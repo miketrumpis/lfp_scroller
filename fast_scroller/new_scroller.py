@@ -20,8 +20,9 @@ import PySide
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 
-from traits.api import Range, Instance, Button, HasTraits
-from traitsui.api import View, VGroup, HGroup, Item, UItem, CustomEditor
+from traits.api import Range, Instance, Button, HasTraits, File, Float, Str
+from traitsui.api import View, VGroup, HGroup, Item, UItem, CustomEditor, \
+     Label
 
 from ecogana.devices.electrode_pinouts import get_electrode_map
 
@@ -150,8 +151,6 @@ class HDF5Plot(pg.PlotCurveItem):
             visible *= self._yscale
             #visible += self.offset
             scale = ds * 0.5
-        if self.index == 0:
-            print start, stop, visible.shape, x_visible.shape, x_visible[0], x_visible[-1]
 
         visible = detrend(visible, type='constant') + self.offset
         self.setData(x=x_visible, y=visible) # update the plot
@@ -280,9 +279,10 @@ def setup_qwidget_control(parent, editor, qwidget):
     #parent.addWidget(qwidget)
     return qwidget
 
-class TestTraits(HasTraits):
+class VisWrapper(HasTraits):
 
     graph = Instance(QtGui.QWidget)
+    file = File
     b = Button
     r = Range(low=0, high=10, value=0)
 
@@ -303,9 +303,42 @@ class TestTraits(HasTraits):
                     ),
                 ),
             resizable=True,
-            title='Foo'
+            title='Quick Scanner'
         )
         return v
+
+class VisLauncher(HasTraits):
+
+    file = File
+    b = Button
+    scale = Float( 1e3 / 20 )
+    offset = Float(0.5)
+    chan_map = Str('ratv4_mux6')
+
+    def _b_fired(self):
+        if not os.path.exists(self.file):
+            return
+        chan_map, _ = get_electrode_map(self.chan_map)
+        new_vis = FastScroller(self.file, self.scale, self.offset,
+                               chan_map, load_channels=range(len(chan_map)))
+        v_win = VisWrapper(new_vis.win)
+        view = v_win.default_traits_view()
+        view.kind = 'livemodal'
+        v_win.configure_traits(view=view)
+
+    v = View(
+        VGroup(
+            Item('file', label='Visualize this file'),
+            Label('Scales samples to voltage (default to mV for Mux7)'),
+            UItem('scale'),
+            Item('offset', label='Offset per channel (in mV)'),
+            Item('chan_map', label='channel map name (use default)'),
+            Item('b', label='Launch vis.')
+            ),
+        resizable=True,
+        title='Launch Visualization'
+    )
+            
                      
 
 #fileName = '/Users/mike/experiment_data/2017-04-25_hoffmann/test_002.h5'
@@ -320,15 +353,19 @@ if __name__ == '__main__':
     ## if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
     ##     QtGui.QApplication.instance().exec_()
 
-    fileName = '/Users/mike/experiment_data/2017-04-28/test_007.h5'
-    scale = 1e3 / 20
-    chan_map, _ = get_electrode_map('ratv4_mux6')
-    fs = FastScroller(fileName, scale, 0.5, chan_map,
-                      load_channels=range(60))
+    ## fileName = '/Users/mike/experiment_data/2017-04-28/test_007.h5'
+    ## scale = 1e3 / 20
+    ## chan_map, _ = get_electrode_map('ratv4_mux6')
+    ## ## fs = FastScroller(fileName, scale, 0.5, chan_map,
+    ## ##                   load_channels=range(60))
 
-    t = TestTraits(fs.win)
-    #t.edit_traits()
-    v = t.configure_traits()
+    ## #t = TestTraits(fs.win)
+    ## t = TestTraits(None)
+    ## #t.edit_traits()
+    ## v = t.configure_traits()
+
+    v = VisLauncher()
+    v.configure_traits()
 
 
 
