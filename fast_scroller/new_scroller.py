@@ -72,13 +72,14 @@ class ReadCache(object):
 class HDF5Plot(pg.PlotCurveItem):
     def __init__(self, *args, **kwds):
         self.hdf5 = None
-        self.limit = 3000 # maximum number of samples to be plotted
+        self.limit = 6000 # maximum number of samples to be plotted
         pg.PlotCurveItem.__init__(self, *args, **kwds)
         
-    def setHDF5(self, data, index, offset, scale=1):
+    def setHDF5(self, data, index, offset, dx=1.0, scale=1):
         self.hdf5 = data
         self.index = index
-        self._dscale = scale
+        self._yscale = scale
+        self._xscale = dx
         self.offset = offset
         self.updateHDF5Plot()
         
@@ -98,8 +99,10 @@ class HDF5Plot(pg.PlotCurveItem):
         # Determine what data range must be read from HDF5
         #xrange = vb.viewRange()[0]
         xrange = self.parentWidget().viewRange()[0]
-        start = max(0,int(xrange[0])-1)
-        stop = min(self.hdf5.shape[-1], int(xrange[1]+2))
+        srange = map(lambda x: int(x / self._xscale), xrange)
+        start = max(0,int(srange[0])-1)
+        stop = min(self.hdf5.shape[-1], int(srange[1]+2))
+        x_visible = np.arange(start, stop) * self._xscale
         
         # Decide by how much we should downsample 
         ds = int((stop-start) / self.limit) + 1
@@ -107,7 +110,7 @@ class HDF5Plot(pg.PlotCurveItem):
         if ds == 1:
             # Small enough to display with no intervention.
             visible = self.hdf5[self.index, start:stop]
-            visible *= self._dscale
+            visible *= self._yscale
             visible += self.offset
             scale = 1
         else:
@@ -115,6 +118,10 @@ class HDF5Plot(pg.PlotCurveItem):
             # Must do this piecewise to limit memory usage.        
             samples = 1 + ((stop-start) // ds)
             visible = np.zeros(samples*2, dtype=self.hdf5.dtype)
+            x_samp = np.linspace(ds//2, len(x_visible)-ds//2, samples*2).astype('i')
+            while x_samp[-1] >= len(x_visible):
+                x_samp = x_samp[:-1]
+            x_visible = np.take(x_visible, x_samp)
             sourcePtr = start
             targetPtr = 0
             
@@ -139,26 +146,35 @@ class HDF5Plot(pg.PlotCurveItem):
                 targetPtr += chunk.shape[0]*2
             
             visible = visible[:targetPtr]
-            visible *= self._dscale
+            x_visible = x_visible[:targetPtr]
+            visible *= self._yscale
             #visible += self.offset
             scale = ds * 0.5
+        if self.index == 0:
+            print start, stop, visible.shape, x_visible.shape, x_visible[0], x_visible[-1]
 
-        
-        self.setData(detrend(visible, type='constant') + self.offset) # update the plot
+        visible = detrend(visible, type='constant') + self.offset
+        self.setData(x=x_visible, y=visible) # update the plot
         #self.setData(visible + self.index * offset)
-        self.setPos(start, 0) # shift to match starting index
+        #self.setPos(start*self._xscale, 0) # shift to match starting index
         self.resetTransform()
-        self.scale(scale, 1)  # scale to match downsampling
+        #self.scale(scale, 1)  # scale to match downsampling
 
 #pg.mkQApp()
 
 class FastScroller(object):
 
     def __init__(self, file_name, scale, spacing, chan_map,
-                 Fs=1.0, load_channels='all', max_zoom=50000):
+                 load_channels='all', max_zoom=50000, units='mV'):
         
 
-        self.win = pg.GraphicsWindow()
+        #self.win = pg.GraphicsWindow()
+        self.win = pg.GraphicsView()
+        layout = pg.GraphicsLayout(border=(10,10,10))
+        #sub_layout = layout.addLayout(row=0, col=0, rowspan=2, colspan=3)
+        self.win.setCentralItem(layout)
+
+        
         self.chan_map = chan_map
 
         # win.setWindowTitle('pyqtgraph example: HDF5 big data')
@@ -169,14 +185,28 @@ class FastScroller(object):
         # |_______|
 
         # The focus plot
-        self.p1 = self.win.addPlot(row=0, col=0, rowspan=2, colspan=2)
+        #self.p1 = self.win.addPlot(row=0, col=0, rowspan=2, colspan=2)
+        ## sub_layout.nextCol()
+        ## sub_layout.nextCol()
+        #layout.nextRow()
+        self.p1 = layout.addPlot(colspan=2, row=0, col=0, rowspan=2)
         self.p1.enableAutoRange(False, False)
-        self.p1.setXRange(0, 500)
-        #max_zoom = 50000
-        self.p1.vb.setLimits(maxXRange=max_zoom)
+        self.p1.setLabel('left', 'Amplitude', units=units)
+        self.p1.setLabel('bottom', 'Time', units='s')
+
+        # The image panel
+        self.p_img = layout.addViewBox(lockAspect=True, row=0, col=2)
+        #self.p_img = layout.addPlot(col=4, rowspan=2, rowspan=2)
+        self.img = pg.ImageItem(np.random.randn(*self.chan_map.geometry))
+        self.p_img.addItem(self.img)
+        self.p_img.autoRange()
+
+        layout.nextRow()
 
         # The navigator plot
-        self.p2 = self.win.addPlot(row=2, col=0, colspan=3)
+        self.p2 = layout.addPlot(row=2, col=0, colspan=3)
+        self.p2.setLabel('left', 'Amplitude', units=units)
+        self.p2.setLabel('bottom', 'Time', units='s')
         self.region = pg.LinearRegionItem() 
         self.region.setZValue(10)
 
@@ -187,18 +217,17 @@ class FastScroller(object):
 
         self.p1.setAutoVisible(y=True)
 
-        # The image panel
-        self.p_img = self.win.addPlot(row=0, col=2, rowspan=2)
-        self.img = pg.ImageItem()
-        self.p_img.addItem(self.img)
 
         # Add traces to top plot
-
         f = h5py.File(file_name, 'r')
         nchan = f['data'].shape[0]
+        del_t = f['Fs'].value ** -1.0
         array = ReadCache(f['data'])
         # array = ReadCache(f['data'][:, :100000])
         # scale = 1e3 / 20 # uV?
+
+        self.p1.setXRange(0, 500*del_t)
+        self.p1.vb.setLimits(maxXRange=max_zoom*del_t)
 
         if isinstance(load_channels, str) and load_channels.lower() == 'all':
             load_channels = xrange(nchan)
@@ -206,23 +235,21 @@ class FastScroller(object):
         self._curves = []
         for i in load_channels:
             curve = HDF5Plot()
-            curve.setHDF5(array, i, spacing * i, scale=scale)
+            curve.setHDF5(array, i, spacing * i, scale=scale, dx=del_t)
             self.p1.addItem(curve)
             self._curves.append( curve )
 
         # Add mean trace to bottom plot
         mn = h5mean(f['data'], 0) * scale
-        self.p2.plot(mn)
-        self.p2.setXRange(0, min(5e4, len(mn)))
+        self.p2.plot(x=np.arange(len(mn))*del_t, y=mn)
+        self.p2.setXRange(0, min(5e4, len(mn))*del_t)
 
 
         # Set bidirectional plot interaction
         self.region.sigRegionChanged.connect(self.update)
         self.p1.sigRangeChanged.connect(self.updateRegion)
 
-        self.region.setRegion([0, 5000])
-
-        self.img.setImage( np.random.randn(*self.chan_map.geometry) )
+        self.region.setRegion([0, 5000*del_t])
 
     def update(self):
         self.region.setZValue(10)
