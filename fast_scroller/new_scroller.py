@@ -23,6 +23,9 @@ from pyqtgraph.Qt import QtCore, QtGui
 from traits.api import Range, Instance, Button, HasTraits
 from traitsui.api import View, VGroup, HGroup, Item, UItem, CustomEditor
 
+from ecogana.devices.electrode_pinouts import get_electrode_map
+
+
 def h5mean(array, axis, block_size=20000):
     """Compute mean of a 2D HDF5 array in blocks"""
 
@@ -140,7 +143,8 @@ class HDF5Plot(pg.PlotCurveItem):
             #visible += self.offset
             scale = ds * 0.5
 
-        self.setData(detrend(visible, type='constant') + self.index + offset) # update the plot
+        
+        self.setData(detrend(visible, type='constant') + self.offset) # update the plot
         #self.setData(visible + self.index * offset)
         self.setPos(start, 0) # shift to match starting index
         self.resetTransform()
@@ -148,91 +152,87 @@ class HDF5Plot(pg.PlotCurveItem):
 
 #pg.mkQApp()
 
-## class FastScroller(object):
+class FastScroller(object):
 
-##     def __init__(self):
+    def __init__(self, file_name, scale, spacing, chan_map,
+                 Fs=1.0, load_channels='all', max_zoom=50000):
         
 
-win = pg.GraphicsWindow()
+        self.win = pg.GraphicsWindow()
+        self.chan_map = chan_map
 
-win.setWindowTitle('pyqtgraph example: HDF5 big data')
-# set up a 3x3 grid:
-# __.__.__
-# |    .__|
-# |____.__|
-# |_______|
+        # win.setWindowTitle('pyqtgraph example: HDF5 big data')
+        # set up a 3x3 grid:
+        # __.__.__
+        # |    .__|
+        # |____.__|
+        # |_______|
 
-#p1 = pg.plot()
-p1 = win.addPlot(row=0, col=0, rowspan=2, colspan=2)
-p1.enableAutoRange(False, False)
-p1.setXRange(0, 500)
-max_zoom = 50000
-p1.vb.setLimits(maxXRange=max_zoom)
+        # The focus plot
+        self.p1 = self.win.addPlot(row=0, col=0, rowspan=2, colspan=2)
+        self.p1.enableAutoRange(False, False)
+        self.p1.setXRange(0, 500)
+        #max_zoom = 50000
+        self.p1.vb.setLimits(maxXRange=max_zoom)
 
-p2 = win.addPlot(row=2, col=0, colspan=3)
-region = pg.LinearRegionItem() 
-region.setZValue(10)
-# Add the LinearRegionItem to the ViewBox, but tell the ViewBox to exclude this 
-# item when doing auto-range calculations.
-p2.addItem(region, ignoreBounds=True)
+        # The navigator plot
+        self.p2 = self.win.addPlot(row=2, col=0, colspan=3)
+        self.region = pg.LinearRegionItem() 
+        self.region.setZValue(10)
 
-# why?
-p1.setAutoVisible(y=True)
+        # Add the LinearRegionItem to the ViewBox,
+        # but tell the ViewBox to exclude this 
+        # item when doing auto-range calculations.
+        self.p2.addItem(self.region, ignoreBounds=True)
 
-p_img = win.addPlot(row=0, col=2, rowspan=2)
-img = pg.ImageItem()
-p_img.addItem(img)
+        self.p1.setAutoVisible(y=True)
 
-# Add traces to top plot
+        # The image panel
+        self.p_img = self.win.addPlot(row=0, col=2, rowspan=2)
+        self.img = pg.ImageItem()
+        self.p_img.addItem(self.img)
 
-#fileName = '/Users/mike/experiment_data/2017-04-25_hoffmann/test_002.h5'
-#fileName = '/Users/mike/experiment_data/2013-11-01_Movshon_Lab/downsamp/m645r4#016_Fs3000.h5'
-#fileName = '/Users/mike/experiment_data/2016-07-06_CSD/test_003.h5'
-fileName = '/Users/mike/experiment_data/2017-04-28/test_003.h5'
-f = h5py.File(fileName, 'r')
-nchan = f['data'].shape[0]
-array = ReadCache(f['data'])
-#array = ReadCache(f['data'][:, :100000])
-scale = 1e3 / 20 # uV?
+        # Add traces to top plot
 
-offset = 1
-for i in xrange(nchan):
-    curve = HDF5Plot()
-    curve.setHDF5(array, i, offset, scale=scale)
-    p1.addItem(curve)
+        f = h5py.File(file_name, 'r')
+        nchan = f['data'].shape[0]
+        array = ReadCache(f['data'])
+        # array = ReadCache(f['data'][:, :100000])
+        # scale = 1e3 / 20 # uV?
 
-# Add mean trace to bottom plot
-mn = h5mean(f['data'], 0)
-#mn = f['data'][:, :100000].mean(0)
-p2.plot(mn)
-p2.setXRange(0, 5e4)
-print 'mean plotted'
+        if isinstance(load_channels, str) and load_channels.lower() == 'all':
+            load_channels = xrange(nchan)
 
-# Set bidirectional plot interaction
-## def fix_range():
-##     minX, maxX = region.getRegion()
-##     md = 0.5 * (minX + maxX)
-##     for line in region.lines:
-##         line.setBounds([md - max_zoom/2, md + max_zoom/2])
-    
-def update():
-    region.setZValue(10)
-    minX, maxX = region.getRegion()
-    p1.setXRange(minX, maxX, padding=0)    
+        self._curves = []
+        for i in load_channels:
+            curve = HDF5Plot()
+            curve.setHDF5(array, i, spacing * i, scale=scale)
+            self.p1.addItem(curve)
+            self._curves.append( curve )
 
-region.sigRegionChanged.connect(update)
-## region.sigRegionChanged.connect(fix_range)
+        # Add mean trace to bottom plot
+        mn = h5mean(f['data'], 0) * scale
+        self.p2.plot(mn)
+        self.p2.setXRange(0, min(5e4, len(mn)))
 
-def updateRegion(window, viewRange):
-    rgn = viewRange[0]
-    region.setRegion(rgn)
 
-p1.sigRangeChanged.connect(updateRegion)
+        # Set bidirectional plot interaction
+        self.region.sigRegionChanged.connect(self.update)
+        self.p1.sigRangeChanged.connect(self.updateRegion)
 
-region.setRegion([0, 500])
+        self.region.setRegion([0, 5000])
 
-img.setImage( np.random.randn(8,8) )
+        self.img.setImage( np.random.randn(*self.chan_map.geometry) )
 
+    def update(self):
+        self.region.setZValue(10)
+        minX, maxX = self.region.getRegion()
+        self.p1.setXRange(minX, maxX, padding=0)    
+
+
+    def updateRegion(self, window, viewRange):
+        rgn = viewRange[0]
+        self.region.setRegion(rgn)
 
 def setup_qwidget_control(parent, editor, qwidget):
     #qwidget.setParent(parent)
@@ -267,6 +267,9 @@ class TestTraits(HasTraits):
         return v
                      
 
+#fileName = '/Users/mike/experiment_data/2017-04-25_hoffmann/test_002.h5'
+#fileName = '/Users/mike/experiment_data/2013-11-01_Movshon_Lab/downsamp/m645r4#016_Fs3000.h5'
+#fileName = '/Users/mike/experiment_data/2016-07-06_CSD/test_003.h5'
 
 ## Start Qt event loop unless running in interactive mode or using pyside.
 if __name__ == '__main__':
@@ -276,7 +279,13 @@ if __name__ == '__main__':
     ## if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
     ##     QtGui.QApplication.instance().exec_()
 
-    t = TestTraits(win)
+    fileName = '/Users/mike/experiment_data/2017-04-28/test_007.h5'
+    scale = 1e3 / 20
+    chan_map, _ = get_electrode_map('ratv4_mux6')
+    fs = FastScroller(fileName, scale, 0.5, chan_map,
+                      load_channels=range(60))
+
+    t = TestTraits(fs.win)
     #t.edit_traits()
     v = t.configure_traits()
 
