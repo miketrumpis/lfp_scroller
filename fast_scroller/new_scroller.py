@@ -249,8 +249,22 @@ class FastScroller(object):
         self.region.sigRegionChanged.connect(self.update)
         self.p1.sigRangeChanged.connect(self.updateRegion)
 
+        # Do navigation jumps (if shift key is down)
+        #pg.SignalProxy(self.p2.scene().sigMouseClicked, slot=self.jump_nav)
+        self.p2.scene().sigMouseClicked.connect(self.jump_nav)
         self.region.setRegion([0, 5000*del_t])
 
+    def jump_nav(self, evt):
+        if QtGui.QApplication.keyboardModifiers() != QtCore.Qt.ShiftModifier:
+            return
+        pos = evt.scenePos()
+        if not self.p2.sceneBoundingRect().contains(pos):
+            return
+        newX = self.p2.vb.mapSceneToView(pos).x()
+        minX, maxX = self.region.getRegion()
+        rng = 0.5 * (maxX - minX)
+        self.region.setRegion( [ newX - rng, newX + rng ] )
+        
     def update(self):
         self.region.setZValue(10)
         minX, maxX = self.region.getRegion()
