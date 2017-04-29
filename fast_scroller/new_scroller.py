@@ -164,7 +164,7 @@ class HDF5Plot(pg.PlotCurveItem):
 class FastScroller(object):
 
     def __init__(self, file_name, scale, spacing, chan_map,
-                 load_channels='all', max_zoom=50000, units='mV'):
+                 load_channels='all', max_zoom=120.0, units='mV'):
         
 
         #self.win = pg.GraphicsWindow()
@@ -226,7 +226,7 @@ class FastScroller(object):
         # scale = 1e3 / 20 # uV?
 
         self.p1.setXRange(0, 500*del_t)
-        self.p1.vb.setLimits(maxXRange=max_zoom*del_t)
+        self.p1.vb.setLimits(maxXRange=max_zoom)
 
         if isinstance(load_channels, str) and load_channels.lower() == 'all':
             load_channels = xrange(nchan)
@@ -313,14 +313,18 @@ class VisLauncher(HasTraits):
     b = Button
     scale = Float( 1e3 / 20 )
     offset = Float(0.5)
+    max_window_width = Float(1200.0)
     chan_map = Str('ratv4_mux6')
 
     def _b_fired(self):
         if not os.path.exists(self.file):
             return
         chan_map, _ = get_electrode_map(self.chan_map)
+        ii, jj = chan_map.to_mat()
+        chan_order = np.argsort(ii)[::-1]
         new_vis = FastScroller(self.file, self.scale, self.offset,
-                               chan_map, load_channels=range(len(chan_map)))
+                               chan_map, load_channels=chan_order,
+                               max_zoom=self.max_window_width)
         v_win = VisWrapper(new_vis.win)
         view = v_win.default_traits_view()
         view.kind = 'livemodal'
