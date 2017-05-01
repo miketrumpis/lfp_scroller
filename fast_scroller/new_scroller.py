@@ -312,7 +312,8 @@ class FastScroller(object):
         # Add mean trace to bottom plot
         self.p2.plot(x=np.arange(len(mn_trace))*del_t, y=mn_trace)
         self.p2.setXRange(0, min(5e4, len(mn_trace))*del_t)
-
+        self.p2.setYRange(*np.percentile(mn_trace, [1, 99]))
+        
         # Set bidirectional plot interaction
         self.region.sigRegionChanged.connect(self.update)
         self.p1.sigRangeChanged.connect(self.updateRegion)
@@ -322,6 +323,11 @@ class FastScroller(object):
         self.p2.scene().sigMouseClicked.connect(self.jump_nav)
         self.region.setRegion([0, 5000*del_t])
 
+        # final adjustments to rows
+        self.win.centralWidget.layout.setRowStretchFactor(0, 0.5)
+        self.win.centralWidget.layout.setRowStretchFactor(1, 5)
+        self.win.centralWidget.layout.setRowStretchFactor(2, 2.5)
+        
     def jump_nav(self, evt):
         if QtGui.QApplication.keyboardModifiers() != QtCore.Qt.ShiftModifier:
             return
@@ -356,8 +362,6 @@ class FastScroller(object):
         self.region.setRegion(rgn)
 
 def setup_qwidget_control(parent, editor, qwidget):
-    #qwidget.setParent(parent)
-    #parent.addWidget(qwidget)
     return qwidget
 
 class VisWrapper(HasTraits):
@@ -383,6 +387,8 @@ class VisWrapper(HasTraits):
                     label='Toolbar'
                     ),
                 ),
+            width=1200,
+            height=500,
             resizable=True,
             title='Quick Scanner'
         )
