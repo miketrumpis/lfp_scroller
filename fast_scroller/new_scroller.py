@@ -6,7 +6,7 @@ import PySide
 from pyqtgraph.Qt import QtGui
 
 from traits.api import Range, Instance, Button, HasTraits, File, Float, \
-     Str, Property, List, Enum
+     Str, Property, List, Enum, on_trait_change
 from traitsui.api import View, VGroup, HGroup, Item, UItem, CustomEditor, \
      Label, Handler, EnumEditor
 
@@ -26,7 +26,7 @@ class VisWrapper(HasTraits):
     file = File
     anim_frame = Button('Animate')
     anim_time_scale = Enum(50, [0.5, 1, 5, 10, 50, 100])
-    r = Range(low=0, high=10, value=0)
+    y_spacing = Enum(0.5, [0.1, 0.2, 0.5, 1, 2, 5])
 
     def __init__(self, qtwindow, **traits):
         self._qtwindow = qtwindow
@@ -70,6 +70,10 @@ class VisWrapper(HasTraits):
         self._atimer = Timer( self.anim_time_scale * dt * 1000,
                               self.__step_frame )
 
+    @on_trait_change('y_spacing')
+    def _change_spacing(self):
+        self._qtwindow.update_y_spacing(self.y_spacing)
+
     def default_traits_view(self):
         v = View(
             VGroup(
@@ -82,7 +86,10 @@ class VisWrapper(HasTraits):
                         Item('anim_frame'),
                         label='Animate Frames'
                         ),
-                    Item('r', label='Range'),
+                    VGroup(
+                        UItem('y_spacing'),
+                        label='Trace offset (mV)'
+                        )
                     ),
                 ),
             width=1200,

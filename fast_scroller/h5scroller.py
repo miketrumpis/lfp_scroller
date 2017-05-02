@@ -269,7 +269,7 @@ class FastScroller(object):
         self.cb = pgx.ColorBarItem(
             image=self.img, label='Voltage ({0})'.format(units)
             )
-        self.img.setLevels( (-10, 10) )
+        self.img.setLevels( (-y_spacing, y_spacing) )
         sub_layout.addItem(self.cb)
 
         self.p1 = layout.addPlot(colspan=2, row=1, col=1)
@@ -295,9 +295,6 @@ class FastScroller(object):
         self.p2.addItem(self.region, ignoreBounds=True)
 
         self.p1.setAutoVisible(y=True)
-
-
-
         self.p1.setXRange(0, 500*x_scale)
         self.p1.vb.setLimits(maxXRange=max_zoom)
 
@@ -406,3 +403,9 @@ class FastScroller(object):
     def updateRegion(self, window, viewRange):
         rgn = viewRange[0]
         self.region.setRegion(rgn)
+
+    def update_y_spacing(self, offset):
+        for i in xrange(len(self._curves)):
+            self._curves[i].offset = i * offset
+        x1, x2 = self.current_frame()
+        self.region.setRegion([x1, x2+.001])
