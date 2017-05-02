@@ -1,12 +1,14 @@
 from __future__ import division
 import sys, os
+from functools import partial
 import numpy as np
+from scipy.signal import detrend
 import h5py
 import PySide
 from pyqtgraph.Qt import QtGui
 
 from traits.api import Instance, Button, HasTraits, File, Float, \
-     Str, Property, List, Enum, on_trait_change, Int
+     Str, Property, List, Enum, on_trait_change, Int, Bool
 from traitsui.api import View, VGroup, HGroup, Item, UItem, CustomEditor, \
      Label, Handler, EnumEditor, Group, ListEditor, TableEditor
 from traitsui.table_column import ObjectColumn
@@ -14,8 +16,9 @@ from traitsui.table_column import ObjectColumn
 from ecogana.devices.electrode_pinouts import get_electrode_map, electrode_maps
 from ecoglib.filt.time.design import butter_bp, cheby1_bp, cheby2_bp, notch
 
-from h5scroller import h5mean, ReadCache, FastScroller, DCOffsetReadCache
-from h5data import bfilter
+from h5scroller import FastScroller
+from h5data import bfilter, FilteredReadCache, h5mean, ReadCache, \
+     DCOffsetReadCache
 
 from pyface.timer.api import Timer
 import time
@@ -118,38 +121,21 @@ class FileData(HasTraits):
     file = File
     data_field = Str
     fs_field = Str
-    
-    #b = Button
     y_scale = Float(1.0)
     chan_map = Enum(electrode_maps.keys()[0], electrode_maps.keys())
+    zero_windows = Bool
 
     def _compose_arrays(self, filter):
         # default is just a wrapped array
         h5 = h5py.File(self.file, 'r')
         array = filter(h5[self.data_field])
         mn_trace = h5mean(array, 0) * self.y_scale
-        return ReadCache(array), mn_trace
+        if self.zero_windows:
+            array = FilteredReadCache(array, partial(detrend, type='constant'))
+        else:
+            array = ReadCache(array)
+        return array, mn_trace
     
-    ## def _b_fired(self):
-    ##     if not os.path.exists(self.file):
-    ##         return
-        
-    ##     chan_map, _ = get_electrode_map(self.chan_map)
-    ##     ii, jj = chan_map.to_mat()
-    ##     chan_order = np.argsort(ii)[::-1]
-    ##     h5 = h5py.File(self.file, 'r')
-    ##     x_scale = h5[self.fs_field].value ** -1.0
-    ##     h5.close()
-    ##     array, nav = self._compose_arrays()
-    ##     new_vis = FastScroller(array, self.y_scale, self.offset,
-    ##                            chan_map, nav, x_scale=x_scale,
-    ##                            load_channels=chan_order,
-    ##                            max_zoom=self.max_window_width)
-    ##     v_win = VisWrapper(new_vis)
-    ##     view = v_win.default_traits_view()
-    ##     view.kind = 'livemodal'
-    ##     v_win.configure_traits(view=view)
-
     def default_traits_view(self):
         view = View(
             VGroup(
@@ -163,7 +149,7 @@ class FileData(HasTraits):
                 Label('Scales samples to voltage (default to mV for Mux7)'),
                 UItem('y_scale'),
                 Item('chan_map', label='channel map name'),
-                #Item('b', label='Launch vis.')
+                Item('zero_windows', label='Remove local DC?')
                 ),
             handler=FileHandler,
             resizable=True,
@@ -174,13 +160,14 @@ class FileData(HasTraits):
 class Mux7FileData(FileData):
 
     file = File
-    #b = Button
     y_scale = Float( 1e3 / 20 )
     chan_map = Str('ratv4_mux6')
     data_field = Property(fget=lambda self: 'data')
     fs_field = Property(fget=lambda self: 'Fs')
     
     def _compose_arrays(self, filter):
+        if self.zero_windows:
+            return super(Mux7FileData, self)._compose_arrays(filter)
         f = h5py.File(self.file, 'r')
         array = filter(f[self.data_field])
         mn_level = h5mean(array, 1, start=int(3e4))
@@ -195,7 +182,7 @@ class Mux7FileData(FileData):
                 Label('Scales samples to voltage (default to mV for Mux7)'),
                 UItem('y_scale'),
                 Item('chan_map', label='channel map name (use default)'),
-                #Item('b', label='Launch vis.')
+                Item('zero_windows', label='Remove local DC?')
                 ),
             ## resizable=True,
             ## title='Launch Visualization'
