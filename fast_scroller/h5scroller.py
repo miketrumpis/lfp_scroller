@@ -319,14 +319,33 @@ class FastScroller(object):
         self.p1.sigRangeChanged.connect(self.updateRegion)
 
         # Do navigation jumps (if shift key is down)
-        #pg.SignalProxy(self.p2.scene().sigMouseClicked, slot=self.jump_nav)
         self.p2.scene().sigMouseClicked.connect(self.jump_nav)
         self.region.setRegion([0, 5000*x_scale])
 
+        # Do fine interaction in zoomed plot with vertical line
+        self.vline = pg.InfiniteLine(angle=90, movable=False)
+        self.p1.addItem(self.vline)
+        self.p1.scene().sigMouseMoved.connect(self.fine_nav)
+        
         # final adjustments to rows
         self.win.centralWidget.layout.setRowStretchFactor(0, 0.5)
         self.win.centralWidget.layout.setRowStretchFactor(1, 5)
         self.win.centralWidget.layout.setRowStretchFactor(2, 2.5)
+
+    def current_frame(self):
+        return self.region.getRegion()
+
+    def current_data(self):
+        x_vis = self._curves[0].x_visible
+        y_vis = self._curves[0].y_visible
+        x = np.empty( (len(self._curves), len(x_vis)), x_vis.dtype )
+        y = np.empty( (len(self._curves), len(y_vis)), y_vis.dtype )
+        x[0] = x_vis
+        y[0] = y_vis
+        for i in xrange(1, len(self._curves)):
+            x[i] = self._curves[i].x_visible
+            y[i] = self._curves[i].y_visible
+        return x, y
         
     def jump_nav(self, evt):
         if QtGui.QApplication.keyboardModifiers() != QtCore.Qt.ShiftModifier:
@@ -339,6 +358,33 @@ class FastScroller(object):
         rng = 0.5 * (maxX - minX)
         self.region.setRegion( [ newX - rng, newX + rng ] )
 
+    def fine_nav(self, evt):
+        if QtGui.QApplication.keyboardModifiers() != QtCore.Qt.ShiftModifier:
+            return
+        #pos = evt.scenePos()
+        pos = evt
+        if not self.p1.sceneBoundingRect().contains(pos):
+            return
+        x_loc = self.p1.vb.mapSceneToView(pos).x()
+        self.vline.setPos(x_loc)
+        if not hasattr(self._curves[0], 'y_visible'):
+            return
+        self.set_image_frame(x=x_loc, move_vline=False)
+
+    def set_image_frame(self, x=None, frame_vec=(), move_vline=True):
+        if not len(frame_vec):
+            if x is None:
+                # can't do anything!
+                return
+            idx = self._curves[0].x_visible.searchsorted(x)
+            frame_vec = np.empty( len(self.chan_map), 'd' )
+            for i in xrange(len(self.chan_map)):
+                frame_vec[i] = self._curves[i].y_visible[idx]
+        frame = self.chan_map.embed(frame_vec, fill=0).T
+        self.img.setImage( frame, autoLevels=False )
+        if move_vline and x is not None:
+            self.vline.setPos(x)
+        
     def set_mean_image(self):
         if not hasattr(self._curves[0], 'y_visible'):
             return
