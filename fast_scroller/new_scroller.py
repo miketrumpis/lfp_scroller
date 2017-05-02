@@ -25,7 +25,6 @@ class VisWrapper(HasTraits):
     graph = Instance(QtGui.QWidget)
     file = File
     anim_frame = Button('Animate')
-    stop_anim = Button('Stop')
     anim_time_scale = Enum(50, [0.5, 1, 5, 10, 50, 100])
     r = Range(low=0, high=10, value=0)
 
@@ -33,31 +32,43 @@ class VisWrapper(HasTraits):
         self._qtwindow = qtwindow
         HasTraits.__init__(self, **traits)
 
-    def _anim_frame_fired(self):
-        x, y = self._qtwindow.current_data()
-        f_skip = 1
-        x = x[0]
-        dt = x[1] - x[0]
-    
-        scaled_dt = self.anim_time_scale * dt
-        n_frames = y.shape[1]
-        print 'got', n_frames, 'frames'
-        print 'pause', scaled_dt, 'sec between frames'
-        n = 0
-        # Step through frames, pausing enough time to achieve
-        # correct frame rate. If going too slow, start skipping frames.
-        app = PySide.QtCore.QCoreApplication.instance()
-        while n <= n_frames:
-            t0 = time.time()
+    def __step_frame(self):
+        n = self.__n
+        x = self.__x
+        y = self.__y
+        if n >= self.__n_frames:
+            self._atimer.Stop()
+            return
+        t0 = time.time()
+        scaled_dt = self.anim_time_scale * (x[1] - x[0])
+        try:
             self._qtwindow.set_image_frame(x=x[n], frame_vec=y[:,n])
-            app.processEvents()
-            t_pause = scaled_dt - (time.time() - t0)
-            print t_pause
-            if t_pause < 0:
-                f_skip += 1
-            else:
-                time.sleep(t_pause)
-            n += f_skip
+        except IndexError:
+            self._atimer.Stop()
+        PySide.QtCore.QCoreApplication.instance().processEvents()
+        t_pause = scaled_dt - (time.time() - t0)
+        if t_pause < 0:
+            self.__f_skip += 1
+            sys.stdout.flush()
+        else:
+            self._atimer.setInterval(t_pause * 1000.0)
+        self.__n += self.__f_skip
+
+    def _anim_frame_fired(self):
+        if hasattr(self, '_atimer') and self._atimer.IsRunning():
+            self._atimer.Stop()
+            return
+        
+        x, self.__y = self._qtwindow.current_data()
+        self.__f_skip = 1
+        self.__x = x[0]
+        dt = self.__x[1] - self.__x[0]
+        self.__n_frames = self.__y.shape[1]
+        self.__n = 0
+        print self.anim_time_scale * dt * 1000
+        print self.__n_frames
+        self._atimer = Timer( self.anim_time_scale * dt * 1000,
+                              self.__step_frame )
 
     def default_traits_view(self):
         v = View(
@@ -68,11 +79,10 @@ class VisWrapper(HasTraits):
                 HGroup(
                     VGroup(
                         Item('anim_time_scale', label='Divide real time'),
-                        HGroup(Item('anim_frame'), Item('stop_anim')),
+                        Item('anim_frame'),
                         label='Animate Frames'
                         ),
                     Item('r', label='Range'),
-                    label='Toolbar'
                     ),
                 ),
             width=1200,
@@ -184,8 +194,13 @@ class Mux7VisLauncher(VisLauncher):
 if __name__ == '__main__':
     
     #v = Mux7VisLauncher()
-    v = VisLauncher()
+    ## v = VisLauncher()
+    ## v.configure_traits()
+
+
+    v = VisLauncher(file='/Users/mike/experiment_data/Viventi 2017-04-10 P4 Rat 17009/2017-04-10_16-21-18_010_Fs1000.h5',
+                    data_field='chdata',
+                    fs_field='Fs',
+                    chan_map='psv_61_intan2')
     v.configure_traits()
-
-
-
+                    
