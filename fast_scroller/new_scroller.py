@@ -14,6 +14,9 @@ from ecogana.devices.electrode_pinouts import get_electrode_map, electrode_maps
 
 from h5scroller import h5mean, ReadCache, FastScroller, DCOffsetReadCache
 
+from pyface.timer.api import Timer
+import time
+
 def setup_qwidget_control(parent, editor, qwidget):
     return qwidget
 
@@ -21,21 +24,53 @@ class VisWrapper(HasTraits):
 
     graph = Instance(QtGui.QWidget)
     file = File
-    b = Button
+    anim_frame = Button('Animate')
+    stop_anim = Button('Stop')
+    anim_time_scale = Enum(50, [0.5, 1, 5, 10, 50, 100])
     r = Range(low=0, high=10, value=0)
 
     def __init__(self, qtwindow, **traits):
         self._qtwindow = qtwindow
         HasTraits.__init__(self, **traits)
 
+    def _anim_frame_fired(self):
+        x, y = self._qtwindow.current_data()
+        f_skip = 1
+        x = x[0]
+        dt = x[1] - x[0]
+    
+        scaled_dt = self.anim_time_scale * dt
+        n_frames = y.shape[1]
+        print 'got', n_frames, 'frames'
+        print 'pause', scaled_dt, 'sec between frames'
+        n = 0
+        # Step through frames, pausing enough time to achieve
+        # correct frame rate. If going too slow, start skipping frames.
+        app = PySide.QtCore.QCoreApplication.instance()
+        while n <= n_frames:
+            t0 = time.time()
+            self._qtwindow.set_image_frame(x=x[n], frame_vec=y[:,n])
+            app.processEvents()
+            t_pause = scaled_dt - (time.time() - t0)
+            print t_pause
+            if t_pause < 0:
+                f_skip += 1
+            else:
+                time.sleep(t_pause)
+            n += f_skip
+
     def default_traits_view(self):
         v = View(
             VGroup(
                 UItem('graph',
                       editor=CustomEditor(setup_qwidget_control,
-                                          self._qtwindow)),
+                                          self._qtwindow.win)),
                 HGroup(
-                    Item('b', label='Button'),
+                    VGroup(
+                        Item('anim_time_scale', label='Divide real time'),
+                        HGroup(Item('anim_frame'), Item('stop_anim')),
+                        label='Animate Frames'
+                        ),
                     Item('r', label='Range'),
                     label='Toolbar'
                     ),
@@ -90,7 +125,7 @@ class VisLauncher(HasTraits):
                                chan_map, nav, x_scale=x_scale,
                                load_channels=chan_order,
                                max_zoom=self.max_window_width)
-        v_win = VisWrapper(new_vis.win)
+        v_win = VisWrapper(new_vis)
         view = v_win.default_traits_view()
         view.kind = 'livemodal'
         v_win.configure_traits(view=view)
