@@ -1,97 +1,12 @@
 from __future__ import division
 import numpy as np
-import h5py
 import PySide
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph_extensions as pgx
 from ecoglib.util import ChannelMap
 
-def h5mean(array, axis, block_size=20000, start=0, stop=-1):
-    """Compute mean of a 2D HDF5 array in blocks"""
-
-    shape = array.shape
-    if axis < 0:
-        axis += len(shape)
-    mn_size = shape[1 - axis]
-    mn = np.empty(mn_size, 'd')
-    b = 0
-    while True:
-        range = slice( b, min(mn_size, b + block_size) )
-        # to compute block x, either slice like:
-        # array[:, x].mean(0)
-        # array[x, :].mean(1)
-        if axis == 1:
-            sl = ( range, slice(start, stop) )
-        else:
-            sl = ( slice(start, stop), range )
-        mn[range] = array[sl].mean(axis)
-        b += block_size
-        if b >= mn_size:
-            break
-    return mn
-
-class ReadCache(object):
-    # TODO -- enable catch for full slicing
-    """
-    Buffers row indexes from memmap or hdf5 file.
-
-    For cases where array[0, n:m], array[1, n:m], array[2, n:m] are
-    accessed sequentially, this object buffers the C x (m-n)
-    submatrix before yielding individual rows.
-    """
-    
-    def __init__(self, array):
-        self._array = array
-        self._current_slice = None
-        self._current_seg = ()
-        self.dtype = array.dtype
-        self.shape = array.shape
-
-    def __getitem__(self, sl):
-        indx, range = sl
-        if self._current_slice != range:
-            all_sl = ( slice(None), range )
-            self._current_seg = self._array[all_sl]
-            self._current_slice = range
-        # always return the full range after slicing with possibly
-        # complex original range
-        new_range = slice(None)
-        new_sl = (indx, new_range)
-        return self._current_seg[new_sl].copy()
-
-class FilteredReadCache(ReadCache):
-    """
-    Apply row-by-row filters to a ReadCache
-    """
-
-    def __init__(self, array, filters):
-        if not isinstance(filters, (tuple, list)):
-            f = filters
-            filters = [ f ] * len(array)
-        self.filters = filters
-        super(FilteredReadCache, self).__init__(array)
-
-    def __getitem__(self, sl):
-        idx = sl[0]
-        x = super(FilteredReadCache, self).__getitem__(sl)
-        return self.filters[idx]( x )
-
-def make_filt(z):
-    def _f(x):
-        return x - z
-    return _f
-    
-class DCOffsetReadCache(FilteredReadCache):
-    """
-    A filtered read cache with a simple offset subtraction.
-    """
-
-    def __init__(self, array, offsets):
-        #filters = [lambda x: x - off for off in offsets]
-        filters = [make_filt(off) for off in offsets]
-        super(DCOffsetReadCache, self).__init__(array, filters)
-        self.offsets = offsets
+from h5data import *
 
 class HMSAxis(pg.AxisItem):
 
