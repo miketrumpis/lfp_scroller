@@ -43,7 +43,8 @@ class FileData(HasTraits):
     data_field = Str
     fs_field = Str
     y_scale = Float(1.0)
-    chan_map = Enum(electrode_maps.keys()[0], electrode_maps.keys())
+    chan_map = Enum(sorted(electrode_maps.keys())[0],
+                    sorted(electrode_maps.keys()))
     zero_windows = Bool
 
     def _compose_arrays(self, filter):
@@ -268,7 +269,7 @@ class VisLauncher(HasTraits):
                                x_scale=x_scale,
                                load_channels=chan_order,
                                max_zoom=self.max_window_width)
-        v_win = VisWrapper(new_vis)
+        v_win = VisWrapper(new_vis, x_scale = x_scale)
         view = v_win.default_traits_view()
         view.kind = 'livemodal'
         v_win.configure_traits(view=view)
