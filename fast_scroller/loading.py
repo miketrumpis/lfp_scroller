@@ -11,6 +11,10 @@ import numpy as np
 from scipy.signal import detrend
 import h5py
 
+# these imports set up some qt runtime stuff (??)
+import PySide
+import pyqtgraph as pg
+
 from traits.api import Instance, Button, HasTraits, File, Float, \
      Str, Property, List, Enum, Int, Bool
 from traitsui.api import View, VGroup, HGroup, Item, UItem, \
@@ -271,8 +275,8 @@ class VisLauncher(HasTraits):
                                max_zoom=self.max_window_width)
         v_win = VisWrapper(new_vis, x_scale = x_scale)
         view = v_win.default_traits_view()
-        view.kind = 'livemodal'
-        v_win.configure_traits(view=view)
+        view.kind = 'live'
+        v_win.edit_traits(view=view)
 
         
     def default_traits_view(self):
