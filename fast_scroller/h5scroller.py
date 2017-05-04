@@ -3,6 +3,7 @@ import numpy as np
 import PySide
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
+pg.setConfigOptions(imageAxisOrder='row-major')
 import pyqtgraph_extensions as pgx
 from ecoglib.util import ChannelMap
 
@@ -293,7 +294,7 @@ class FastScroller(object):
             frame_vec = np.empty( len(self.chan_map), 'd' )
             for i in xrange(len(self.chan_map)):
                 frame_vec[i] = self._curves[i].y_visible[idx]
-        frame = self.chan_map.embed(frame_vec, fill=0).T
+        frame = self.chan_map.embed(frame_vec, fill=0)[::-1].copy()
         self.img.setImage( frame, autoLevels=False )
         if move_vline and x is not None:
             self.vline.setPos(x)
@@ -304,7 +305,7 @@ class FastScroller(object):
         image = np.empty( len(self.chan_map), 'd' )
         for i in xrange(len(self.chan_map)):
             image[i] = self._curves[i].y_visible.std()
-        self.img.setImage( self.chan_map.embed(image, fill=0).T,
+        self.img.setImage( self.chan_map.embed(image, fill=0)[::-1].copy(),
                            autoLevels=False )
         
     def update(self):
