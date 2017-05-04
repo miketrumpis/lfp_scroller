@@ -153,7 +153,7 @@ class IntervalSpectrum(PlotsInterval):
         ax.set_ylabel('Power Spectral Density (mV / Hz^2)')
         ax.set_xlabel('Frequency (Hz)')
         sns.despine(ax=ax)
-        f.tight_layout()
+        fig.tight_layout()
         self._plot_count += 1
         if update is not None:
             update()
@@ -288,7 +288,8 @@ class VisWrapper(HasTraits):
                       editor=CustomEditor(setup_qwidget_control,
                                           self._qtwindow.win),
                       resizable=True,
-                      height=(ht-150)),
+                      #height=(ht-150)),
+                      height=0.85),
                 HSplit(
                     Group(Label('Trace spacing (mv)'),
                           UItem('y_spacing', resizable=True)),
