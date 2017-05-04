@@ -12,13 +12,13 @@ from pyqtgraph.Qt import QtGui
 from traits.api import Instance, Button, HasTraits, Float, Bool, \
      Enum, on_trait_change, Str, List
 from traitsui.api import View, VGroup, HGroup, Item, UItem, CustomEditor, \
-     Group, ListEditor
+     Group, ListEditor, VSplit, HSplit, Label
 
 from pyface.timer.api import Timer
 import time
 
 from ecogana.anacode.anatool.gui_tools import SavesFigure
-from ecogana.anacode.plot_util import filled_interval
+from ecogana.anacode.plot_util import filled_interval, subplots
 from ecoglib.estimation.jackknife import Jackknife
 from ecoglib.numutil import nextpow2
 from sandbox.split_methods import multi_taper_psd
@@ -51,7 +51,51 @@ class VisModule(HasTraits):
     parent = Instance('VisWrapper')
 
 class PlotsInterval(VisModule):
-    pass
+    new_figure = Bool(False)
+    _figures = List([])
+
+    def _get_fig(self, **kwargs):
+        """Accepts subplots kwargs"""
+        fig = getattr(self, 'fig', None)
+        if fig and not self.new_figure:
+            return fig, self.axes, fig.canvas.draw_idle
+        self.fig, self.axes = subplots(**kwargs)
+        splot = SavesFigure.live_fig(self.fig)
+        self._figures.append(splot)
+        self._plot_count = 0
+        self._colors = mpl.rcParams["axes.prop_cycle"].by_key()["color"]
+        return self.fig, self.axes, self.fig.canvas.draw_idle
+
+class IntervalTraces(PlotsInterval):
+    name = 'Plot Window'
+    plot = Button('Plot')
+    new_figure = Bool(True)
+
+    def _plot_fired(self):
+        x, y = self.parent._qtwindow.current_data()
+        x = x[0]
+        dy = self.parent.y_spacing
+        f, ax, update = self._get_fig()
+        clr = self._colors[self._plot_count]
+        ax.plot(x, y.T + np.arange(len(y)) * dy, lw=0.5, color=clr)
+        sns.despine(ax=ax)
+        ax.set_ylabel('Amplitude (mV)')
+        ax.set_xlabel('Time (s)')
+        f.tight_layout()
+        self._plot_count += 1
+        try:
+            update()
+        except:
+            pass
+
+    def default_traits_view(self):
+        v = View(
+            Group(
+                UItem('plot'),
+                label='Plot current window'
+                )
+            )
+        return v
 
 class IntervalSpectrum(PlotsInterval):
     name = 'Power Spectrum'
@@ -60,9 +104,7 @@ class IntervalSpectrum(PlotsInterval):
     avg_spec = Bool(True)
     sem = Bool(True)
     adaptive = Bool(True)
-    new_figure = Bool(False)
     plot = Button('Plot')
-    _figures = List([])
 
     def __default_mtm_kwargs(self, n):
         kw = dict()
@@ -79,17 +121,6 @@ class IntervalSpectrum(PlotsInterval):
         fx, pxx, _ = multi_taper_psd(array, **kw)
         return fx, pxx
 
-    def _get_fig(self):
-        fig = getattr(self, 'fig', None)
-        if fig and not self.new_figure:
-            print 'returning existing figure'
-            return fig, fig.axes[0], fig.canvas.draw_idle
-        self.fig = Figure()
-        ax = self.fig.add_subplot(111)
-        self._plot_count = 0
-        self._colors = mpl.rcParams["axes.prop_cycle"].by_key()["color"]
-        return self.fig, ax, None
-         
     def _plot_fired(self):
         x, y = self.parent._qtwindow.current_data()
         fx, pxx = self.spectrum(y)
@@ -119,12 +150,10 @@ class IntervalSpectrum(PlotsInterval):
                 )
             self._plot_count += 1
             ax.legend(lns[:1], (label,))
+        ax.set_ylabel('Power Spectral Density (mV / Hz^2)')
+        ax.set_xlabel('Frequency (Hz)')
         sns.despine(ax=ax)
-        if self._plot_count == 0:
-            splot = SavesFigure.live_fig(fig, has_graphs=True)
-            #splot = simplefigure(fig)
-            #splot.show()
-            self._figures.append(splot)
+        f.tight_layout()
         self._plot_count += 1
         if update is not None:
             update()
@@ -229,8 +258,12 @@ class VisWrapper(HasTraits):
 
     graph = Instance(QtGui.QWidget)
     x_scale = Float
+    y_spacing = Enum(0.5, [0.1, 0.2, 0.5, 1, 2, 5])
 
-    modules = List( [YRange, AnimateInterval, IntervalSpectrum] )
+    modules = List( [#YRange,
+                     IntervalTraces,
+                     AnimateInterval,
+                     IntervalSpectrum] )
 
     def __init__(self, qtwindow, **traits):
         self._qtwindow = qtwindow
@@ -243,20 +276,34 @@ class VisWrapper(HasTraits):
         for m in mods:
             self.modules.append( m(parent=self) )
 
+    @on_trait_change('y_spacing')
+    def _change_spacing(self):
+        self._qtwindow.update_y_spacing(self.y_spacing)
+
     def default_traits_view(self):
+        ht = 1200
         v = View(
-            VGroup(
+            VSplit(
                 UItem('graph',
                       editor=CustomEditor(setup_qwidget_control,
-                                          self._qtwindow.win)),
-                UItem('modules', style='custom',
-                      editor=ListEditor(use_notebook=True, deletable=False, 
-                                        dock_style='tab', page_name='.name'),
-                                        
-                      height=-150),
+                                          self._qtwindow.win),
+                      resizable=True,
+                      height=(ht-150)),
+                HSplit(
+                    Group(Label('Trace spacing (mv)'),
+                          UItem('y_spacing', resizable=True)),
+                                
+                    UItem('modules', style='custom', resizable=True,
+                          editor=ListEditor(use_notebook=True,
+                                            deletable=False, 
+                                            dock_style='tab',
+                                            page_name='.name'),
+                                            
+                          height=-150),
+                      )
                 ),
             width=1200,
-            height=500,
+            height=ht,
             resizable=True,
             title='Quick Scanner'
         )
