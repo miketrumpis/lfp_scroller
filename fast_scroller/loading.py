@@ -18,7 +18,7 @@ import pyqtgraph as pg
 from traits.api import Instance, Button, HasTraits, File, Float, \
      Str, Property, List, Enum, Int, Bool
 from traitsui.api import View, VGroup, HGroup, Item, UItem, \
-     Label, Handler, EnumEditor, Group, ListEditor, TableEditor
+     Label, Handler, EnumEditor, Group, TableEditor, Tabbed
 from traitsui.table_column import ObjectColumn
 
 from ecogana.devices.electrode_pinouts import get_electrode_map, electrode_maps
@@ -43,7 +43,7 @@ class FileHandler(Handler):
 
 class FileData(HasTraits):
     """Basic model for an HDF5 file holding an array timeseries."""
-    file = File
+    file = File(filter=[u'*.h5'])
     data_field = Str
     fs_field = Str
     y_scale = Float(1.0)
@@ -72,7 +72,7 @@ class FileData(HasTraits):
                     Item('fs_field', label='Fs field',
                          editor=EnumEditor(name='handler.fields'))
                     ),
-                Label('Scales samples to voltage (default to mV for Mux7)'),
+                Label('Scales samples to voltage (mV)'),
                 UItem('y_scale'),
                 Item('chan_map', label='channel map name'),
                 Item('zero_windows', label='Remove local DC?')
@@ -88,7 +88,7 @@ class Mux7FileData(FileData):
     An HDF5 array holding timeseries from the MUX headstages:
     defaults to building an ReadCache with DC offset subraction.
     """
-    file = File
+
     y_scale = Float( 1e3 / 20 )
     chan_map = Str('ratv4_mux6')
     data_field = Property(fget=lambda self: 'data')
@@ -127,7 +127,8 @@ class FilterMenu(HasTraits):
         for k, v in t.items():
             if k in ('trait_added', 'trait_modified'):
                 continue
-            items.append( Item(k, label=v.info_text, style='simple') )
+            #items.append( Item(k, label=v.info_text, style='simple') )
+            items.extend( [Label(v.info_text), UItem(k, style='simple')] )
         return View(*items, resizable=True)
     
 class BandpassMenu(FilterMenu):
@@ -163,14 +164,21 @@ class NotchMenu(FilterMenu):
 class FilterHandler(Handler):
 
     def object_filt_type_changed(self, info):
+        # check whether there is already a menu of the
+        # correct type -- this method appears to be called
+        # whenever a new handler is created!
         if info.object.filt_type == 'butterworth':
-            info.object.filt_menu = ButterMenu()
+            if not isinstance(info.object.filt_menu, ButterMenu):
+                info.object.filt_menu = ButterMenu()
         elif info.object.filt_type == 'cheby 1':
-            info.object.filt_menu = Cheby1Menu()
+            if not isinstance(info.object.filt_menu, Cheby1Menu):
+                info.object.filt_menu = Cheby1Menu()
         elif info.object.filt_type == 'cheby 2':
-            info.object.filt_menu = Cheby2Menu()
+            if not isinstance(info.object.filt_menu, Cheby2Menu):
+                info.object.filt_menu = Cheby2Menu()
         elif info.object.filt_type == 'notch':
-            info.object.filt_menu = NotchMenu()
+            if not isinstance(info.object.filt_menu, NotchMenu):
+                info.object.filt_menu = NotchMenu()
 
 
 class Filter(HasTraits):
@@ -239,6 +247,20 @@ class FilterPipeline(HasTraits):
         title='Filters',
         )
 
+class HeadstageHandler(Handler):
+
+    def object_headstage_changed(self, info):
+        hs = info.object.headstage
+        if hs.lower() in ('mux5', 'mux6', 'mux7'):
+            fd = Mux7FileData()
+        elif hs.lower() == 'intan':
+            fd = FileData(
+                y_scale = 0.000198, data_field='chdata', fs_field='Fs'
+                )
+        else:
+            fd = FileData()
+        info.object.file_data = fd
+    
 class VisLauncher(HasTraits):
     """
     Builds pyqtgraph/traitsui visualation using a timeseries
@@ -247,15 +269,16 @@ class VisLauncher(HasTraits):
     
     file_data = Instance(FileData)
     filters = Instance(FilterPipeline)
-    b = Button
+    b = Button('Launch Visualization')
     offset = Float(0.5)
     max_window_width = Float(1200.0)
+    headstage = Enum('mux7',
+                     ('mux3', 'mux5', 'mux6', 'mux7', 'intan', 'unknown'))
 
     def __init__(self, **traits):
         super(VisLauncher, self).__init__(**traits)
         self.add_trait('filters', FilterPipeline())
-        self.add_trait('tabs', List( [self.file_data, self.filters] ))
-
+        
     def _b_fired(self):
         if not os.path.exists(self.file_data.file):
             return
@@ -282,36 +305,36 @@ class VisLauncher(HasTraits):
     def default_traits_view(self):
         v = View(
             VGroup(
-                UItem(
-                    'tabs', style='custom',
-                    editor=ListEditor(
-                        use_notebook=True, deletable=False,
-                        dock_style='tab'
-                        )
+                Label('Headstage'),
+                UItem('headstage'),
+                Tabbed(
+                    UItem('file_data', style='custom'),
+                    UItem('filters', style='custom')
                     ),
-                Item('offset', label='Offset per channel (in mV)'),
-                Item('b', label='Launch vis.'),
+                Label('Offset per channel (in mV)'),
+                UItem('offset', ),
+                UItem('b'),
             ),
             resizable=True,
-            title='Launch Visualization'
+            title='Launch Visualization',
+            handler=HeadstageHandler
         )
         return v
 
     
 if __name__ == '__main__':
-    
-    ## fd = Mux7FileData()
-    fd = FileData()
-    v = VisLauncher(file_data=fd)
-    ## v = VisLauncher()
+
+    ## fd = FileData(
+    ##     file='/Users/mike/experiment_data/Viventi 2017-03-27 P4 Rat 17009 Implant/2017-03-27_13-24-53_008_Fs1000.h5',
+    ##     data_field='chdata',
+    ##     fs_field='Fs',
+    ##     chan_map='psv_61_intan2',
+    ##     y_scale=0.000198
+    ##     )
+
+    ## v = VisLauncher(headstage='intan')
     ## v.configure_traits()
+    ## v.file_data = fd
 
-
-    ## v = VisLauncher(file='/Users/mike/experiment_data/Viventi 2017-04-10 P4 Rat 17009/2017-04-10_16-21-18_010_Fs1000.h5',
-    ##                 data_field='chdata',
-    ##                 fs_field='Fs',
-    ##                 chan_map='psv_61_intan2',
-    ##                 y_scale=0.000198)
-
-    v.configure_traits()
-                    
+    v = VisLauncher(headstage='mux7')
+    v.configure_traits()                    
