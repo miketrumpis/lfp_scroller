@@ -81,7 +81,8 @@ class HDF5Plot(pg.PlotCurveItem):
             x_visible = self.x_visible
             ## visible += self.offset
         else:
-            # Here convert data into a down-sampled array suitable for visualizing.
+            # Here convert data into a down-sampled
+            # array suitable for visualizing.
 
             N = len(self.y_visible)
             Nsub = N // ds
@@ -302,7 +303,7 @@ class FastScroller(object):
             return
         image = np.empty( len(self.chan_map), 'd' )
         for i in xrange(len(self.chan_map)):
-            image[i] = self._curves[i].y_visible.mean()
+            image[i] = self._curves[i].y_visible.std()
         self.img.setImage( self.chan_map.embed(image, fill=0).T,
                            autoLevels=False )
         
