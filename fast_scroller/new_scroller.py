@@ -1,6 +1,7 @@
 from __future__ import division
 
 import matplotlib as mpl
+import matplotlib.ticker as ticker
 mpl.rcParams['interactive'] = True
 mpl.use('Qt4Agg')
 from matplotlib.figure import Figure
@@ -10,9 +11,10 @@ import PySide
 from pyqtgraph.Qt import QtGui
 
 from traits.api import Instance, Button, HasTraits, Float, Bool, \
-     Enum, on_trait_change, Str, List
+     Enum, on_trait_change, Str, List, Range, Property, Any, \
+     property_depends_on
 from traitsui.api import View, VGroup, HGroup, Item, UItem, CustomEditor, \
-     Group, ListEditor, VSplit, HSplit, Label
+     Group, ListEditor, VSplit, HSplit, Label, EnumEditor, VFlow
 
 from pyface.timer.api import Timer
 import time
@@ -21,30 +23,10 @@ from ecogana.anacode.anatool.gui_tools import SavesFigure
 from ecogana.anacode.plot_util import filled_interval, subplots
 from ecoglib.estimation.jackknife import Jackknife
 from ecoglib.numutil import nextpow2
+import ecoglib.estimation.multitaper as msp
 from sandbox.split_methods import multi_taper_psd
 
 import ecogana.anacode.seaborn_lite as sns
-
-
-## from matplotlib.backends.backend_qt4agg import \
-##      FigureCanvasQTAgg as FigureCanvas
-## from matplotlib.backends.backend_qt4agg import \
-##      NavigationToolbar2QT as NavigationToolbar
-from matplotlib.backends.backend_qt4agg import new_figure_manager_given_figure
-def simplefigure(fig):
-    from pyqtgraph.Qt import QtCore
-    canvas = FigureCanvas(fig)
-    main_frame = QtGui.QWidget()
-    canvas.setParent(main_frame)
-    mpl_toolbar = NavigationToolbar(canvas, main_frame)        
-    vbox = QtGui.QVBoxLayout()
-    vbox.addWidget(canvas)
-    vbox.addWidget(mpl_toolbar)
-    main_frame.setLayout(vbox)
-    #main_frame.setGeometry(QtCore.QRect(100, 100, 400, 200))
-    return main_frame
-
-
 
 class VisModule(HasTraits):
     name = Str('__dummy___')
@@ -177,6 +159,190 @@ class IntervalSpectrum(PlotsInterval):
             )
         return v
 
+    
+class IntervalSpectrogram(PlotsInterval):
+    name = 'Spectrogram'
+
+    channel = Str('all')
+    _chan_list = Property(depends_on='parent.chan_map')
+    # estimations details
+    NW = Enum( 2.5, np.arange(2, 11, 0.5).tolist() )
+    _bandwidth = Property( Float )
+    lag = Float(25) # ms
+    strip = Float(100) # ms
+    detrend = Bool(True)
+    adaptive = Bool(True)
+    over_samp = Range(0, 16, mode = 'spinner', value=4)
+    high_res = Bool(True)
+
+    baseline = Float(1.0) # sec
+    normalize = Enum('Z score', ('None', 'Z score', 'divide', 'subtract'))
+    plot = Button('Plot')
+    freq_hi = Float
+    freq_lo = Float(0)
+    new_figure = Bool(True)
+
+    colormap='Spectral_r'
+
+    def __init__(self, **traits):
+        HasTraits.__init__(self, **traits)
+        self.freq_hi = round( (self.parent.x_scale ** -1.0) / 2.0 )
+    
+    def _get__chan_list(self):
+        ii, jj = self.parent.chan_map.to_mat()
+        clist = ['All']
+        for i, j in zip(ii, jj):
+            clist.append( '{0}, {1}'.format(i,j) )
+        return sorted(clist)
+
+    @property_depends_on('NW')
+    def _get__bandwidth(self):
+        #t1, t2 = self.parent._qtwindow.current_frame()
+        T = self.strip * 1e-3
+        # TW = NW --> W = NW / T
+        return 2.0 * self.NW / T
+    
+    def __default_mtm_kwargs(self, strip):
+        kw = dict()
+        kw['NW'] = self.NW
+        kw['adaptive'] = self.adaptive
+        Fs = self.parent.x_scale ** -1.0
+        kw['Fs'] = Fs
+        kw['jackknife'] = False
+        kw['detrend'] = 'linear' if self.detrend else ''
+        lag = int( Fs * self.lag / 1000. )
+        if strip is None:
+            strip = int( Fs * self.strip / 1000. )
+        kw['NFFT'] = nextpow2(strip)
+        kw['pl'] = 1.0 - float(lag) / strip
+        if self.high_res:
+            kw['samp_factor'] = self.over_samp
+            kw['low_bias'] = 0.95
+        return kw, strip
+
+    def _normalize(self, tx, ptf, mode, tc):
+        # ptf should be ([n_chan], n_freq, n_time)
+        if not mode:
+            mode = self.normalize
+        if not tc:
+            tc = self.baseline
+
+        m = tx < tc
+        if ptf.ndim < 3:
+            ptf = ptf.reshape( (1,) + ptf.shape )
+        nf = ptf.shape[1]
+        p_bl = ptf[..., m].transpose(0, 2, 1).copy().reshape(-1, nf)
+
+        # get mean of baseline for each freq.
+        jn = Jackknife(p_bl, axis=0)
+        mn = jn.estimate(np.mean)
+        assert len(mn) == nf, '?'
+        if mode.lower() == 'divide':
+            ptf = ptf.mean(0) / mn[:, None]
+        elif mode.lower() == 'subtract':
+            ptf = np.exp(ptf.mean(0)) - np.exp(mn[:,None])
+        elif mode.lower() == 'z score':
+            stdev = jn.estimate(np.std)
+            ptf = (ptf.mean(0) - mn[:,None]) / stdev[:,None]
+        return ptf
+        
+    
+    def highres_spectrogram(self, array, strip=None, **mtm_kw):
+        kw, strip = self.__default_mtm_kwargs(strip)
+        kw.update(**mtm_kw)
+        tx, fx, ptf = msp.mtm_spectrogram(array, strip, **kw)
+        n_cut = 6
+        tx = tx[n_cut:-n_cut]
+        ptf = ptf[..., n_cut:-n_cut].copy()
+        return tx, fx, ptf
+
+    def spectrogram(self, array, strip=None, **mtm_kw):
+        kw, strip = self.__default_mtm_kwargs(strip)
+        kw.update(**mtm_kw)
+        tx, fx, ptf = msp.mtm_spectrogram_basic(array, strip, **kw)
+        return tx, fx, ptf
+
+    def _plot_fired(self):
+        x, y = self.parent._qtwindow.current_data()
+        x = x[0]
+        if self.channel.lower() != 'all':
+            i, j = map(int, self.channel.split(','))
+            y = y[self.parent.chan_map.lookup(i, j)]
+
+        if self.high_res:
+            tx, fx, ptf = self.highres_spectrogram(y)
+        else:
+            tx, fx, ptf = self.spectrogram(y)
+
+        if self.normalize.lower() != 'none':
+            ptf = self._normalize(tx, ptf, self.normalize, self.baseline)
+        else:
+            ptf = np.log(ptf)
+            if ptf.ndim > 2:
+                ptf = ptf.mean(0)
+        m = (fx >= self.freq_lo) & (fx <= self.freq_hi)
+        ptf = ptf[m]
+        fx = fx[m]
+        fig, ax, update = self._get_fig()
+        im = ax.imshow(
+            ptf, extent=[tx[0], tx[-1], fx[0], fx[-1]],
+            cmap=self.colormap
+            )
+        ax.axis('auto')
+        ax.set_xlabel('Time (s)'); ax.set_ylabel('Frequency (Hz)')
+        cbar = fig.colorbar(im, ax=ax, shrink=0.5)
+        cbar.locator = ticker.MaxNLocator(nbins=3)
+        if self.normalize.lower() == 'divide':
+            title = 'Normalized ratio'
+        elif self.normalize.lower() == 'subtract':
+            title = 'Baseline subtracted'
+        elif self.normalize.lower() == 'z score':
+            title = 'Z score'
+        else:
+            title = 'Log-power'
+        cbar.set_label(title)
+        fig.tight_layout()
+        if update is not None:
+            update()
+        
+    def default_traits_view(self):
+        v = View(
+            HGroup(
+                Group(
+                    Label('Channel to plot'),
+                    UItem('channel',
+                          editor=EnumEditor(name='object._chan_list')),
+                    UItem('plot'),
+                    Label('Freq. Range'),
+                    HGroup(
+                        Item('freq_lo', label='low', width=3),
+                        Item('freq_hi', label='high', width=3),
+                        )
+                    ),
+                VGroup(
+                    Item('high_res', label='High-res SG'),
+                    Item('normalize', label='Normalize'),
+                    Item('baseline', label='Baseline length (sec)'),
+                    label='Spectrogram setup'
+                    ),
+                VGroup(
+                    Item('NW'),
+                    Item('_bandwidth', label='BW (Hz)',
+                         style='readonly', width=4),
+                    Item('strip', label='SG strip len (ms)'),
+                    Item('lag', label='SG lag (ms)'),
+                    Item('detrend', label='Detrend window'),
+                    Item('adaptive', label='Adaptive MTM'),
+                    label='Estimation details', columns=2
+                    ),
+                VGroup(
+                    Item('over_samp', label='Oversamp high-res SG'),
+                    enabled_when='high_res'
+                    )
+                )
+            )
+        return v
+    
 class YRange(VisModule):
     name = 'Trace Offsets'
     y_spacing = Enum(0.5, [0.1, 0.2, 0.5, 1, 2, 5])
@@ -259,11 +425,12 @@ class VisWrapper(HasTraits):
     graph = Instance(QtGui.QWidget)
     x_scale = Float
     y_spacing = Enum(0.5, [0.1, 0.2, 0.5, 1, 2, 5])
-
-    modules = List( [#YRange,
-                     IntervalTraces,
+    chan_map = Any
+    
+    modules = List( [IntervalTraces,
                      AnimateInterval,
-                     IntervalSpectrum] )
+                     IntervalSpectrum,
+                     IntervalSpectrogram] )
 
     def __init__(self, qtwindow, **traits):
         self._qtwindow = qtwindow
