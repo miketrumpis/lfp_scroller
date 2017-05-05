@@ -250,6 +250,8 @@ class FilterPipeline(HasTraits):
 class HeadstageHandler(Handler):
 
     def object_headstage_changed(self, info):
+        if not info.initialized and info.object.file_data:
+            return
         hs = info.object.headstage
         if hs.lower() in ('mux5', 'mux6', 'mux7'):
             fd = Mux7FileData()
