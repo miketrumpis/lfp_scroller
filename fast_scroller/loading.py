@@ -280,8 +280,8 @@ class VisLauncher(HasTraits):
     def __init__(self, **traits):
         super(VisLauncher, self).__init__(**traits)
         self.add_trait('filters', FilterPipeline())
-        
-    def _b_fired(self):
+
+    def launch(self):
         if not os.path.exists(self.file_data.file):
             return
         
@@ -298,11 +298,14 @@ class VisLauncher(HasTraits):
                                x_scale=x_scale,
                                load_channels=chan_order,
                                max_zoom=self.max_window_width)
-        v_win = VisWrapper(new_vis, x_scale = x_scale)
+        v_win = VisWrapper(new_vis, x_scale = x_scale, chan_map=chan_map)
         view = v_win.default_traits_view()
         view.kind = 'live'
         v_win.edit_traits(view=view)
-
+        return v_win
+        
+    def _b_fired(self):
+        self.launch()
         
     def default_traits_view(self):
         v = View(
