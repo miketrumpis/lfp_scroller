@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 def h5mean(
         array, axis, block_size=20000,
-        start=0, stop=None, rowmask=None, colmask=None
+        start=0, stop=None, rowmask=(), colmask=()
         ):
     """Compute mean of a 2D HDF5 array in blocks"""
 
