@@ -97,7 +97,7 @@ class Mux7FileData(FileData):
     data_field = Property(fget=lambda self: 'data')
     fs_field = Property(fget=lambda self: 'Fs')
     
-    def _compose_arrays(self, filter):
+    def _compose_arrays(self, filter, rowmask=(), colmask=()):
         if self.zero_windows:
             return super(Mux7FileData, self)._compose_arrays(filter)
         f = h5py.File(self.file, 'r')
