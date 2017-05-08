@@ -50,7 +50,7 @@ class ReadCache(object):
 
     def __getitem__(self, sl):
         indx, range = sl
-        if not isinstance(indx, int):
+        if not isinstance(indx, (np.integer, int)):
             return self._array[sl].copy()
         if self._current_slice != range:
             all_sl = ( slice(None), range )
