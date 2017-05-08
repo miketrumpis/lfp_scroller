@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
 Objects for loading/filtering HDF5 data streams and launching the
 pyqtgraph / traitsui vis tool.
@@ -23,6 +24,7 @@ from traitsui.table_column import ObjectColumn
 
 from ecogana.devices.electrode_pinouts import get_electrode_map, electrode_maps
 from ecoglib.filt.time.design import butter_bp, cheby1_bp, cheby2_bp, notch
+from ecoglib.util import ChannelMap
 
 from h5scroller import FastScroller
 from h5data import bfilter, FilteredReadCache, h5mean, ReadCache, \
@@ -51,11 +53,12 @@ class FileData(HasTraits):
                     sorted(electrode_maps.keys()))
     zero_windows = Bool
 
-    def _compose_arrays(self, filter):
+    def _compose_arrays(self, filter, rowmask=(), colmask=()):
         # default is just a wrapped array
         h5 = h5py.File(self.file, 'r')
         array = filter(h5[self.data_field])
-        mn_trace = h5mean(array, 0) * self.y_scale
+        mn_trace = h5mean(array, 0, rowmask=rowmask, colmask=colmask)
+        mn_trace *= self.y_scale
         if self.zero_windows:
             array = FilteredReadCache(array, partial(detrend, type='constant'))
         else:
@@ -100,7 +103,8 @@ class Mux7FileData(FileData):
         f = h5py.File(self.file, 'r')
         array = filter(f[self.data_field])
         mn_level = h5mean(array, 1, start=int(3e4))
-        mn_trace = h5mean(array, 0) * self.y_scale
+        mn_trace = h5mean(array, 0, rowmask=rowmask, colmask=colmask)
+        mn_trace *= self.y_scale
         array = DCOffsetReadCache(array, mn_level)
         return array, mn_trace
 
@@ -253,8 +257,10 @@ class HeadstageHandler(Handler):
         if not info.initialized and info.object.file_data:
             return
         hs = info.object.headstage
-        if hs.lower() in ('mux5', 'mux6', 'mux7'):
-            fd = Mux7FileData()
+        if hs.lower() == 'mux3':
+            fd = Mux7FileData(y_scale=1e3 / 10.)
+        elif hs.lower() in ('mux5', 'mux6', 'mux7'):
+            fd = Mux7FileData(y_scale=1e3 / 20.)
         elif hs.lower() == 'intan':
             fd = FileData(
                 y_scale = 0.000198, data_field='chdata', fs_field='Fs'
@@ -285,20 +291,33 @@ class VisLauncher(HasTraits):
         if not os.path.exists(self.file_data.file):
             return
         
-        chan_map, _ = get_electrode_map(self.file_data.chan_map)
+        chan_map, nc = get_electrode_map(self.file_data.chan_map)
+        data_channels = range( len(chan_map) + len(nc) )
+        for chan in nc:
+            data_channels.remove(chan)
+
+        # permute  channels to stack rows
         ii, jj = chan_map.to_mat()
         chan_order = np.argsort(ii)[::-1]
+        data_channels = [data_channels[i] for i in chan_order]
+        chan_map = ChannelMap( [chan_map[i] for i in chan_order],
+                               chan_map.geometry, col_major=chan_map.col_major )
+
         h5 = h5py.File(self.file_data.file, 'r')
         x_scale = h5[self.file_data.fs_field].value ** -1.0
+        num_vectors = h5[self.file_data.data_field].shape[0]
         h5.close()
         filters = self.filters.make_pipeline(x_scale ** -1.0)
-        array, nav = self.file_data._compose_arrays(filters)
+        rm = np.zeros( (num_vectors,), dtype='?' )
+        rm[data_channels] = True
+        array, nav = self.file_data._compose_arrays(filters, rowmask=rm)
         new_vis = FastScroller(array, self.file_data.y_scale,
                                self.offset, chan_map, nav,
                                x_scale=x_scale,
-                               load_channels=chan_order,
+                               load_channels=data_channels,
                                max_zoom=self.max_window_width)
-        v_win = VisWrapper(new_vis, x_scale = x_scale, chan_map=chan_map)
+        v_win = VisWrapper(new_vis, x_scale = x_scale, chan_map=chan_map,
+                           y_spacing=self.offset)
         view = v_win.default_traits_view()
         view.kind = 'live'
         v_win.edit_traits(view=view)
