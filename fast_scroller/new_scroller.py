@@ -448,7 +448,7 @@ class VisWrapper(HasTraits):
         self._qtwindow.update_y_spacing(self.y_spacing)
 
     def default_traits_view(self):
-        ht = 1200
+        ht = 1000
         v = View(
             VSplit(
                 UItem('graph',
