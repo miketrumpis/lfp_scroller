@@ -4,7 +4,10 @@ from scipy.linalg import LinAlgError
 from scipy.signal import lfilter, lfilter_zi
 from tqdm import tqdm
 
-def h5mean(array, axis, block_size=20000, start=0, stop=-1):
+def h5mean(
+        array, axis, block_size=20000,
+        start=0, stop=None, rowmask=None, colmask=None
+        ):
     """Compute mean of a 2D HDF5 array in blocks"""
 
     shape = array.shape
@@ -22,7 +25,16 @@ def h5mean(array, axis, block_size=20000, start=0, stop=-1):
             sl = ( range, slice(start, stop) )
         else:
             sl = ( slice(start, stop), range )
-        mn[range] = array[sl].mean(axis)
+        if not (len(rowmask) or len(colmask)):
+            mn[range] = array[sl].mean(axis)
+        else:
+            tmp = array[sl]
+            # only average unmasked rows/columns
+            if len(rowmask):
+                tmp = tmp[rowmask]
+            if len(colmask):
+                tmp = tmp[:, colmask]
+            mn[range] = tmp.mean(axis)
         b += block_size
         if b >= mn_size:
             break
