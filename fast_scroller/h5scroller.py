@@ -145,7 +145,12 @@ class FastScroller(object):
         if isinstance(load_channels, str) and load_channels.lower() == 'all':
             load_channels = xrange(nchan)
             self.chan_map = chan_map
-        elif len(load_channels) <= len(chan_map):
+        elif len(load_channels) == len(chan_map):
+            self.chan_map = chan_map
+        elif len(load_channels) < len(chan_map):
+            # "load_channels" indexes an array of recording channels
+            # that may include grounded channels or other junk.
+            raise NotImplementedError('cannot yet subset data channels')
             new_cm = ChannelMap( [chan_map[i] for i in load_channels],
                                   chan_map.geometry,
                                   col_major=chan_map.col_major )
