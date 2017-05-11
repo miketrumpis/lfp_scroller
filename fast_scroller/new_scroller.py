@@ -200,7 +200,7 @@ class IntervalSpectrogram(PlotsInterval):
         #t1, t2 = self.parent._qtwindow.current_frame()
         T = self.strip * 1e-3
         # TW = NW --> W = NW / T
-        return 2.0 * self.NW / T
+        return 2.0 * self.NW / T 
     
     def __default_mtm_kwargs(self, strip):
         kw = dict()
@@ -274,6 +274,8 @@ class IntervalSpectrogram(PlotsInterval):
         else:
             tx, fx, ptf = self.spectrogram(y)
 
+        tx += x[0]
+            
         if self.normalize.lower() != 'none':
             ptf = self._normalize(tx, ptf, self.normalize, self.baseline)
         else:
