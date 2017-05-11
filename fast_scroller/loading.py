@@ -17,12 +17,14 @@ import PySide
 import pyqtgraph as pg
 
 from traits.api import Instance, Button, HasTraits, File, Float, \
-     Str, Property, List, Enum, Int, Bool
+     Str, Property, List, Enum, Int, Bool, on_trait_change
 from traitsui.api import View, VGroup, HGroup, Item, UItem, \
-     Label, Handler, EnumEditor, Group, TableEditor, Tabbed
+     Label, Handler, EnumEditor, Group, TableEditor, Tabbed, spring, \
+     FileEditor
 from traitsui.table_column import ObjectColumn
 
 from ecogana.devices.electrode_pinouts import get_electrode_map, electrode_maps
+from ecogana.devices.load.open_ephys import hdf5_open_ephys_channels
 from ecoglib.filt.time.design import butter_bp, cheby1_bp, cheby2_bp, notch
 from ecoglib.util import ChannelMap
 
@@ -31,7 +33,18 @@ from h5data import bfilter, FilteredReadCache, h5mean, ReadCache, \
      DCOffsetReadCache
 
 from new_scroller import VisWrapper
-     
+
+class Error(HasTraits):
+    error_msg = Str('')
+    view = View(
+        VGroup(
+            spring,
+            HGroup(Item('error_msg', style='readonly'), show_labels=False),
+            spring
+            ),
+        buttons=['OK']
+    )
+
 class FileHandler(Handler):
 
     fields = List(Str)
@@ -85,6 +98,96 @@ class FileData(HasTraits):
             title='Launch Visualization'
         )
         return view
+
+class OpenEphysFileData(FileData):
+    file = File(filter=[u'*.h5', u'*.continuous'])
+    data_field = Property(fget=lambda self: 'chdata')
+    fs_field = Property(fget=lambda self: 'Fs')
+    y_scale = Float(1)
+
+    # convert controls
+    can_convert = Property(
+        fget=lambda self: os.path.splitext(self.file)[1] == '.continuous'
+        )
+    temp_conv = Bool(False)
+    conv_file = File
+    downsamp = Int(1)
+    quantized = Bool(False)
+    do_convert = Button('Run convert')
+    
+
+    @on_trait_change('file')
+    def _sync_files(self):
+        if self.can_convert:
+            rec, _ = os.path.split(self.file)        
+            self.conv_file = rec + '.h5'
+
+    def _do_convert_fired(self):
+        # check extension
+        if os.path.splitext(self.file) == '.h5':
+            print 'already an HDF5 file!!'
+            return
+        # self.file is '/exp/rec/file.continuous'
+        rec, _ = os.path.split(self.file)
+        exp, rec = os.path.split(rec)
+        if self.temp_conv:
+            if not self.conv_file:
+                ev = Error(
+                    error_msg='Temp file not implemented, set a convert file'
+                    )
+                ev.edit_traits()
+                return
+            self.temp_conv = False
+        if self.temp_conv:
+            with NamedTemporaryFile(mode='ab') as h5file:
+                h5file.close()
+                hdf5_open_ephys_channels(
+                    exp, rec, h5file.name,
+                    downsamp=self.downsamp, quantized=self.quantized
+                    )
+            self.file = self.h5file.name
+        else:
+            if not self.conv_file:
+                ev = Error(
+                    error_msg='Set a convert file first'
+                    )
+                ev.edit_traits()
+                return
+            print 'converting to', self.conv_file
+            hdf5_open_ephys_channels(
+                exp, rec, self.conv_file,
+                downsamp=self.downsamp, quantized=self.quantized
+                )
+            self.file = self.conv_file
+                        
+    def default_traits_view(self):
+        v = View(
+            VGroup(
+                Item('file', label='Visualize this file'),
+                VGroup(
+                    Item('conv_file',
+                         editor=FileEditor(dialog_style='save'),
+                         label='HDF5 convert file'),
+                    HGroup(
+                        Item('temp_conv', label='Use temp file'),
+                        Item('downsamp', label='Downsample factor'),
+                        Item('quantized', label='Quantized?'),
+                        label='Conversion options'
+                        ),
+                    UItem('do_convert'),
+                    enabled_when='can_convert'
+                    ),
+                    
+                Label('Scales samples to mV if sampled are quantized'),
+                UItem('y_scale'),
+                Item('chan_map', label='channel map name'),
+                Item('zero_windows', label='Remove local DC?')
+                ),
+            resizable=True,
+            title='Launch Visualization'
+        )
+        return v
+        
     
 class Mux7FileData(FileData):
     """
@@ -263,9 +366,7 @@ class HeadstageHandler(Handler):
         elif hs.lower() in ('mux5', 'mux6', 'mux7'):
             fd = Mux7FileData(y_scale=1e3 / 20.)
         elif hs.lower() == 'intan':
-            fd = FileData(
-                y_scale = 0.000198, data_field='chdata', fs_field='Fs'
-                )
+            fd = OpenEphysFileData()
         else:
             fd = FileData()
         info.object.file_data = fd
