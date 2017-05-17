@@ -173,7 +173,7 @@ def bfilter(b, a, x, axis=-1, zi=None, out=None):
             zi = zii[ tuple(zi_sl) ] * xc[ tuple(xc_sl) ]
         xcf, zi = lfilter(b, a, xc, axis=axis, zi=zi)
         if out is None:
-            xc[:] = xcf
+            x[sl] = xcf
         else:
             out[sl] = xcf
     return
