@@ -686,7 +686,6 @@ class IntervalSpectrogram(PlotsInterval):
         else:
             tx, fx, ptf = self.spectrogram(y)
 
-        tx += x[0]
             
         if self.normalize.lower() != 'none':
             ptf = self._normalize(tx, ptf, self.normalize, self.baseline)
@@ -694,9 +693,11 @@ class IntervalSpectrogram(PlotsInterval):
             ptf = np.log(ptf)
             if ptf.ndim > 2:
                 ptf = ptf.mean(0)
+        # cut out non-display frequencies and advance timebase to match window
         m = (fx >= self.freq_lo) & (fx <= self.freq_hi)
         ptf = ptf[m]
         fx = fx[m]
+        tx += x[0]
         fig, ax, update = self._get_fig()
         im = ax.imshow(
             ptf, extent=[tx[0], tx[-1], fx[0], fx[-1]],
