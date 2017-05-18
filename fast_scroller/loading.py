@@ -103,7 +103,7 @@ class OpenEphysFileData(FileData):
     file = File(filter=[u'*.h5', u'*.continuous'])
     data_field = Property(fget=lambda self: 'chdata')
     fs_field = Property(fget=lambda self: 'Fs')
-    y_scale = Float(1)
+    y_scale = Float(0.001)
 
     # convert controls
     can_convert = Property(
@@ -178,7 +178,8 @@ class OpenEphysFileData(FileData):
                     enabled_when='can_convert'
                     ),
                     
-                Label('Scales samples to mV if sampled are quantized'),
+                Label('Scales samples to mV'),
+                Label('(1.98e-4 if quantized, else 1e-3)'),
                 UItem('y_scale'),
                 Item('chan_map', label='channel map name'),
                 Item('zero_windows', label='Remove local DC?')
