@@ -323,7 +323,7 @@ def _pipeline_factory(f_list):
     def copy_x(x):
         with NamedTemporaryFile(mode='ab', dir='.') as f:
             print f.name
-            f.close()
+            f.file.close()
             fw = h5py.File(f.name, 'w')
             y = fw.create_dataset('data', shape=x.shape,
                                   dtype=x.dtype, chunks=x.chunks)
