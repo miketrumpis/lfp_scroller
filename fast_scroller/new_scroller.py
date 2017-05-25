@@ -68,6 +68,7 @@ class IntervalTraces(PlotsInterval):
     name = 'Plot Window'
     plot = Button('Plot')
     new_figure = Bool(True)
+    label_channels = Bool(False)
 
     def _plot_fired(self):
         x, y = self.parent._qtwindow.current_data()
@@ -75,9 +76,16 @@ class IntervalTraces(PlotsInterval):
         dy = self.parent.y_spacing
         f, ax, update = self._get_fig()
         clr = self._colors[self._plot_count]
-        ax.plot(x, y.T + np.arange(len(y)) * dy, lw=0.5, color=clr)
+        y_levels = np.arange(len(y)) * dy
+        ax.plot(x, y.T + y_levels, lw=0.5, color=clr)
         sns.despine(ax=ax)
-        ax.set_ylabel('Amplitude (mV)')
+        if not self.label_channels:
+            ax.set_ylabel('Amplitude (mV)')
+        else:
+            ax.set_yticks( y_levels )
+            ii, jj = self.parent._qtwindow.chan_map.to_mat()
+            labels = map(str, zip(ii, jj))
+            ax.set_yticklabels(labels, fontsize=8)
         ax.set_xlabel('Time (s)')
         f.tight_layout()
         self._plot_count += 1
@@ -90,6 +98,8 @@ class IntervalTraces(PlotsInterval):
         v = View(
             Group(
                 UItem('plot'),
+                Label('Label Channels'),
+                UItem('label_channels'),
                 label='Plot current window'
                 )
             )
