@@ -1,6 +1,6 @@
 from __future__ import division
 
-import sys
+import os, sys
 
 import matplotlib as mpl
 import matplotlib.ticker as ticker
@@ -9,6 +9,7 @@ mpl.rcParams['interactive'] = True
 mpl.use('Qt4Agg')
 from matplotlib.backends.backend_qt4agg import \
      FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 
 import numpy as np
@@ -17,20 +18,23 @@ from pyqtgraph.Qt import QtGui
 
 from traits.api import Instance, Button, HasTraits, Float, Bool, \
      Enum, on_trait_change, Str, List, Range, Property, Any, \
-     property_depends_on, Int
+     property_depends_on, Int, File
 from traitsui.api import View, VGroup, HGroup, Item, UItem, CustomEditor, \
      Group, ListEditor, VSplit, HSplit, Label, EnumEditor, \
-     RangeEditor
+     RangeEditor, FileEditor
 
 from pyface.timer.api import Timer
 import time
 
+from tqdm import tqdm
+
 from nitime.utils import autocov
 
-from ecogana.anacode.anatool.gui_tools import SavesFigure
+from ecogana.anacode.anatool.gui_tools import SavesFigure, ArrayMap
 from ecogana.anacode.signal_testing import centered_pair_maps
 from ecogana.anacode.plot_util import filled_interval, subplots, \
      subplot2grid
+from ecoglib.vis.traitsui_bridge import MPLFigureEditor, PingPongStartup
 from ecoglib.estimation.jackknife import Jackknife
 from ecoglib.numutil import nextpow2
 from ecoglib.util import channel_combinations, ChannelMap
@@ -138,6 +142,94 @@ class MultiframeSavesFigure(SavesFigure):
     def named_toggle(name):
         return MultiframeSavesFigure(mode_name=name)
 
+class ArrayVarianceTool(HasTraits):
+    """Stand-alone UI to image covariance seeded at chosen sites"""
+    array_plot = Instance(ArrayMap)
+    selected_site = Int(-1)
+    min_max_norm = Bool(True)
+    cmap = Enum('gray', ('gray', 'gray_r', 'jet', 'bwr', 'viridis'))
+    save_file = File(os.getcwd())
+    save_all = Button('Save PDF')
+
+    def __init__(self, cov, chan_map, **traits):
+        self.cov = cov
+        self._cv_mn = cov.min()
+        self._cv_mx = cov.max()
+        array_plot = ArrayMap(chan_map)
+        HasTraits.__init__(self, array_plot=array_plot)
+        self.sync_trait('selected_site', self.array_plot, mutual=True)
+
+    @on_trait_change('selected_site, cmap, min_max_norm')
+    def _image(self):
+        kw = dict(cmap=self.cmap)
+        if self.min_max_norm:
+            kw['clim'] = (self._cv_mn, self._cv_mx)
+        else:
+            if self._cv_mn < 0:
+                # full neg-pos range
+                mx = max( -self._cv_mn, self._cv_mx )
+                kw['clim'] = (-mx, mx)
+            else:
+                kw['clim'] = (0, self._cv_mx)
+        site = self.selected_site
+        if site >= 0:
+            self.array_plot.update_map(self.cov[site], **kw)
+            self.array_plot.ax.set_title('Seeded covariance map')
+        else:
+            self.array_plot.update_map(self.cov.mean(1), **kw)
+            self.array_plot.ax.set_title('Mean covariance weight')
+
+    def _save_all_fired(self):
+        # cycle through sites, update image, and use
+        # PdfPages.savefig(self.array_plot.fig)
+        chan_map = self.array_plot.chan_map
+        ij = zip(*chan_map.to_mat())
+        ij = sorted(ij)
+        pdf_file = self.save_file
+        if not pdf_file.endswith('.pdf'):
+            pdf_file = pdf_file + '.pdf'
+        save_site = self.selected_site
+        with PdfPages(pdf_file) as pdf:
+            for i_, j_ in tqdm(ij, desc='Saving PDF pages', leave=True):
+                s = chan_map.lookup(i_, j_)
+                self.selected_site = s
+                f = self.array_plot.fig
+                ax = self.array_plot.ax
+                ttl = ax.get_title()
+                ax.set_title(ttl + ' site ({0}, {1})'.format(i_, j_))
+                pdf.savefig(f)
+        self.selected_site = save_site
+            
+        
+    def _post_canvas_hook(self):
+        self.array_plot.fig.canvas.mpl_connect(
+            'button_press_event', self.array_plot.click_listen
+            )
+        self._image()
+
+    def default_traits_view(self):
+        v = View(
+            VSplit(
+                UItem('array_plot', editor=MPLFigureEditor(),
+                      width=500, height=400, resizable=True),
+                HGroup(
+                    Item('selected_site', style='readonly'),
+                    Item('min_max_norm', label='Min-Max Normalize'),
+                    Item('cmap', label='Color map'),
+                    ),
+                HGroup(
+                    Item('save_file', label='pdf file',
+                         editor=FileEditor(dialog_style='save')),
+                    UItem('save_all')
+                    )
+                ),
+            handler=PingPongStartup,
+            resizable=True,
+            title='Covariance Visualization'
+            )
+        return v
+            
+    
 class SpatialVariance(PlotsInterval):
     name = 'Spatial Variance'
     plot = Button('plot')
@@ -157,6 +249,23 @@ class SpatialVariance(PlotsInterval):
     plot_stcov = Button('STCov map')
     n_lags = Int(10)
     norm_kernel = Bool(False)
+
+    # tool button
+    vis_tool = Button('Covar map')
+
+    def _vis_tool_fired(self):
+        _, y = self.parent._qtwindow.current_data()
+        if self.normalize:
+            cov = np.corrcoef(y)
+        else:
+            cov = np.cov(y)
+        chan_map = self.parent._qtwindow.chan_map
+        tool = ArrayVarianceTool(cov, chan_map)
+        print tool.array_plot
+        view = tool.default_traits_view()
+        view.kind = 'live'
+        tool.edit_traits(view=view)
+        return tool
 
     def _plot_acov_fired(self):
         t, y = self.parent._qtwindow.current_data()
@@ -206,14 +315,20 @@ class SpatialVariance(PlotsInterval):
         t_stamp = t[0].mean()
         t = (t[0] - t[0,0]) * 1e3
         dt = t[1] - t[0]
-        N = int(self.n_lags / dt)
+        # shoot for minimum of 1 ms per frame
+        skip = 1
+        while dt*skip <= 1:
+            skip += 1
+        N = int(self.n_lags / (dt * skip))
+        print self.n_lags, dt, N, skip
         y = y - y.mean(axis=1, keepdims=1)
         N = min( len(t)-1, N )
         Ct = np.empty( (N, len(y), len(y)), 'd' )
         T = len(t)
-        for n in xrange(N):
+        for n in tqdm(xrange(0, skip*N, skip),
+                      desc='Computing S-T functions', leave=True):
             Ct_ = np.einsum('ik,jk->ij', y[:, :T-n], y[:, n:])
-            Ct[n] = Ct_ / (T-n)
+            Ct[n//skip] = Ct_ / (T-n)
 
         if self.norm_kernel:
             nrm = np.sqrt( Ct[0].diagonal() )
@@ -225,7 +340,9 @@ class SpatialVariance(PlotsInterval):
         idx1 = chan_combs.idx1; idx2 = chan_combs.idx2
 
         d_idx = np.triu_indices(len(y), k=1)
-        stcov = [centered_pair_maps(Ct_[d_idx], idx1, idx2) for Ct_ in Ct]
+        stcov = list()
+        for Ct_ in tqdm(Ct, desc='Centering S-T kernels'):
+            stcov.append( centered_pair_maps(Ct_[d_idx], idx1, idx2) )
         stcov = np.array([np.nanmean(s_, axis=0) for s_ in stcov])
         y, x = stcov.shape[-2:]
         midx = int( x/2 ); xx = (np.arange(x) - midx) * self.pitch
@@ -257,7 +374,7 @@ class SpatialVariance(PlotsInterval):
         mx = np.nanmax(np.abs(st_xt))
         print mx
         im = ax2.imshow(
-            st_xt, extent=[xx[0], xx[-1], t[N], 0],
+            st_xt, extent=[xx[0], xx[-1], t[N*skip], 0],
             clim=(-mx, mx), cmap='bwr', origin='upper'
             )
         ax2.axis('auto')
@@ -271,7 +388,7 @@ class SpatialVariance(PlotsInterval):
         mx = np.nanmax(np.abs(st_yt))
         print mx
         im = ax3.imshow(
-            st_yt, extent=[yy[0], yy[-1], t[N], 0],
+            st_yt, extent=[yy[0], yy[-1], t[N*skip], 0],
             clim=(-mx, mx), cmap='bwr', origin='upper'
             )
         ax3.axis('auto')
@@ -280,7 +397,7 @@ class SpatialVariance(PlotsInterval):
         ax3.set_ylabel('Lag (ms)')
                 
         splot = MultiframeSavesFigure(fig, stcov, mode_name='lag (ms)',
-                                      frame_index=t[:N])
+                                      frame_index=t[0:N*skip:skip])
         splot.edit_traits()
         fig.tight_layout()
         fig.canvas.draw_idle()
@@ -463,7 +580,8 @@ class SpatialVariance(PlotsInterval):
                 VGroup(
                     Label('Plot in new figure'),
                     UItem('new_figure'),
-                    UItem('plot')
+                    UItem('plot'),
+                    UItem('vis_tool'),
                     ),
                 VGroup(
                     Item('estimator', label='Estimator'),
