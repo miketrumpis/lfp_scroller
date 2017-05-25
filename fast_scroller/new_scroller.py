@@ -157,6 +157,8 @@ class ArrayVarianceTool(HasTraits):
     array_plot = Instance(ArrayMap)
     selected_site = Int(-1)
     min_max_norm = Bool(True)
+    _c_lo = Float
+    _c_hi = Float
     cmap = Enum('gray', ('gray', 'gray_r', 'jet', 'bwr', 'viridis'))
     save_file = File(os.getcwd())
     save_all = Button('Save PDF')
@@ -166,21 +168,21 @@ class ArrayVarianceTool(HasTraits):
         self._cv_mn = cov.min()
         self._cv_mx = cov.max()
         array_plot = ArrayMap(chan_map)
-        HasTraits.__init__(self, array_plot=array_plot)
+        HasTraits.__init__(
+            self, array_plot=array_plot,
+            _c_lo=self._cv_mn, _c_hi=self._cv_mx
+            )
         self.sync_trait('selected_site', self.array_plot, mutual=True)
 
-    @on_trait_change('selected_site, cmap, min_max_norm')
+    @on_trait_change('selected_site, cmap, min_max_norm, _c_lo, _c_hi')
     def _image(self):
+        if not hasattr(self, 'array_plot'):
+            return
         kw = dict(cmap=self.cmap)
         if self.min_max_norm:
             kw['clim'] = (self._cv_mn, self._cv_mx)
         else:
-            if self._cv_mn < 0:
-                # full neg-pos range
-                mx = max( -self._cv_mn, self._cv_mx )
-                kw['clim'] = (-mx, mx)
-            else:
-                kw['clim'] = (0, self._cv_mx)
+            kw['clim'] = self._c_lo, self._c_hi
         site = self.selected_site
         if site >= 0:
             self.array_plot.update_map(self.cov[site], **kw)
@@ -226,6 +228,11 @@ class ArrayVarianceTool(HasTraits):
                     Item('selected_site', style='readonly'),
                     Item('min_max_norm', label='Min-Max Normalize'),
                     Item('cmap', label='Color map'),
+                    ),
+                HGroup(
+                    Item('_c_lo', label='Low color'),
+                    Item('_c_hi', label='High color'),
+                    enabled_when='min_max_norm==False'
                     ),
                 HGroup(
                     Item('save_file', label='pdf file',
