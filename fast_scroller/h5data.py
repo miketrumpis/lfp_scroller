@@ -74,6 +74,24 @@ class ReadCache(object):
         new_sl = (indx, new_range)
         return self._current_seg[new_sl].copy()
 
+class CommonReferenceReadCache(ReadCache):
+    """Returns common-average re-referenced blocks"""
+
+    def __getitem__(self, sl):
+        indx, range = sl
+        if not isinstance(indx, (np.integer, int)):
+            return self._array[sl].copy()
+        if self._current_slice != range:
+            all_sl = ( slice(None), range )
+            self._current_seg = self._array[all_sl].copy()
+            self._current_seg -= self._current_seg.mean(0)
+            self._current_slice = range
+        # always return the full range after slicing with possibly
+        # complex original range
+        new_range = slice(None)
+        new_sl = (indx, new_range)
+        return self._current_seg[new_sl].copy()
+
 class FilteredReadCache(ReadCache):
     """
     Apply row-by-row filters to a ReadCache

@@ -30,7 +30,7 @@ from ecoglib.util import ChannelMap
 
 from h5scroller import FastScroller
 from h5data import bfilter, FilteredReadCache, h5mean, ReadCache, \
-     DCOffsetReadCache
+     DCOffsetReadCache, CommonReferenceReadCache
 
 from new_scroller import VisWrapper
 
@@ -65,6 +65,7 @@ class FileData(HasTraits):
     chan_map = Enum(sorted(electrode_maps.keys())[0],
                     sorted(electrode_maps.keys()))
     zero_windows = Bool
+    car_windows = Bool
 
     def _compose_arrays(self, filter, rowmask=(), colmask=()):
         # default is just a wrapped array
@@ -74,6 +75,8 @@ class FileData(HasTraits):
         mn_trace *= self.y_scale
         if self.zero_windows:
             array = FilteredReadCache(array, partial(detrend, type='constant'))
+        elif self.car_windows:
+            array = CommonReferenceReadCache(array)
         else:
             array = ReadCache(array)
         return array, mn_trace
@@ -91,7 +94,11 @@ class FileData(HasTraits):
                 Label('Scales samples to voltage (mV)'),
                 UItem('y_scale'),
                 Item('chan_map', label='channel map name'),
-                Item('zero_windows', label='Remove local DC?')
+                HGroup(
+                    Item('zero_windows', label='Remove local DC?'),
+                    Item('car_windows', label='Com. Avg. Ref?'),
+                    label='Choose up to one'
+                    )
                 ),
             handler=FileHandler,
             resizable=True,
@@ -182,7 +189,11 @@ class OpenEphysFileData(FileData):
                 Label('(1.98e-4 if quantized, else 1e-3)'),
                 UItem('y_scale'),
                 Item('chan_map', label='channel map name'),
-                Item('zero_windows', label='Remove local DC?')
+                HGroup(
+                    Item('zero_windows', label='Remove local DC?'),
+                    Item('car_windows', label='Com. Avg. Ref?'),
+                    label='Choose up to one'
+                    )
                 ),
             resizable=True,
             title='Launch Visualization'
@@ -202,7 +213,7 @@ class Mux7FileData(FileData):
     fs_field = Property(fget=lambda self: 'Fs')
     
     def _compose_arrays(self, filter, rowmask=(), colmask=()):
-        if self.zero_windows:
+        if self.zero_windows or self.car_windows:
             return super(Mux7FileData, self)._compose_arrays(filter)
         f = h5py.File(self.file, 'r')
         array = filter(f[self.data_field])
@@ -219,7 +230,11 @@ class Mux7FileData(FileData):
                 Label('Scales samples to voltage (default to mV for Mux7)'),
                 UItem('y_scale'),
                 Item('chan_map', label='channel map name (use default)'),
-                Item('zero_windows', label='Remove local DC?')
+                HGroup(
+                    Item('zero_windows', label='Remove local DC?'),
+                    Item('car_windows', label='Com. Avg. Ref?'),
+                    label='Choose up to one'
+                    )
                 ),
             ## resizable=True,
             ## title='Launch Visualization'
