@@ -261,7 +261,6 @@ class SpatialVariance(PlotsInterval):
             cov = np.cov(y)
         chan_map = self.parent._qtwindow.chan_map
         tool = ArrayVarianceTool(cov, chan_map)
-        print tool.array_plot
         view = tool.default_traits_view()
         view.kind = 'live'
         tool.edit_traits(view=view)
@@ -913,15 +912,20 @@ class AnimateInterval(VisModule):
             self._atimer.Stop()
         PySide.QtCore.QCoreApplication.instance().processEvents()
         # calculate the difference between the desired interval
-        # and the time it just took to draw (per frame)
-        t_pause = scaled_dt - (time.time() - t0) / self.__f_skip
+        # and the time it just took to draw (per "frame")
+        elapsed = time.time() - t0
+        t_pause = scaled_dt - elapsed / self.__f_skip
         if t_pause < 0:
             self.__f_skip += 1
-            print 'took', -t_pause, 'sec too long, increasing skip rate', self.__f_skip
             sys.stdout.flush()
         else:
-            print t_pause
             self._atimer.setInterval(t_pause * 1000.0)
+            # check to see if the frame skip can be decreased (e.g.
+            # real-time is slowed down)
+            while elapsed / max(1, self.__f_skip - 1) < scaled_dt:
+                self.__f_skip = max(1, self.__f_skip - 1)
+                if self.__f_skip == 1:
+                    break
         self.__n += self.__f_skip
 
     def _anim_frame_fired(self):
@@ -935,8 +939,6 @@ class AnimateInterval(VisModule):
         dt = self.__x[1] - self.__x[0]
         self.__n_frames = self.__y.shape[1]
         self.__n = 0
-        print self.anim_time_scale * dt * 1000
-        print self.__n_frames
         self._atimer = Timer( self.anim_time_scale * dt * 1000,
                               self.__step_frame )
 
