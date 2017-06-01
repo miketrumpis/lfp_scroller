@@ -207,7 +207,8 @@ class Mux7FileData(FileData):
     defaults to building an ReadCache with DC offset subraction.
     """
 
-    y_scale = Float( 1e3 / 20 )
+    y_scale = Property(fget=lambda self: 1e3 / self.gain)
+    gain = Enum( 12, (3, 10, 12, 20) )
     chan_map = Str('ratv4_mux6')
     data_field = Property(fget=lambda self: 'data')
     fs_field = Property(fget=lambda self: 'Fs')
@@ -227,8 +228,8 @@ class Mux7FileData(FileData):
         view = View(
             VGroup(
                 Item('file', label='Visualize this file'),
-                Label('Scales samples to voltage (default to mV for Mux7)'),
-                UItem('y_scale'),
+                Label('Amplifier gain (default 12 for Mux v7)'),
+                UItem('gain'),
                 Item('chan_map', label='channel map name (use default)'),
                 HGroup(
                     Item('zero_windows', label='Remove local DC?'),
@@ -236,8 +237,6 @@ class Mux7FileData(FileData):
                     label='Choose up to one'
                     )
                 ),
-            ## resizable=True,
-            ## title='Launch Visualization'
         )
         return view
 
@@ -250,7 +249,6 @@ class FilterMenu(HasTraits):
         for k, v in t.items():
             if k in ('trait_added', 'trait_modified'):
                 continue
-            #items.append( Item(k, label=v.info_text, style='simple') )
             items.extend( [Label(v.info_text), UItem(k, style='simple')] )
         return View(*items, resizable=True)
     
@@ -378,9 +376,9 @@ class HeadstageHandler(Handler):
             return
         hs = info.object.headstage
         if hs.lower() == 'mux3':
-            fd = Mux7FileData(y_scale=1e3 / 10.)
+            fd = Mux7FileData(gain=10) #y_scale=1e3 / 10.)
         elif hs.lower() in ('mux5', 'mux6', 'mux7'):
-            fd = Mux7FileData(y_scale=1e3 / 20.)
+            fd = Mux7FileData(gain=12) #y_scale=1e3 / 20.)
         elif hs.lower() == 'intan':
             fd = OpenEphysFileData()
         else:
