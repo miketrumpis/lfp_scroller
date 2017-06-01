@@ -60,8 +60,7 @@ class HDF5Plot(pg.PlotCurveItem):
             return
         start, stop = r
         self.x_visible = np.arange(start, stop) * self._xscale
-        self.y_visible = self.hdf5[self.index, start:stop]
-        self.y_visible *= self._yscale
+        self.y_visible = self.hdf5[self.index, start:stop] * self._yscale
         
     def updateHDF5Plot(self):
         if self.hdf5 is None:
@@ -169,16 +168,6 @@ class FastScroller(object):
         layout.addLabel('Zoomed plot')
         layout.addLabel('|')
         layout.nextRow()
-        # win.setWindowTitle('pyqtgraph example: HDF5 big data')
-        # set up a 3x3 grid:
-        # __.__.__
-        # |    .__|
-        # |____.__|
-        # |_______|
-
-        # The focus plot
-        #self.p1 = self.win.addPlot(row=0, col=0, rowspan=2, colspan=2)
-        #layout.nextRow()
         sub_layout = layout.addLayout(colspan=1)
         self.p_img = sub_layout.addViewBox(lockAspect=True)
 
