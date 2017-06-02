@@ -1,6 +1,7 @@
 from __future__ import division
 
 import os, sys
+from collections import OrderedDict
 
 import matplotlib as mpl
 import matplotlib.ticker as ticker
@@ -44,25 +45,54 @@ from sandbox.split_methods import multi_taper_psd
 
 import ecogana.anacode.seaborn_lite as sns
 
+class FigureStack(OrderedDict):
+
+    def new_figure(self, **kwargs):
+        fig, axes = subplots(**kwargs)
+        splot = SavesFigure.live_fig(fig)
+        
+        def remove_fig():
+            print 'catch closing'
+            try:
+                self.pop(splot)
+            except ValueError:
+                return
+
+        fig.canvas.destroyed.connect(remove_fig)
+        self[splot] = (fig, axes)
+        return fig, axes
+
+    def current_figure(self):
+        if not len(self):
+            return
+        k = self.keys()[-1]
+        return self[k]
+
+class PlotCounter(dict):
+
+    def __getitem__(self, a):
+        if a in self:
+            n = super(PlotCounter, self).__getitem__(a)
+            self[a] = n + 1
+            return n
+        self[a] = 0
+        return self[a]
+    
 class VisModule(HasTraits):
     name = Str('__dummy___')
     parent = Instance('VisWrapper')
 
 class PlotsInterval(VisModule):
     new_figure = Bool(False)
-    _figures = List([])
+    _figstack = Instance(FigureStack, args=())
+    _axplots = Instance(PlotCounter, args=())
 
     def _get_fig(self, **kwargs):
-        """Accepts subplots kwargs"""
-        fig = getattr(self, 'fig', None)
-        if fig and not self.new_figure:
-            return fig, self.axes, fig.canvas.draw_idle
-        self.fig, self.axes = subplots(**kwargs)
-        splot = SavesFigure.live_fig(self.fig)
-        self._figures.append(splot)
-        self._plot_count = 0
+        if len(self._figstack) and not self.new_figure:
+            fig, axes = self._figstack.current_figure()
+            return fig, axes
         self._colors = mpl.rcParams["axes.prop_cycle"].by_key()["color"]
-        return self.fig, self.axes, self.fig.canvas.draw_idle
+        return self._figstack.new_figure(**kwargs)
 
 class IntervalTraces(PlotsInterval):
     name = 'Plot Window'
@@ -74,8 +104,8 @@ class IntervalTraces(PlotsInterval):
         x, y = self.parent._qtwindow.current_data()
         x = x[0]
         dy = self.parent.y_spacing
-        f, ax, update = self._get_fig()
-        clr = self._colors[self._plot_count]
+        f, ax = self._get_fig()
+        clr = self._colors[self._axplots[ax]]
         y_levels = np.arange(len(y)) * dy
         ax.plot(x, y.T + y_levels, lw=0.5, color=clr)
         sns.despine(ax=ax)
@@ -88,9 +118,8 @@ class IntervalTraces(PlotsInterval):
             ax.set_yticklabels(labels, fontsize=8)
         ax.set_xlabel('Time (s)')
         f.tight_layout()
-        self._plot_count += 1
         try:
-            update()
+            f.canvas.draw_idle()
         except:
             pass
 
@@ -559,9 +588,9 @@ class SpatialVariance(PlotsInterval):
         else:
             r = self.compute_variogram(y, self.parent._qtwindow.chan_map)
         x, svg, svg_se = r
-        fig, ax, update = self._get_fig()
+        fig, ax = self._get_fig()
         label = 't ~ {0:.1f}'.format(t.mean())
-        clr = self._colors[self._plot_count]
+        clr = self._colors[self._axplots[ax]]
         ax.plot(
             x, svg, marker='s', ms=6, ls='--',
             color=clr, label=label
@@ -582,11 +611,10 @@ class SpatialVariance(PlotsInterval):
         ax.legend()
         ax.set_xlabel('Distance (mm)')
         ax.set_ylabel('Semivariance')
-        self._plot_count += 1
         sns.despine(ax=ax)
         fig.tight_layout()
         try:
-            update()
+            fig.canvas.draw_idle()
         except:
             pass
 
@@ -653,10 +681,10 @@ class IntervalSpectrum(PlotsInterval):
         x, y = self.parent._qtwindow.current_data()
         fx, pxx = self.spectrum(y)
 
-        fig, ax, update = self._get_fig()
+        fig, ax = self._get_fig()
                     
         label = 't ~ {0:.1f}'.format(x.mean())
-        
+        plot_count = self._axplots[ax]
         if self.avg_spec:
             jn = Jackknife(np.log(pxx), axis=0)
             mn, se = jn.estimate(np.mean, se=True)
@@ -669,22 +697,22 @@ class IntervalSpectrum(PlotsInterval):
             se = np.exp( mn - se ), np.exp( mn + se )
             filled_interval(
                 ax.semilogy, fx, np.exp(mn), se,
-                color=self._colors[self._plot_count], label=label, ax=ax
+                color=self._colors[plot_count], label=label, ax=ax
                 )
             ax.legend()
         else:
             lns = ax.semilogy(
-                fx, pxx.T, lw=.25, color=self._colors[self._plot_count]
+                fx, pxx.T, lw=.25, color=self._colors[plot_count]
                 )
-            self._plot_count += 1
             ax.legend(lns[:1], (label,))
         ax.set_ylabel('Power Spectral Density (mV / Hz^2)')
         ax.set_xlabel('Frequency (Hz)')
         sns.despine(ax=ax)
         fig.tight_layout()
-        self._plot_count += 1
-        if update is not None:
-            update()
+        try:
+            fig.canvas.draw_idle()
+        except:
+            pass
 
     def default_traits_view(self):
         v = View(
@@ -832,7 +860,7 @@ class IntervalSpectrogram(PlotsInterval):
         ptf = ptf[m]
         fx = fx[m]
         tx += x[0]
-        fig, ax, update = self._get_fig()
+        fig, ax = self._get_fig()
         im = ax.imshow(
             ptf, extent=[tx[0], tx[-1], fx[0], fx[-1]],
             cmap=self.colormap
@@ -851,8 +879,10 @@ class IntervalSpectrogram(PlotsInterval):
             title = 'Log-power'
         cbar.set_label(title)
         fig.tight_layout()
-        if update is not None:
-            update()
+        try:
+            fig.canvas.draw_idle()
+        except:
+            pass
         
     def default_traits_view(self):
         v = View(
