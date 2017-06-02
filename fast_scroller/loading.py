@@ -25,8 +25,9 @@ from traitsui.table_column import ObjectColumn
 
 from ecogana.devices.electrode_pinouts import get_electrode_map, electrode_maps
 from ecogana.devices.load.open_ephys import hdf5_open_ephys_channels
+from ecogana.devices.channel_picker import interactive_mask
 from ecoglib.filt.time.design import butter_bp, cheby1_bp, cheby2_bp, notch
-from ecoglib.util import ChannelMap
+from ecoglib.util import ChannelMap, Bunch
 
 from h5scroller import FastScroller
 from h5data import bfilter, FilteredReadCache, h5mean, ReadCache, \
@@ -396,14 +397,34 @@ class VisLauncher(HasTraits):
     file_data = Instance(FileData)
     filters = Instance(FilterPipeline)
     b = Button('Launch Visualization')
-    offset = Float(0.5)
+    offset = Enum(0.2, [0.1, 0.2, 0.5, 1, 2, 5])
     max_window_width = Float(1200.0)
     headstage = Enum('mux7',
                      ('mux3', 'mux5', 'mux6', 'mux7', 'intan', 'unknown'))
+    screen_channels = Bool(False)
 
     def __init__(self, **traits):
         super(VisLauncher, self).__init__(**traits)
         self.add_trait('filters', FilterPipeline())
+
+    def _get_screen(self, array, channels, chan_map, Fs):
+        from ecogana.expconfig import params
+        mem_guideline = float(params.memory_limit)
+        n_chan = len(array)
+        word_size = array.dtype.itemsize
+        n_pts = min(100000, mem_guideline / n_chan / word_size)
+        data = np.empty( (len(channels), n_pts), dtype=array.dtype )
+        for n, c in enumerate(channels):
+            data[n] = array[c, :n_pts]
+
+        data_bunch = Bunch(
+            data=data, chan_map=chan_map, Fs=Fs, units='au', name=''
+            )
+        mask = interactive_mask(data_bunch, use_db=False)
+        screen_channels = [ channels[i] for i in xrange(len(mask)) if mask[i] ]
+        screen_map = chan_map.subset(mask)
+        return screen_channels, screen_map
+        
 
     def launch(self):
         if not os.path.exists(self.file_data.file):
@@ -415,8 +436,8 @@ class VisLauncher(HasTraits):
             data_channels.remove(chan)
 
         # permute  channels to stack rows
-        ii, jj = chan_map.to_mat()
-        chan_order = np.argsort(ii)[::-1]
+        chan_idx = zip(*chan_map.to_mat())
+        chan_order = chan_map.lookup(*zip( *sorted(chan_idx)[::-1] ))
         data_channels = [data_channels[i] for i in chan_order]
         chan_map = ChannelMap( [chan_map[i] for i in chan_order],
                                chan_map.geometry, col_major=chan_map.col_major )
@@ -429,6 +450,9 @@ class VisLauncher(HasTraits):
         rm = np.zeros( (num_vectors,), dtype='?' )
         rm[data_channels] = True
         array, nav = self.file_data._compose_arrays(filters, rowmask=rm)
+        if self.screen_channels:
+            data_channels, chan_map = \
+              self._get_screen(array, data_channels, chan_map, x_scale**-1.0)
         new_vis = FastScroller(array, self.file_data.y_scale,
                                self.offset, chan_map, nav,
                                x_scale=x_scale,
@@ -453,8 +477,16 @@ class VisLauncher(HasTraits):
                     UItem('file_data', style='custom'),
                     UItem('filters', style='custom')
                     ),
-                Label('Offset per channel (in mV)'),
-                UItem('offset', ),
+                HGroup(
+                    VGroup(
+                        Label('Offset per channel (in mV)'),
+                        UItem('offset', )
+                    ),
+                    VGroup(
+                        Label('Screen Channels?'),
+                        UItem('screen_channels')
+                    )
+                ),
                 UItem('b'),
             ),
             resizable=True,

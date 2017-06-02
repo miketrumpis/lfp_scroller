@@ -60,6 +60,9 @@ class ReadCache(object):
         self.dtype = array.dtype
         self.shape = array.shape
 
+    def __len__(self):
+        return len(self._array)
+
     def __getitem__(self, sl):
         indx, range = sl
         if not isinstance(indx, (np.integer, int)):
