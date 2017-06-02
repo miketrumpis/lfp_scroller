@@ -376,9 +376,11 @@ class HeadstageHandler(Handler):
             return
         hs = info.object.headstage
         if hs.lower() == 'mux3':
-            fd = Mux7FileData(gain=10) #y_scale=1e3 / 10.)
-        elif hs.lower() in ('mux5', 'mux6', 'mux7'):
-            fd = Mux7FileData(gain=12) #y_scale=1e3 / 20.)
+            fd = Mux7FileData(gain=10)
+        elif hs.lower() in ('mux5', 'mux6'):
+            fd = Mux7FileData(gain=20)
+        elif hs.lower() == 'mux7':
+            fd = Mux7FileData(gain=12)
         elif hs.lower() == 'intan':
             fd = OpenEphysFileData()
         else:
