@@ -998,7 +998,17 @@ class AnimateInterval(VisModule):
                 )
             )
         return v
-    
+
+ana_modules = {
+    'Stacked traces plot' : IntervalTraces,
+    'Spatial variance tool' : SpatialVariance,
+    'Power spectrum' : IntervalSpectrum,
+    'Spectrogram' : IntervalSpectrogram,
+    'Animator' : AnimateInterval,
+    'Time stamps' : Timestamps,
+    }
+default_modules = ('Stacked traces plot', 'Power spectrum', 'Animator')
+
 def setup_qwidget_control(parent, editor, qwidget):
     return qwidget
 

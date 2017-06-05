@@ -20,7 +20,7 @@ from traits.api import Instance, Button, HasTraits, File, Float, \
      Str, Property, List, Enum, Int, Bool, on_trait_change
 from traitsui.api import View, VGroup, HGroup, Item, UItem, \
      Label, Handler, EnumEditor, Group, TableEditor, Tabbed, spring, \
-     FileEditor
+     FileEditor, SetEditor
 from traitsui.table_column import ObjectColumn
 
 from ecogana.devices.electrode_pinouts import get_electrode_map, electrode_maps
@@ -33,7 +33,7 @@ from h5scroller import FastScroller
 from h5data import bfilter, FilteredReadCache, h5mean, ReadCache, \
      DCOffsetReadCache, CommonReferenceReadCache
 
-from new_scroller import VisWrapper
+from new_scroller import VisWrapper, ana_modules, default_modules
 
 class Error(HasTraits):
     error_msg = Str('')
@@ -387,7 +387,7 @@ class HeadstageHandler(Handler):
         else:
             fd = FileData()
         info.object.file_data = fd
-    
+
 class VisLauncher(HasTraits):
     """
     Builds pyqtgraph/traitsui visualation using a timeseries
@@ -396,6 +396,8 @@ class VisLauncher(HasTraits):
     
     file_data = Instance(FileData)
     filters = Instance(FilterPipeline)
+    module_set = List(default_modules)
+    all_modules = List(ana_modules.keys())
     b = Button('Launch Visualization')
     offset = Enum(0.2, [0.1, 0.2, 0.5, 1, 2, 5])
     max_window_width = Float(1200.0)
@@ -453,13 +455,14 @@ class VisLauncher(HasTraits):
         if self.screen_channels:
             data_channels, chan_map = \
               self._get_screen(array, data_channels, chan_map, x_scale**-1.0)
+        modules = [ana_modules[k] for k in self.module_set]
         new_vis = FastScroller(array, self.file_data.y_scale,
                                self.offset, chan_map, nav,
                                x_scale=x_scale,
                                load_channels=data_channels,
                                max_zoom=self.max_window_width)
         v_win = VisWrapper(new_vis, x_scale = x_scale, chan_map=chan_map,
-                           y_spacing=self.offset)
+                           y_spacing=self.offset, modules=modules)
         view = v_win.default_traits_view()
         view.kind = 'live'
         v_win.edit_traits(view=view)
@@ -475,7 +478,14 @@ class VisLauncher(HasTraits):
                 UItem('headstage'),
                 Tabbed(
                     UItem('file_data', style='custom'),
-                    UItem('filters', style='custom')
+                    UItem('filters', style='custom'),
+                    UItem('module_set',
+                          editor=SetEditor(
+                              name='all_modules',
+                              left_column_title='Analysis modules',
+                              right_column_title='Modules to load'
+                              )
+                        ),
                     ),
                 HGroup(
                     VGroup(
