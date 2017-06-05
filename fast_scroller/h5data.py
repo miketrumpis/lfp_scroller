@@ -117,7 +117,7 @@ class FilteredReadCache(ReadCache):
             y_[:] = f(x_)
         return y
 
-def make_filt(z):
+def _make_subtract(z):
     def _f(x):
         return x - z
     return _f
@@ -129,7 +129,7 @@ class DCOffsetReadCache(FilteredReadCache):
 
     def __init__(self, array, offsets):
         #filters = [lambda x: x - off for off in offsets]
-        filters = [make_filt(off) for off in offsets]
+        filters = [_make_subtract(off) for off in offsets]
         super(DCOffsetReadCache, self).__init__(array, filters)
         self.offsets = offsets
 
