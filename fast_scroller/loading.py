@@ -33,7 +33,8 @@ from h5scroller import FastScroller
 from h5data import bfilter, FilteredReadCache, h5mean, ReadCache, \
      DCOffsetReadCache, CommonReferenceReadCache
 
-from new_scroller import VisWrapper, ana_modules, default_modules
+from new_scroller import VisWrapper
+from .modules import ana_modules, default_modules
 
 class Error(HasTraits):
     error_msg = Str('')
