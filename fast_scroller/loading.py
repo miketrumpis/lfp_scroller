@@ -561,5 +561,5 @@ if __name__ == '__main__':
     ## v.configure_traits()
     ## v.file_data = fd
 
-    v = VisLauncher(headstage='mux7')
+    v = VisLauncher(headstage='mux7', chan_map='ratv4_mux6')
     v.configure_traits()                    
