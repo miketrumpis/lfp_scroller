@@ -400,10 +400,15 @@ class VisLauncher(HasTraits):
     module_set = List(default_modules)
     all_modules = List(ana_modules.keys())
     b = Button('Launch Visualization')
-    offset = Enum(0.2, [0.1, 0.2, 0.5, 1, 2, 5])
+    offset = Enum(0.2, [0, 0.1, 0.2, 0.5, 1, 2, 5])
     max_window_width = Float(1200.0)
     headstage = Enum('mux7',
                      ('mux3', 'mux5', 'mux6', 'mux7', 'intan', 'unknown'))
+    chan_map = Enum(sorted(electrode_maps.keys())[0],
+                    sorted(electrode_maps.keys()) + ['unknown'])
+    n_chan = Int
+    skip_chan = Str
+    elec_geometry = Str
     screen_channels = Bool(False)
 
     def __init__(self, **traits):
