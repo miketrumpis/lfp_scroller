@@ -64,8 +64,6 @@ class FileData(HasTraits):
     data_field = Str
     fs_field = Str
     y_scale = Float(1.0)
-    chan_map = Enum(sorted(electrode_maps.keys())[0],
-                    sorted(electrode_maps.keys()))
     zero_windows = Bool
     car_windows = Bool
 
@@ -95,7 +93,6 @@ class FileData(HasTraits):
                     ),
                 Label('Scales samples to voltage (mV)'),
                 UItem('y_scale'),
-                Item('chan_map', label='channel map name'),
                 HGroup(
                     Item('zero_windows', label='Remove local DC?'),
                     Item('car_windows', label='Com. Avg. Ref?'),
@@ -190,7 +187,6 @@ class OpenEphysFileData(FileData):
                 Label('Scales samples to mV'),
                 Label('(1.98e-4 if quantized, else 1e-3)'),
                 UItem('y_scale'),
-                Item('chan_map', label='channel map name'),
                 HGroup(
                     Item('zero_windows', label='Remove local DC?'),
                     Item('car_windows', label='Com. Avg. Ref?'),
@@ -211,13 +207,15 @@ class Mux7FileData(FileData):
 
     y_scale = Property(fget=lambda self: 1e3 / self.gain)
     gain = Enum( 12, (3, 10, 12, 20) )
-    chan_map = Str('ratv4_mux6')
     data_field = Property(fget=lambda self: 'data')
     fs_field = Property(fget=lambda self: 'Fs')
+    dc_subtract = Bool(True)
     
     def _compose_arrays(self, filter, rowmask=(), colmask=()):
-        if self.zero_windows or self.car_windows:
-            return super(Mux7FileData, self)._compose_arrays(filter)
+        if not self.dc_subtract or self.zero_windows or self.car_windows:
+            return super(Mux7FileData, self)._compose_arrays(
+                filter, rowmask=rowmask, colmask=colmask
+                )
         f = h5py.File(self.file, 'r')
         array = filter(f[self.data_field])
         mn_level = h5mean(array, 1, start=int(3e4))
@@ -230,11 +228,15 @@ class Mux7FileData(FileData):
         view = View(
             VGroup(
                 Item('file', label='Visualize this file'),
-                Label('Amplifier gain (default 12 for Mux v7)'),
-                UItem('gain'),
-                Item('chan_map', label='channel map name (use default)'),
                 HGroup(
-                    Item('zero_windows', label='Remove local DC?'),
+                    VGroup(
+                        Label('Amplifier gain (default 12 for Mux v7)'),
+                        UItem('gain')
+                        ),
+                    Item('dc_subtract', label='DC compensation'),
+                    ),
+                HGroup(
+                    Item('zero_windows', label='Remove DC per window?'),
                     Item('car_windows', label='Com. Avg. Ref?'),
                     label='Choose up to one'
                     )
@@ -437,8 +439,18 @@ class VisLauncher(HasTraits):
     def launch(self):
         if not os.path.exists(self.file_data.file):
             return
+        if self.chan_map == 'unknown':
+            chan = np.arange(self.n_chan)
+            try:
+                nc = np.array( map(int, self.skip_chan.split(',')) )
+            except:
+                nc = []
+            geo = map(int, self.elec_geometry.split(','))
+            n_sig_chan = self.n_chan - len(nc)
+            chan_map = ChannelMap(np.arange(n_sig_chan), geo)
+        else:
+            chan_map, nc = get_electrode_map(self.chan_map)
         
-        chan_map, nc = get_electrode_map(self.file_data.chan_map)
         data_channels = range( len(chan_map) + len(nc) )
         for chan in nc:
             data_channels.remove(chan)
@@ -480,8 +492,31 @@ class VisLauncher(HasTraits):
     def default_traits_view(self):
         v = View(
             VGroup(
-                Label('Headstage'),
-                UItem('headstage'),
+                HGroup(
+                    VGroup(
+                        Label('Headstage'),
+                        UItem('headstage'),
+                        ),
+                    VGroup(
+                        Label('Channel map'),
+                        UItem('chan_map')
+                        ),
+                    HGroup(
+                        VGroup(
+                            Label('N signal channelsl'),
+                            UItem('n_chan'),
+                            ),
+                        VGroup(
+                            Label('Skip chans'),
+                            UItem('skip_chan')
+                            ),
+                        VGroup(
+                            Label('Grid geometry'),
+                            UItem('elec_geometry')
+                            ),
+                        visible_when='chan_map=="unknown"'
+                        ),
+                    ),
                 Tabbed(
                     UItem('file_data', style='custom'),
                     UItem('filters', style='custom'),
