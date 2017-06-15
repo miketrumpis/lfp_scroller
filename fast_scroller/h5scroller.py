@@ -1,6 +1,6 @@
 from __future__ import division
 import numpy as np
-import PySide
+#import PySide
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 pg.setConfigOptions(imageAxisOrder='row-major')

@@ -26,7 +26,7 @@ import ecogana.anacode.seaborn_lite as sns
 from ecogana.anacode.plot_util import subplots, subplot2grid
 
 
-from .base import PlotsInterval, MultiframeSavesFigure
+from .base import PlotsInterval, MultiframeSavesFigure, colormaps
 
 __all__ = ['ArrayVarianceTool', 'SpatialVariance']
 
@@ -37,7 +37,7 @@ class ArrayVarianceTool(HasTraits):
     min_max_norm = Bool(True)
     _c_lo = Float
     _c_hi = Float
-    cmap = Enum('gray', ('gray', 'gray_r', 'jet', 'bwr', 'viridis'))
+    cmap = Enum('gray', colormaps)
     save_file = File(os.getcwd())
     save_all = Button('Save PDF')
 
@@ -56,6 +56,8 @@ class ArrayVarianceTool(HasTraits):
     def _image(self):
         if not hasattr(self, 'array_plot'):
             return
+        if self.array_plot is None:
+            return
         kw = dict(cmap=self.cmap)
         if self.min_max_norm:
             kw['clim'] = (self._cv_mn, self._cv_mx)
@@ -63,11 +65,11 @@ class ArrayVarianceTool(HasTraits):
             kw['clim'] = self._c_lo, self._c_hi
         site = self.selected_site
         if site >= 0:
-            self.array_plot.update_map(self.cov[site], **kw)
             self.array_plot.ax.set_title('Seeded covariance map')
+            self.array_plot.update_map(self.cov[site], **kw)
         else:
-            self.array_plot.update_map(self.cov.mean(1), **kw)
             self.array_plot.ax.set_title('Mean covariance weight')
+            self.array_plot.update_map(self.cov.mean(1), **kw)
 
     def _save_all_fired(self):
         # cycle through sites, update image, and use
@@ -254,7 +256,7 @@ class SpatialVariance(PlotsInterval):
             extent=[xx[0], xx[-1], yy[0], yy[-1]]
             )
         ax.set_xlabel('Distance X (mm)')
-        ax.set_xlabel('Distance Y (mm)')
+        ax.set_ylabel('Distance Y (mm)')
         ax.set_title('Spatiotemporal kernel ~ t={0:.2f} sec'.format(t_stamp))
         cb = fig.colorbar(im)
         if self.norm_kernel:

@@ -1,13 +1,17 @@
-import sys
+import os
 import time
-
+import numpy as np
 from pyqtgraph.Qt import QtCore
 
-from traits.api import Button, Enum
-from traitsui.api import View, VGroup, Item
+from traits.api import Button, Enum, Bool, Int, File
+from traitsui.api import View, VGroup, Group, HGroup, UItem, \
+     Item, FileEditor, RangeEditor
 from pyface.timer.api import Timer
 
-from .base import VisModule
+import ecoglib.vis.ani as ani
+
+from .base import VisModule, colormaps
+from .. import Error, validate_file_path
 
 __all__ = ['AnimateInterval']
 
@@ -15,6 +19,19 @@ class AnimateInterval(VisModule):
     name = 'Animate window'
     anim_frame = Button('Animate')
     anim_time_scale = Enum(50, [0.5, 1, 5, 10, 20, 50, 100])
+    _has_ffmpeg = Bool(False)
+    write_frames = Button('Write movie')
+    drop_video_frames = Int(1)
+    video_file = File(
+        os.path.join(os.path.abspath(os.curdir), 'vid.mp4')
+        )
+    cmap = Enum('gray', colormaps)
+    clim = Enum('display', ('display', '[2-98]%', '[1-99]%', 'full'))
+
+    def __init__(self, **traits):
+        import matplotlib.animation as anim
+        traits['_has_ffmpeg'] = 'ffmpeg' in anim.writers.list()
+        super(AnimateInterval, self).__init__(**traits)
 
     def __step_frame(self):
         n = self.__n
@@ -36,7 +53,6 @@ class AnimateInterval(VisModule):
         t_pause = scaled_dt - elapsed / self.__f_skip
         if t_pause < 0:
             self.__f_skip += 1
-            sys.stdout.flush()
         else:
             self._atimer.setInterval(t_pause * 1000.0)
             # check to see if the frame skip can be decreased (e.g.
@@ -61,12 +77,71 @@ class AnimateInterval(VisModule):
         self._atimer = Timer( self.anim_time_scale * dt * 1000,
                               self.__step_frame )
 
+    def _get_clim(self, array):
+        print self.parent._qtwindow.cb.axis.range
+        if self.clim == 'full':
+            return (array.min(), array.max())
+        if self.clim.endswidth('%'):
+            clim = self.clim.replace('[', '').replace(']', '').replace('%', '')
+            p_lo, p_hi = map(float, clim.split('-'))
+            print p_lo, p_hi
+            return np.percentile(array.ravel(), [p_lo, p_hi])
+        else:
+            return (array.min(), array.max())
+
+    def _write_frames_fired(self):
+        if not validate_file_path(self.video_file):
+            ev = Error(
+                error_msg='Invalid video file:\n{0}'.format(self.video_file)
+                )
+            ev.edit_traits()
+            return
+
+        x, y = self.parent._qtwindow.current_data()
+        x = x[0]
+        dt = x[1] - x[0]
+        # fps is sampling frequency divided by time scale dilation
+        fps = (dt * self.anim_time_scale) ** -1.0
+        chan_map = self.parent._qtwindow.chan_map
+        if self.drop_video_frames > 1:
+            x = x[::self.drop_video_frames]
+            y = y[..., ::self.drop_video_frames]
+            fps /= float(self.drop_video_frames)
+        frames = chan_map.embed(y.T, axis=1)
+        clim = np.percentile(y.ravel(), [2, 98])
+
+        ani.write_frames(
+            frames, self.video_file, timer='s', time=x, fps=fps,
+            title='Scroller video', quicktime=True, colorbar=True,
+            cbar_label='mV', cmap=self.cmap, clim=clim,
+            origin='upper'
+            )
+
+
     def default_traits_view(self):
         v = View(
-            VGroup(
-                Item('anim_time_scale', label='Divide real time'),
-                Item('anim_frame'),
-                label='Animate Frames'
+            HGroup(
+                VGroup(
+                    Item('anim_time_scale', label='Divide real time'),
+                    Item('anim_frame'),
+                    label='Animate Frames'
+                    ),
+                HGroup(
+                    VGroup(
+                        Item('video_file', label='MP4 File',
+                            editor=FileEditor(dialog_style='save')),
+                        UItem('write_frames')
+                        ),
+                    VGroup(
+                        Item('cmap', label='Colormap'),
+                        Item('clim', label='Color limit mode'),
+                        Item('drop_video_frames',
+                             label='Frame drop rate',
+                             editor=RangeEditor(low=1, high=100,
+                                                mode='spinner')),
+                        ),
+                    visible_when='_has_ffmpeg'
+                    )
                 )
             )
         return v

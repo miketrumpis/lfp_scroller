@@ -12,10 +12,6 @@ import numpy as np
 from scipy.signal import detrend
 import h5py
 
-# these imports set up some qt runtime stuff (??)
-import PySide
-import pyqtgraph as pg
-
 from traits.api import Instance, Button, HasTraits, File, Float, \
      Str, Property, List, Enum, Int, Bool, on_trait_change
 from traitsui.api import View, VGroup, HGroup, Item, UItem, \
@@ -29,23 +25,13 @@ from ecogana.devices.channel_picker import interactive_mask
 from ecoglib.filt.time.design import butter_bp, cheby1_bp, cheby2_bp, notch
 from ecoglib.util import ChannelMap, Bunch
 
-from h5scroller import FastScroller
-from h5data import bfilter, FilteredReadCache, h5mean, ReadCache, \
+from .h5scroller import FastScroller
+from .h5data import bfilter, FilteredReadCache, h5mean, ReadCache, \
      DCOffsetReadCache, CommonReferenceReadCache
 
-from new_scroller import VisWrapper
+from .new_scroller import VisWrapper
 from .modules import ana_modules, default_modules
-
-class Error(HasTraits):
-    error_msg = Str('')
-    view = View(
-        VGroup(
-            spring,
-            HGroup(Item('error_msg', style='readonly'), show_labels=False),
-            spring
-            ),
-        buttons=['OK']
-    )
+from . import Error
 
 class FileHandler(Handler):
 
@@ -423,6 +409,7 @@ class VisLauncher(HasTraits):
         n_chan = len(array)
         word_size = array.dtype.itemsize
         n_pts = min(100000, mem_guideline / n_chan / word_size)
+        n_pts = min(array.shape[1], n_pts)
         data = np.empty( (len(channels), n_pts), dtype=array.dtype )
         for n, c in enumerate(channels):
             data[n] = array[c, :n_pts]
