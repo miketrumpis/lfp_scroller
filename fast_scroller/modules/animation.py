@@ -78,16 +78,15 @@ class AnimateInterval(VisModule):
                               self.__step_frame )
 
     def _get_clim(self, array):
-        print self.parent._qtwindow.cb.axis.range
         if self.clim == 'full':
             return (array.min(), array.max())
-        if self.clim.endswidth('%'):
+        if self.clim.endswith('%'):
             clim = self.clim.replace('[', '').replace(']', '').replace('%', '')
             p_lo, p_hi = map(float, clim.split('-'))
             print p_lo, p_hi
             return np.percentile(array.ravel(), [p_lo, p_hi])
         else:
-            return (array.min(), array.max())
+            return self.parent._qtwindow.cb.axis.range
 
     def _write_frames_fired(self):
         if not validate_file_path(self.video_file):
@@ -109,6 +108,7 @@ class AnimateInterval(VisModule):
             fps /= float(self.drop_video_frames)
         frames = chan_map.embed(y.T, axis=1)
         clim = np.percentile(y.ravel(), [2, 98])
+        clim = self._get_clim(y)
 
         ani.write_frames(
             frames, self.video_file, timer='s', time=x, fps=fps,
