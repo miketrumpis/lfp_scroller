@@ -18,7 +18,7 @@ __all__ = ['AnimateInterval']
 class AnimateInterval(VisModule):
     name = 'Animate window'
     anim_frame = Button('Animate')
-    anim_time_scale = Enum(50, [0.5, 1, 5, 10, 20, 50, 100])
+    anim_time_scale = Enum(50, [0.1, 0.5, 1, 5, 10, 20, 50, 100])
     _has_ffmpeg = Bool(False)
     write_frames = Button('Write movie')
     drop_video_frames = Int(1)
