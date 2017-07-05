@@ -11,6 +11,7 @@ from tempfile import NamedTemporaryFile
 import numpy as np
 from scipy.signal import detrend
 import h5py
+from tqdm import tqdm
 
 from traits.api import Instance, Button, HasTraits, File, Float, \
      Str, Property, List, Enum, Int, Bool, on_trait_change
@@ -21,8 +22,11 @@ from traitsui.table_column import ObjectColumn
 
 from ecogana.devices.electrode_pinouts import get_electrode_map, electrode_maps
 from ecogana.devices.load.open_ephys import hdf5_open_ephys_channels
+from ecogana.devices.load.mux import mux_sampling
 from ecogana.devices.channel_picker import interactive_mask
-from ecoglib.filt.time.design import butter_bp, cheby1_bp, cheby2_bp, notch
+from ecoglib.filt.time.design import butter_bp, cheby1_bp, cheby2_bp, \
+     notch, ellip_bp, savgol
+from ecoglib.filt.time import ma_highpass, downsample
 from ecoglib.util import ChannelMap, Bunch
 
 from .h5scroller import FastScroller
@@ -52,6 +56,26 @@ class FileData(HasTraits):
     y_scale = Float(1.0)
     zero_windows = Bool
     car_windows = Bool
+    data_channels = Property
+    Fs = Property(depends_on='file')
+    downsample = Button('Downsample')
+    ds_rate = Int(10)
+
+    def _get_Fs(self):
+        try:
+            with h5py.File(self.file, 'r') as f:
+                return f[self.fs_field].value
+        except:
+            return None
+
+    def _get_data_channels(self):
+        if not os.path.exists(self.file):
+            return []
+        with h5py.File(self.file, 'r') as f:
+            if self.data_field in f:
+                return range( f[self.data_field].shape[0] )
+            else:
+                return []
 
     def _compose_arrays(self, filter, rowmask=(), colmask=()):
         # default is just a wrapped array
@@ -66,6 +90,40 @@ class FileData(HasTraits):
         else:
             array = ReadCache(array)
         return array, mn_trace
+
+    def _downsample_fired(self):
+        if not os.path.exists(self.file):
+            return
+        fname = os.path.split(self.file)[1]
+        fname, ext = os.path.splitext(fname)
+        #ds_fname = os.path.join( os.getcwd(), fname + '_ds.h5' )
+        with h5py.File(self.file, 'r') as h5, \
+          NamedTemporaryFile(mode='ab', dir='.',
+                             suffix=fname+'.h5', delete=False) as f:
+        
+            arr = h5[self.data_field]
+            Fs = h5[self.fs_field].value
+            n_chan, len_ts = arr.shape
+            n = len_ts // self.ds_rate
+            if n * self.ds_rate < len_ts:
+                n += 1
+            f.file.close()
+            fw = h5py.File(f.name, 'w')
+            y = fw.create_dataset(self.data_field, shape=(n_chan, n),
+                                  dtype=arr.dtype, chunks=True)
+            fw[self.fs_field] = Fs / float(self.ds_rate)
+            # copy over other keys
+            for k in h5.keys():
+                if k not in (self.data_field, self.fs_field):
+                    try:
+                        fw[k] = h5[k].value
+                    except (AttributeError, RuntimeError) as e:
+                        print 'skipped key', k
+                    
+            for i in tqdm(xrange(n_chan), desc='Downsampling'):
+                x_ds, fs = downsample(arr[i], Fs, r=self.ds_rate)
+                y[i,:] = x_ds
+        self.file = f.name
     
     def default_traits_view(self):
         view = View(
@@ -83,11 +141,15 @@ class FileData(HasTraits):
                     Item('zero_windows', label='Remove local DC?'),
                     Item('car_windows', label='Com. Avg. Ref?'),
                     label='Choose up to one'
+                    ),
+                HGroup(
+                    UItem('downsample'),
+                    Item('ds_rate', label='Downsample rate'),
+                    Item('Fs', label='Current Fs', style='readonly')
                     )
                 ),
             handler=FileHandler,
-            resizable=True,
-            title='Launch Visualization'
+            resizable=True
         )
         return view
 
@@ -98,16 +160,18 @@ class OpenEphysFileData(FileData):
     y_scale = Float(0.001)
 
     # convert controls
-    can_convert = Property(
-        fget=lambda self: os.path.splitext(self.file)[1] == '.continuous'
-        )
+    can_convert = Property
     temp_conv = Bool(False)
     conv_file = File
     downsamp = Int(1)
     quantized = Bool(False)
     do_convert = Button('Run convert')
     
-
+    def _get_can_convert(self):
+        if not self.file or not os.path.exists(self.file):
+            return False
+        return os.path.splitext(self.file)[1] == '.continuous'
+    
     @on_trait_change('file')
     def _sync_files(self):
         if self.can_convert:
@@ -162,7 +226,7 @@ class OpenEphysFileData(FileData):
                          label='HDF5 convert file'),
                     HGroup(
                         Item('temp_conv', label='Use temp file'),
-                        Item('downsamp', label='Downsample factor'),
+                        Item('downsamp', label='Downsample factor', width=4),
                         Item('quantized', label='Quantized?'),
                         label='Conversion options'
                         ),
@@ -179,12 +243,11 @@ class OpenEphysFileData(FileData):
                     label='Choose up to one'
                     )
                 ),
-            resizable=True,
-            title='Launch Visualization'
+            resizable=True
         )
         return v
         
-    
+_sampling = mux_sampling.keys() + ['mux3', 'unknown']
 class Mux7FileData(FileData):
     """
     An HDF5 array holding timeseries from the MUX headstages:
@@ -192,10 +255,24 @@ class Mux7FileData(FileData):
     """
 
     y_scale = Property(fget=lambda self: 1e3 / self.gain)
-    gain = Enum( 12, (3, 10, 12, 20) )
+    gain = Enum( 12, (3, 4, 10, 12, 20) )
     data_field = Property(fget=lambda self: 'data')
     fs_field = Property(fget=lambda self: 'Fs')
     dc_subtract = Bool(True)
+    sampling_style = Enum( 'mux7_1card', _sampling )
+
+    def _get_data_channels(self):
+        if not os.path.exists(self.file):
+            return []
+        with h5py.File(self.file, 'r') as f:
+            if not self.data_field in f:
+                return []
+            n_chan = f[self.data_field].shape[0]
+            n_row = f['numRow'].value
+            n_col = f['numCol'].value
+            dig_order = mux_sampling.get(self.sampling_style, range(4))
+            chans  = [ range(i*n_row, (i+1)*n_row) for i in dig_order ]
+            return reduce(lambda x, y: x + y, chans)
     
     def _compose_arrays(self, filter, rowmask=(), colmask=()):
         if not self.dc_subtract or self.zero_windows or self.car_windows:
@@ -220,14 +297,21 @@ class Mux7FileData(FileData):
                         UItem('gain')
                         ),
                     Item('dc_subtract', label='DC compensation'),
+                    Item('sampling_style', label='DAQ setup')
                     ),
                 HGroup(
                     Item('zero_windows', label='Remove DC per window?'),
                     Item('car_windows', label='Com. Avg. Ref?'),
                     label='Choose up to one'
+                    ),
+                HGroup(
+                    UItem('downsample'),
+                    Item('ds_rate', label='Downsample rate'),
+                    Item('Fs', label='Current Fs', style='readonly')
                     )
                 ),
-        )
+            resizable=True
+            )
         return view
 
 class FilterMenu(HasTraits):
@@ -239,7 +323,10 @@ class FilterMenu(HasTraits):
         for k, v in t.items():
             if k in ('trait_added', 'trait_modified'):
                 continue
-            items.extend( [Label(v.info_text), UItem(k, style='simple')] )
+            if v.info_text:
+                items.extend( [Label(v.info_text), UItem(k, style='simple')] )
+            else:
+                items.extend( [UItem(k, style='simple')] )
         return View(*items, resizable=True)
     
 class BandpassMenu(FilterMenu):
@@ -271,6 +358,39 @@ class NotchMenu(FilterMenu):
     nzo = Int(3, info_text='number of zeros at notch')
     def make_filter(self, Fs):
         return notch(self.notch, Fs, self.nwid, nzo=self.nzo)
+
+class MAHPMenu(FilterMenu):
+    hpc = Float(1, info_text='highpass cutoff')
+    def make_filter(self, Fs):
+        fir = ma_highpass(None, self.hpc/Fs, fir_filt=True)
+        return fir, 1
+
+class EllipMenu(BandpassMenu):
+    atten = Float(10, info_text='Stopband attenutation (dB)')
+    ripple = Float(0.5, info_text='Passband ripple (dB)')
+    hp_width = Float(0, info_text='HP transition width (Hz)')
+    lp_width = Float(0, info_text='LP transition width (Hz)')
+    ord = Int(info_text='filter order')
+    samp_rate = Float(2.0, info_text='Sampling rate')
+    check_order = Button('check order')
+
+    def _check_order_fired(self):
+        b, a = self.make_filter(self.samp_rate)
+        self.ord = len(b)
+
+    def make_filter(self, Fs):
+        return ellip_bp(
+            self.atten, self.ripple, lo=self.lo, hi=self.hi,
+            hp_width=self.hp_width, lp_width=self.lp_width, Fs=Fs
+            )
+
+class SavgolMenu(FilterMenu):
+    T = Float(1.0, info_text='Window length (s)')
+    ord = Int(3, info_text='Poly order')
+    sm = Bool(True, info_text='Smoothing (T), residual (F)')
+
+    def make_filter(self, Fs):
+        return savgol(self.T, self.ord, Fs=Fs, smoothing=self.sm)
     
 class FilterHandler(Handler):
 
@@ -287,16 +407,32 @@ class FilterHandler(Handler):
         elif info.object.filt_type == 'cheby 2':
             if not isinstance(info.object.filt_menu, Cheby2Menu):
                 info.object.filt_menu = Cheby2Menu()
+        elif info.object.filt_type == 'elliptical':
+            if not isinstance(info.object.filt_menu, EllipMenu):
+                info.object.filt_menu = EllipMenu()            
         elif info.object.filt_type == 'notch':
             if not isinstance(info.object.filt_menu, NotchMenu):
                 info.object.filt_menu = NotchMenu()
+        elif info.object.filt_type == 'm-avg hp':
+            if not isinstance(info.object.filt_menu, MAHPMenu):
+                info.object.filt_menu = MAHPMenu()
+        elif info.object.filt_type == 'savitzky-golay':
+            if not isinstance(info.object.filt_menu, SavgolMenu):
+                info.object.filt_menu = SavgolMenu()
+            
 
+available_filters = ('butterworth',
+                     'cheby 1',
+                     'cheby 2',
+                     'elliptical',
+                     'notch',
+                     'm-avg hp',
+                     'savitzky-golay')
 
 class Filter(HasTraits):
     """Filter model with adaptive menu. Menu can build transfer functions."""
     
-    filt_type = Enum( 'butterworth', ['butterworth', 'cheby 1',
-                                      'cheby 2', 'notch'] )
+    filt_type = Enum( 'butterworth', available_filters )
     filt_menu = Instance(HasTraits)
 
     view = View(
@@ -307,7 +443,8 @@ class Filter(HasTraits):
                 label='Filter menu'
                 )
             ),
-        handler=FilterHandler
+        handler=FilterHandler,
+        resizable=True
         )
     
 filter_table = TableEditor(
@@ -317,7 +454,8 @@ filter_table = TableEditor(
     show_toolbar=True,
     reorderable=True,
     edit_view=None,
-    row_factory=Filter
+    row_factory=Filter,
+    selected='selected'
     )
 
 def _pipeline_factory(f_list):
@@ -325,7 +463,6 @@ def _pipeline_factory(f_list):
         return lambda x: x
     def copy_x(x):
         with NamedTemporaryFile(mode='ab', dir='.') as f:
-            print f.name
             f.file.close()
             fw = h5py.File(f.name, 'w')
             y = fw.create_dataset('data', shape=x.shape,
@@ -346,16 +483,35 @@ def _pipeline_factory(f_list):
 class FilterPipeline(HasTraits):
     """List of filters that can be pipelined."""
     filters = List(Filter)
+    filt_type = Enum( 'butterworth', available_filters )
+    selected = Instance(Filter)
+    add_filter = Button('Add filter')
+    remove_filter = Button('Remove filter')
 
     def make_pipeline(self, Fs):
         filters = [f.filt_menu.make_filter(Fs) for f in self.filters]
         return _pipeline_factory(filters)
+
+    def _add_filter_fired(self):
+        self.filters.append( Filter(filt_type=self.filt_type) )
+
+    def _remove_filter_fired(self):
+        self.filters.remove( self.selected )
     
     view = View(
-        Group(
-            UItem('filters', editor=filter_table),
-            show_border=True
+        VGroup(
+            Group(
+                UItem('filt_type'),
+                UItem('add_filter'),
+                UItem('remove_filter'),
+                springy=True
+                ),
+            Group(
+                UItem('filters', editor=filter_table),
+                show_border=True
+                ),
             ),
+        resizable=True,
         title='Filters',
         )
 
@@ -371,6 +527,8 @@ class HeadstageHandler(Handler):
             fd = Mux7FileData(gain=20)
         elif hs.lower() == 'mux7':
             fd = Mux7FileData(gain=12)
+        elif hs.lower() == 'stim v4':
+            fd = Mux7FileData(gain=4)
         elif hs.lower() == 'intan':
             fd = OpenEphysFileData()
         else:
@@ -391,13 +549,15 @@ class VisLauncher(HasTraits):
     offset = Enum(0.2, [0, 0.1, 0.2, 0.5, 1, 2, 5])
     max_window_width = Float(1200.0)
     headstage = Enum('mux7',
-                     ('mux3', 'mux5', 'mux6', 'mux7', 'intan', 'unknown'))
+                     ('mux3', 'mux5', 'mux6', 'mux7',
+                      'stim v4', 'intan', 'unknown'))
     chan_map = Enum(sorted(electrode_maps.keys())[0],
                     sorted(electrode_maps.keys()) + ['unknown'])
     n_chan = Int
     skip_chan = Str
     elec_geometry = Str
     screen_channels = Bool(False)
+    screen_start = Float(0)
 
     def __init__(self, **traits):
         super(VisLauncher, self).__init__(**traits)
@@ -408,11 +568,12 @@ class VisLauncher(HasTraits):
         mem_guideline = float(params.memory_limit)
         n_chan = len(array)
         word_size = array.dtype.itemsize
-        n_pts = min(100000, mem_guideline / n_chan / word_size)
-        n_pts = min(array.shape[1], n_pts)
+        n_pts = min(1000000, mem_guideline / n_chan / word_size)
+        offset = int(self.screen_start * 60 * Fs)
+        n_pts = min(array.shape[1]-offset, n_pts)
         data = np.empty( (len(channels), n_pts), dtype=array.dtype )
         for n, c in enumerate(channels):
-            data[n] = array[c, :n_pts]
+            data[n] = array[c, offset:offset+n_pts]
 
         data_bunch = Bunch(
             data=data, chan_map=chan_map, Fs=Fs, units='au', name=''
@@ -421,7 +582,6 @@ class VisLauncher(HasTraits):
         screen_channels = [ channels[i] for i in xrange(len(mask)) if mask[i] ]
         screen_map = chan_map.subset(mask)
         return screen_channels, screen_map
-        
 
     def launch(self):
         if not os.path.exists(self.file_data.file):
@@ -437,10 +597,13 @@ class VisLauncher(HasTraits):
             chan_map = ChannelMap(np.arange(n_sig_chan), geo)
         else:
             chan_map, nc = get_electrode_map(self.chan_map)
-        
-        data_channels = range( len(chan_map) + len(nc) )
-        for chan in nc:
-            data_channels.remove(chan)
+
+        with h5py.File(self.file_data.file, 'r') as h5:
+            x_scale = h5[self.file_data.fs_field].value ** -1.0
+            num_vectors = h5[self.file_data.data_field].shape[0]
+
+        data_channels = [self.file_data.data_channels[i]
+                         for i in xrange(num_vectors) if i not in nc]
 
         # permute  channels to stack rows
         chan_idx = zip(*chan_map.to_mat())
@@ -449,10 +612,6 @@ class VisLauncher(HasTraits):
         chan_map = ChannelMap( [chan_map[i] for i in chan_order],
                                chan_map.geometry, col_major=chan_map.col_major )
 
-        h5 = h5py.File(self.file_data.file, 'r')
-        x_scale = h5[self.file_data.fs_field].value ** -1.0
-        num_vectors = h5[self.file_data.data_field].shape[0]
-        h5.close()
         filters = self.filters.make_pipeline(x_scale ** -1.0)
         rm = np.zeros( (num_vectors,), dtype='?' )
         rm[data_channels] = True
@@ -523,6 +682,10 @@ class VisLauncher(HasTraits):
                     VGroup(
                         Label('Screen Channels?'),
                         UItem('screen_channels')
+                    ),
+                    VGroup(
+                        Label('Begin screening at x minutes'),
+                        UItem('screen_start')
                     )
                 ),
                 UItem('b'),
