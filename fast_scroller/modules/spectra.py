@@ -1,6 +1,6 @@
 import numpy as np
 
-from traits.api import Button, Bool, Enum
+from traits.api import Button, Bool, Enum, Property, Float, property_depends_on
 from traitsui.api import View, VGroup, HGroup, Item, UItem
      
 
@@ -18,6 +18,7 @@ __all__ = ['IntervalSpectrum']
 class IntervalSpectrum(PlotsInterval):
     name = 'Power Spectrum'
     NW = Enum( 2.5, np.arange(2, 11, 0.5).tolist() )
+    _bandwidth = Property( Float )
     pow2 = Bool(True)
     avg_spec = Bool(True)
     sem = Bool(True)
@@ -32,6 +33,13 @@ class IntervalSpectrum(PlotsInterval):
         kw['NFFT'] = nextpow2(n) if self.pow2 else n
         kw['jackknife'] = False
         return kw
+
+    @property_depends_on('NW')
+    def _get__bandwidth(self):
+        t1, t2 = self.parent._qtwindow.current_frame()
+        T = t2 - t1
+        # TW = NW --> W = NW / T
+        return 2.0 * self.NW / T 
     
     def spectrum(self, array, **mtm_kw):
         kw = self.__default_mtm_kwargs(array.shape[-1])
@@ -89,7 +97,11 @@ class IntervalSpectrum(PlotsInterval):
                     Item('sem', label='Use S.E.M.'),
                     Item('new_figure', label='Plot in new figure')
                     ),
-                UItem('plot'),
+                HGroup(
+                    UItem('plot'),
+                    Item('_bandwidth', label='BW (Hz)',
+                         style='readonly', width=4),
+                    ),
                 label='Spectrum plotting'
                 )
             )

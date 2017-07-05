@@ -136,7 +136,7 @@ class IntervalSpectrogram(PlotsInterval):
         fig, ax = self._get_fig()
         im = ax.imshow(
             ptf, extent=[tx[0], tx[-1], fx[0], fx[-1]],
-            cmap=self.colormap
+            cmap=self.colormap, origin='lower'
             )
         ax.axis('auto')
         ax.set_xlabel('Time (s)'); ax.set_ylabel('Frequency (Hz)')
