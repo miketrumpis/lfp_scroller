@@ -136,7 +136,7 @@ class DCOffsetReadCache(FilteredReadCache):
 
 class H5Chunks(object):
 
-    def __init__(self, h5array, axis=1, slices=False):
+    def __init__(self, h5array, axis=1, min_chunk=None, slices=False):
         chunk = h5array.chunks
         if len(chunk) > 2:
             raise ValueError('Only iterates for 2D arrays')
@@ -149,6 +149,9 @@ class H5Chunks(object):
         self.axis = axis
         self.size = h5array.shape[axis]
         self.chunk = chunk[axis]
+        if min_chunk is not None:
+            while self.chunk < min_chunk:
+                self.chunk += chunk[axis]
         self.n_blocks = self.size // self.chunk
         if self.n_blocks * self.chunk < self.size:
             self.n_blocks += 1
@@ -186,9 +189,10 @@ def bfilter(b, a, x, axis=-1, zi=None, out=None):
     zi_sl[axis] = slice(None)
     xc_sl = [slice(None)] * x.ndim
     xc_sl[axis] = slice(0,1)
-    
-    for n, sl in tqdm(enumerate(H5Chunks(x, axis=axis, slices=True)),
-                      desc='Blockwise filtering', leave=True):
+    fir_size = len(b)
+    itr = H5Chunks(x, axis=axis, min_chunk=fir_size, slices=True)
+    for n, sl in tqdm(enumerate(itr), desc='Blockwise filtering',
+                      leave=True, total=itr.n_blocks):
         xc = x[sl]
         if n == 0:
             zi = zii[ tuple(zi_sl) ] * xc[ tuple(xc_sl) ]
@@ -199,14 +203,3 @@ def bfilter(b, a, x, axis=-1, zi=None, out=None):
             out[sl] = xcf
     return
     
-    ## if not filtfilt:
-    ##     return
-
-    ## # loop through in reverse order, slicing out reverse-time blocks
-    ## for n, xc in enumerate(x_blk.bwd()):
-    ##     if n == 0:
-    ##         zi = zii[ tuple(zi_sl) ] * xc[ tuple(xc_sl) ]
-    ##     xcf, zi = signal.lfilter(b, a, xc, axis=axis, zi=zi)
-    ##     xc[:] = xcf
-    ## del xc
-    ## del x_blk
