@@ -71,11 +71,14 @@ class FileData(HasTraits):
     def _get_data_channels(self):
         if not os.path.exists(self.file):
             return []
-        with h5py.File(self.file, 'r') as f:
-            if self.data_field in f:
-                return range( f[self.data_field].shape[0] )
-            else:
-                return []
+        try:
+            with h5py.File(self.file, 'r') as f:
+                if self.data_field in f:
+                    return range( f[self.data_field].shape[0] )
+                else:
+                    return []
+        except IOError:
+            return []
 
     def _compose_arrays(self, filter, rowmask=(), colmask=()):
         # default is just a wrapped array
@@ -264,15 +267,18 @@ class Mux7FileData(FileData):
     def _get_data_channels(self):
         if not os.path.exists(self.file):
             return []
-        with h5py.File(self.file, 'r') as f:
-            if not self.data_field in f:
-                return []
-            n_chan = f[self.data_field].shape[0]
-            n_row = f['numRow'].value
-            n_col = f['numCol'].value
-            dig_order = mux_sampling.get(self.sampling_style, range(4))
-            chans  = [ range(i*n_row, (i+1)*n_row) for i in dig_order ]
-            return reduce(lambda x, y: x + y, chans)
+        try:
+            with h5py.File(self.file, 'r') as f:
+                if not self.data_field in f:
+                    return []
+                n_chan = f[self.data_field].shape[0]
+                n_row = f['numRow'].value
+                n_col = f['numCol'].value
+                dig_order = mux_sampling.get(self.sampling_style, range(4))
+                chans  = [ range(i*n_row, (i+1)*n_row) for i in dig_order ]
+                return reduce(lambda x, y: x + y, chans)
+        except IOError:
+            return []
     
     def _compose_arrays(self, filter, rowmask=(), colmask=()):
         if not self.dc_subtract or self.zero_windows or self.car_windows:
