@@ -322,6 +322,7 @@ class Mux7FileData(FileData):
 
 class FilterMenu(HasTraits):
     """Edits filter arguments."""
+    filtfilt = Bool(False, info_text='Forward/reverse filter')
     def default_traits_view(self):
         # builds a panel automatically from traits
         t = self.traits()
@@ -355,7 +356,7 @@ class Cheby2Menu(BandpassMenu):
     stop_atten = Float(40, info_text='stopband attenuation (dB)')
     def make_filter(self, Fs):
         return cheby2_bp(
-            self.ripple, lo=self.lo, hi=self.hi, Fs=Fs, ord=self.ord
+            self.stop_atten, lo=self.lo, hi=self.hi, Fs=Fs, ord=self.ord
             )
     
 class NotchMenu(FilterMenu):
@@ -464,7 +465,7 @@ filter_table = TableEditor(
     selected='selected'
     )
 
-def _pipeline_factory(f_list):
+def _pipeline_factory(f_list, filter_modes):
     if not len(f_list):
         return lambda x: x
     def copy_x(x):
@@ -478,9 +479,9 @@ def _pipeline_factory(f_list):
     def run_list(x, axis=1):
         y = copy_x(x)
         b, a = f_list[0]
-        bfilter(b, a, x, axis=axis, out=y)
-        for (b, a) in f_list[1:]:
-            bfilter(b, a, y, axis=axis)
+        bfilter(b, a, x, axis=axis, out=y, filtfilt=filter_modes[0])
+        for (b, a), ff in zip(f_list[1:], filter_modes[1:]):
+            bfilter(b, a, y, axis=axis, filtfilt=ff)
         return y
 
     return run_list
@@ -496,7 +497,8 @@ class FilterPipeline(HasTraits):
 
     def make_pipeline(self, Fs):
         filters = [f.filt_menu.make_filter(Fs) for f in self.filters]
-        return _pipeline_factory(filters)
+        filtfilt = [f.filt_menu.filtfilt for f in self.filters]
+        return _pipeline_factory(filters, filtfilt)
 
     def _add_filter_fired(self):
         self.filters.append( Filter(filt_type=self.filt_type) )

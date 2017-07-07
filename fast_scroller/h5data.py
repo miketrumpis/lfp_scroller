@@ -136,7 +136,9 @@ class DCOffsetReadCache(FilteredReadCache):
 
 class H5Chunks(object):
 
-    def __init__(self, h5array, axis=1, min_chunk=None, slices=False):
+    def __init__(
+            self, h5array, axis=1, min_chunk=None, slices=False, reverse=False
+            ):
         chunk = h5array.chunks
         if len(chunk) > 2:
             raise ValueError('Only iterates for 2D arrays')
@@ -155,26 +157,28 @@ class H5Chunks(object):
         self.n_blocks = self.size // self.chunk
         if self.n_blocks * self.chunk < self.size:
             self.n_blocks += 1
-        self.__it = 0
+        self.__it = self.n_blocks - 1 if reverse else 0
+        self.reverse = reverse
         self.slices = slices
 
     def __iter__(self):
         return self
 
     def next(self):
-        if self.__it >= self.n_blocks:
+        if self.__it >= self.n_blocks or self.__it < 0:
             raise StopIteration()
         n = self.__it
         rng = slice(n * self.chunk, min(self.size, (n+1) * self.chunk))
         sl = ( slice(None), rng ) if self.axis else ( rng, slice(None) )
-        self.__it += 1
+        if self.reverse:
+            self.__it -= 1
+        else:
+            self.__it += 1
         if self.slices:
             return sl
         return self.h5array[sl]
-            
-    
-        
-def bfilter(b, a, x, axis=-1, zi=None, out=None):
+
+def bfilter(b, a, x, axis=-1, out=None, filtfilt=False):
     """
     Apply linear filter inplace over array x streaming from disk.
     """
@@ -201,5 +205,27 @@ def bfilter(b, a, x, axis=-1, zi=None, out=None):
             x[sl] = xcf
         else:
             out[sl] = xcf
-    return
-    
+
+    if not filtfilt:
+        del xc
+        del xcf
+        return
+
+    rev_sl = [ slice(None) ] * x.ndim
+    rev_sl[axis] = slice(None, None, -1)
+    itr = H5Chunks(x, axis=axis, min_chunk=fir_size, slices=True, reverse=True)
+    for n, sl in tqdm(enumerate(itr), desc='Blockwise filtering (reverse)',
+                      leave=True, total=itr.n_blocks):
+        if out is None:
+            xc = x[sl][rev_sl]
+        else:
+            xc = out[sl][rev_sl]
+        if n == 0:
+            zi = zii[ tuple(zi_sl) ] * xc[ tuple(xc_sl) ]
+        xcf, zi = lfilter(b, a, xc, axis=axis, zi=zi)
+        if out is None:
+            x[sl] = xcf[rev_sl]
+        else:
+            out[sl] = xcf[rev_sl]
+    del xc
+    del xcf
