@@ -608,8 +608,8 @@ class VisLauncher(HasTraits):
 
         with h5py.File(self.file_data.file, 'r') as h5:
             x_scale = h5[self.file_data.fs_field].value ** -1.0
-            num_vectors = h5[self.file_data.data_field].shape[0]
-
+        num_vectors = len(chan_map) + len(nc)
+        
         data_channels = [self.file_data.data_channels[i]
                          for i in xrange(num_vectors) if i not in nc]
 
