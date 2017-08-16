@@ -79,20 +79,18 @@ class FileData(HasTraits):
                     return []
         except IOError:
             return []
-
-    def _compose_arrays(self, filter, rowmask=(), colmask=()):
+        
+    def _compose_arrays(self, filter):
         # default is just a wrapped array
         h5 = h5py.File(self.file, 'r')
         array = filter(h5[self.data_field])
-        mn_trace = h5mean(array, 0, rowmask=rowmask, colmask=colmask)
-        mn_trace *= self.y_scale
         if self.zero_windows:
             array = FilteredReadCache(array, partial(detrend, type='constant'))
         elif self.car_windows:
             array = CommonReferenceReadCache(array)
         else:
             array = ReadCache(array)
-        return array, mn_trace
+        return array
 
     def _downsample_fired(self):
         if not os.path.exists(self.file):
@@ -280,18 +278,15 @@ class Mux7FileData(FileData):
         except IOError:
             return []
     
-    def _compose_arrays(self, filter, rowmask=(), colmask=()):
+    def _compose_arrays(self, filter):
         if not self.dc_subtract or self.zero_windows or self.car_windows:
-            return super(Mux7FileData, self)._compose_arrays(
-                filter, rowmask=rowmask, colmask=colmask
-                )
+            print 'not removing dc'
+            return super(Mux7FileData, self)._compose_arrays(filter)
         f = h5py.File(self.file, 'r')
         array = filter(f[self.data_field])
         mn_level = h5mean(array, 1, start=int(3e4))
-        mn_trace = h5mean(array, 0, rowmask=rowmask, colmask=colmask)
-        mn_trace *= self.y_scale
         array = DCOffsetReadCache(array, mn_level)
-        return array, mn_trace
+        return array
 
     def default_traits_view(self):
         view = View(
@@ -608,6 +603,7 @@ class VisLauncher(HasTraits):
 
         with h5py.File(self.file_data.file, 'r') as h5:
             x_scale = h5[self.file_data.fs_field].value ** -1.0
+            array_size = h5[self.file_data.data_field].shape[0]
         num_vectors = len(chan_map) + len(nc)
         
         data_channels = [self.file_data.data_channels[i]
@@ -621,12 +617,18 @@ class VisLauncher(HasTraits):
                                chan_map.geometry, col_major=chan_map.col_major )
 
         filters = self.filters.make_pipeline(x_scale ** -1.0)
-        rm = np.zeros( (num_vectors,), dtype='?' )
-        rm[data_channels] = True
-        array, nav = self.file_data._compose_arrays(filters, rowmask=rm)
+        array = self.file_data._compose_arrays(filters)
         if self.screen_channels:
             data_channels, chan_map = \
               self._get_screen(array, data_channels, chan_map, x_scale**-1.0)
+            
+        rm = np.zeros( (array_size,), dtype='?' )
+        rm[data_channels] = True
+              
+
+        nav = h5mean(array.file_array, 0, rowmask=rm)
+        nav *= self.file_data.y_scale
+
         modules = [ana_modules[k] for k in self.module_set]
         new_vis = FastScroller(array, self.file_data.y_scale,
                                self.offset, chan_map, nav,
