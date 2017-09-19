@@ -8,6 +8,7 @@ from .spatial_field import SpatialVariance, ArrayVarianceTool
 from .spectra import IntervalSpectrum
 from .spectrogram import IntervalSpectrogram
 from .time_stamps import Timestamps
+from .band_power_map import BandPowerMap
 
 __all__ = ['AnimateInterval',
            'IntervalTraces',
@@ -45,5 +46,7 @@ ana_modules = {
     'Spectrogram' : IntervalSpectrogram,
     'Animator' : AnimateInterval,
     'Time stamps' : Timestamps,
+    'Band power map' : BandPowerMap
     }
-default_modules = ('Stacked traces plot', 'Power spectrum', 'Animator')
+default_modules = ('Stacked traces plot', 'Power spectrum',
+                   'Animator', 'Band power map')
