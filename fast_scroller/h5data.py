@@ -139,6 +139,7 @@ class DCOffsetReadCache(FilteredReadCache):
 
 
 class H5Chunks(object):
+    """Iterates an HDF5 over "chunks" with ndarray-like access"""
 
     def __init__(
             self, h5array, axis=1, min_chunk=None, slices=False, reverse=False
