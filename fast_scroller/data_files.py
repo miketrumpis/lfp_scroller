@@ -1,7 +1,6 @@
 from __future__ import division
 import os
 from glob import glob
-from collections import OrderedDict
 from functools import partial
 from tempfile import NamedTemporaryFile
 import numpy as np
@@ -355,6 +354,12 @@ def concatenate_hdf5_files(files, new_file, filters=None):
                 n = array.shape[1]
                 cat_array[:, offset:offset+n] = array[:]
             offset += n
+        # copy anything other singleton values from the last file?
+        with h5py.File(fd.file, 'r') as fr:
+            for k in set(fr.keys()) - {fd.fs_field, fd.data_field}:
+                if hasattr(fr[k], 'shape') and not len(fr[k].shape):
+                    print 'picked up key', k
+                    fw[k] = fr[k].value
     return new_file
         
 class ConcatFilesTool(HasTraits):
@@ -373,7 +378,7 @@ class ConcatFilesTool(HasTraits):
 
     def _default_file_map(self):
         if not hasattr(self, '_file_map'):
-            self._file_map = OrderedDict()
+            self._file_map = dict()
         klass = self.headstage_flavor
         # Rules:
         # 1) keep any existing file name to FileData map
@@ -393,8 +398,8 @@ class ConcatFilesTool(HasTraits):
         if not len(self.joined_files):
             return
         self._default_file_map()
-        file_names = self._file_map.keys()
-        file_objs = self._file_map.values()
+        file_names = self.joined_files
+        file_objs = [self._file_map[f] for f in file_names]
         new_file_name = '-'.join(file_names)
         if self.file_suffix:
             new_file_name = new_file_name + '_' + self.file_suffix
