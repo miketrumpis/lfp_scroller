@@ -21,7 +21,8 @@ from ecoglib.util import ChannelMap, Bunch
 from .h5scroller import FastScroller
 from .h5data import h5mean
 
-from .data_files import Mux7FileData, OpenEphysFileData, FileData
+from .data_files import Mux7FileData, OpenEphysFileData, \
+     FileData, ConcatFilesTool
 from .filtering import FilterPipeline
 from .new_scroller import VisWrapper
 from .modules import ana_modules, default_modules
@@ -69,11 +70,18 @@ class VisLauncher(HasTraits):
     elec_geometry = Str
     screen_channels = Bool(False)
     screen_start = Float(0)
+    concat_tool_launch = Button('Launch Concat. Tool')
 
     def __init__(self, **traits):
         super(VisLauncher, self).__init__(**traits)
         self.add_trait('filters', FilterPipeline())
 
+    def _concat_tool_launch_fired(self):
+        cft = ConcatFilesTool()
+        cft.edit_traits()
+        # hold onto this reference or else window closes if idle?
+        self.__ctf = ctf
+        
     def _get_screen(self, array, channels, chan_map, Fs):
         from ecogana.expconfig import params
         mem_guideline = float(params.memory_limit)
@@ -164,6 +172,7 @@ class VisLauncher(HasTraits):
                         Label('Channel map'),
                         UItem('chan_map')
                         ),
+                    UItem('concat_tool_launch'),
                     HGroup(
                         VGroup(
                             Label('N signal channelsl'),
