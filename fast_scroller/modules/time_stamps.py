@@ -94,7 +94,7 @@ class Timestamps(VisModule):
             vb.sigStateChanged.emit(vb)
 
     def default_traits_view(self):
-        from ..loading import FileHandler
+        from ..data_files import FileHandler
         v = View(
             HGroup(
                 Group(Label('HDF5 file with timing signal'),
