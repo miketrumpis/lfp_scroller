@@ -21,7 +21,7 @@ from ecogana.devices.load.mux import mux_sampling
 from ecoglib.filt.time import downsample
 
 from .h5data import FilteredReadCache, h5mean, ReadCache, \
-     DCOffsetReadCache, CommonReferenceReadCache
+     DCOffsetReadCache, CommonReferenceReadCache, interpolate_blanked
 from .filtering import FilterPipeline, pipeline_factory
 from . import Error
 
@@ -110,7 +110,11 @@ class FileData(HasTraits):
                         print 'skipped key', k
                     
             for i in tqdm(xrange(n_chan), desc='Downsampling'):
-                x_ds, fs = downsample(arr[i], Fs, r=self.ds_rate)
+                arr_row = arr[i]
+                m = np.isnan(arr_row)
+                if m.any():
+                    arr_row = interpolate_blanked(arr_row, m, inplace=True)
+                x_ds, fs = downsample(arr_row, Fs, r=self.ds_rate)
                 y[i,:] = x_ds
         return f.name
     

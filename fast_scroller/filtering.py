@@ -1,5 +1,6 @@
 from __future__ import division
 from tempfile import NamedTemporaryFile
+from functools import partial
 import h5py
 
 from traits.api import Instance, Button, HasTraits, Float, \
@@ -12,7 +13,7 @@ from ecoglib.filt.time.design import butter_bp, cheby1_bp, cheby2_bp, \
      notch, ellip_bp, savgol
 from ecoglib.filt.time import ma_highpass
 
-from .h5data import bfilter
+from .h5data import bfilter, block_nan_filter
 
 class FilterMenu(HasTraits):
     """Edits filter arguments."""
@@ -29,6 +30,15 @@ class FilterMenu(HasTraits):
             else:
                 items.extend( [UItem(k, style='simple')] )
         return View(*items, resizable=True)
+
+class NaNFilterMenu(FilterMenu):
+    """Interpolate through NaN code values"""
+
+    interp_order = Enum('linear', ('linear', 'nearest', 'zero',
+                                   'slinear', 'quadratic', 'cubic'))
+
+    def make_filter(self, Fs):
+        return partial(block_nan_filter, kind=self.interp_order)
     
 class BandpassMenu(FilterMenu):
     lo = Float(-1, info_text='low freq cutoff (-1 for none)')
@@ -92,7 +102,7 @@ class SavgolMenu(FilterMenu):
 
     def make_filter(self, Fs):
         return savgol(self.T, self.ord, Fs=Fs, smoothing=self.sm)
-    
+
 class FilterHandler(Handler):
 
     def object_filt_type_changed(self, info):
@@ -119,10 +129,13 @@ class FilterHandler(Handler):
                 info.object.filt_menu = MAHPMenu()
         elif info.object.filt_type == 'savitzky-golay':
             if not isinstance(info.object.filt_menu, SavgolMenu):
-                info.object.filt_menu = SavgolMenu()
-            
+                info.object.filt_menu = SavgolMenu()            
+        elif info.object.filt_type == 'NaN filter':
+            if not isinstance(info.object.filt_menu, NaNFilterMenu):
+                info.object.filt_menu = NaNFilterMenu()
 
-available_filters = ('butterworth',
+available_filters = ('NaN filter',
+                     'butterworth',
                      'cheby 1',
                      'cheby 2',
                      'elliptical',
@@ -172,8 +185,13 @@ def pipeline_factory(f_list, filter_modes):
         
     def run_list(x, axis=1):
         y = copy_x(x)
-        b, a = f_list[0]
-        bfilter(b, a, x, axis=axis, out=y, filtfilt=filter_modes[0])
+        # possible that 1st filter is the NaN filter
+        if callable(f_list[0]):
+            nf = f_list[0]
+            nf(x, y)
+        else:
+            b, a = f_list[0]
+            bfilter(b, a, x, axis=axis, out=y, filtfilt=filter_modes[0])
         for (b, a), ff in zip(f_list[1:], filter_modes[1:]):
             bfilter(b, a, y, axis=axis, filtfilt=ff)
         return y

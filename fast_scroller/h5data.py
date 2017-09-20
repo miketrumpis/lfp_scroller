@@ -2,7 +2,9 @@ from __future__ import division
 import numpy as np
 from scipy.linalg import LinAlgError
 from scipy.signal import lfilter, lfilter_zi
+from scipy.interpolate import interp1d
 from tqdm import tqdm
+from ecoglib.util import input_as_2d
 
 def h5mean(
         array, axis, block_size=20000,
@@ -234,3 +236,44 @@ def bfilter(b, a, x, axis=-1, out=None, filtfilt=False):
             out[sl] = xcf[rev_sl]
     del xc
     del xcf
+
+@input_as_2d(in_arr=(0, 1))
+def interpolate_blanked(x, mask, inplace=False, kind='linear'):
+    if inplace:
+        y = x
+    else:
+        y = x.copy()
+    a = np.arange(x.shape[1])
+    for row_x, row_y, row_m in zip(x, y, mask):
+        fv = row_x[~row_m].mean()
+        f = interp1d(a[~row_m], row_x[~row_m], kind=kind,
+                     bounds_error=False, fill_value=fv)
+        #row_y[~row_m] = row_x[~row_m]
+        row_y[row_m] = f( a[row_m] )
+    return y
+    
+def block_nan_filter(x, y, kind='linear'):
+    itr = H5Chunks(x, axis=1, slices=True)
+    for n, sl in tqdm(enumerate(itr), desc='NaN Filtering',
+                      leave=True, total=itr.n_blocks):
+        xc = x[sl]
+        nan_mask = np.isnan(xc)
+        if not nan_mask.any():
+            y[sl] = xc
+            continue
+        xc = interpolate_blanked(xc, nan_mask, inplace=True, kind=kind)
+        y[sl] = xc
+        
+        ## yc = np.empty_like(xc)
+        ## nm = np.isnan(xc)
+        ## if not nm.any():
+        ##     y[sl] = xc
+        ##     continue
+        ## a = np.arange(xc.shape[1])
+        ## for row_x, row_y, nan_row in zip(xc, yc, nm):
+        ##     fv = np.nanmean(row_x)
+        ##     f = interp1d(a[~nan_row], row_x[~nan_row], kind=kind,
+        ##                  bounds_error=False, fill_value=fv)
+        ##     row_y[~nan_row] = row_x[~nan_row]
+        ##     row_y[nan_row] = f( a[nan_row] )
+        ## y[sl] = yc
