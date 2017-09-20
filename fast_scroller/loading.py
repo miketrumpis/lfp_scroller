@@ -80,7 +80,7 @@ class VisLauncher(HasTraits):
         cft = ConcatFilesTool()
         cft.edit_traits()
         # hold onto this reference or else window closes if idle?
-        self.__ctf = ctf
+        self.__cft = cft
         
     def _get_screen(self, array, channels, chan_map, Fs):
         from ecogana.expconfig import params
