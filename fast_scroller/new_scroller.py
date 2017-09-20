@@ -1,7 +1,7 @@
 from __future__ import division
 
 from traits.api import HasTraits, Instance, Float, Enum, \
-     Any, List, on_trait_change
+     Any, List, on_trait_change, Event
 from traitsui.api import View, UItem, VSplit, CustomEditor, \
      HSplit, Group, Label, ListEditor
 
@@ -21,7 +21,7 @@ class VisWrapper(HasTraits):
     x_scale = Float
     y_spacing = Enum(0.5, [0, 0.1, 0.2, 0.5, 1, 2, 5])
     chan_map = Any
-    
+    region = Event
     modules = List( [IntervalTraces,
                      AnimateInterval,
                      IntervalSpectrum,
@@ -31,7 +31,12 @@ class VisWrapper(HasTraits):
     def __init__(self, qtwindow, **traits):
         self._qtwindow = qtwindow
         HasTraits.__init__(self, **traits)
+        # connect the region-changed signal to signal a traits callback
+        qtwindow.region.sigRegionChanged.connect(self._region_did_change)
         self._make_modules()
+
+    def _region_did_change(self):
+        self.region = True
 
     def _make_modules(self):
         mods = self.modules[:]

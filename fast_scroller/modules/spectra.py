@@ -1,6 +1,6 @@
 import numpy as np
 
-from traits.api import Button, Bool, Enum, Property, Float, property_depends_on
+from traits.api import Button, Bool, Enum, Property, Float, cached_property
 from traitsui.api import View, VGroup, HGroup, Item, UItem
      
 
@@ -18,7 +18,7 @@ __all__ = ['IntervalSpectrum']
 class IntervalSpectrum(PlotsInterval):
     name = 'Power Spectrum'
     NW = Enum( 2.5, np.arange(2, 11, 0.5).tolist() )
-    _bandwidth = Property( Float )
+    _bandwidth = Property( Float, depends_on='NW, parent.region' )
     pow2 = Bool(True)
     avg_spec = Bool(True)
     sem = Bool(True)
@@ -34,7 +34,7 @@ class IntervalSpectrum(PlotsInterval):
         kw['jackknife'] = False
         return kw
 
-    @property_depends_on('NW')
+    @cached_property
     def _get__bandwidth(self):
         t1, t2 = self.parent._qtwindow.current_frame()
         T = t2 - t1

@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.ticker as ticker
 
 from traits.api import Button, Bool, Enum, Property, Float, \
-     Range, HasTraits, property_depends_on
+     Range, HasTraits, cached_property
 from traitsui.api import View, Group, VGroup, HGroup, Item, UItem, \
      Label, EnumEditor
      
@@ -22,13 +22,13 @@ class IntervalSpectrogram(PlotsInterval):
     ## _chan_list = Property(depends_on='parent.chan_map')
     # estimations details
     NW = Enum( 2.5, np.arange(2, 11, 0.5).tolist() )
-    _bandwidth = Property( Float )
     lag = Float(25) # ms
     strip = Float(100) # ms
     detrend = Bool(True)
     adaptive = Bool(True)
     over_samp = Range(0, 16, mode = 'spinner', value=4)
     high_res = Bool(True)
+    _bandwidth = Property( Float, depends_on='NW, strip' )
 
     baseline = Float(1.0) # sec
     normalize = Enum('Z score', ('None', 'Z score', 'divide', 'subtract'))
@@ -43,7 +43,8 @@ class IntervalSpectrogram(PlotsInterval):
         HasTraits.__init__(self, **traits)
         self.freq_hi = round( (self.parent.x_scale ** -1.0) / 2.0 )
     
-    @property_depends_on('NW')
+    #@property_depends_on('NW')
+    @cached_property
     def _get__bandwidth(self):
         #t1, t2 = self.parent._qtwindow.current_frame()
         T = self.strip * 1e-3
