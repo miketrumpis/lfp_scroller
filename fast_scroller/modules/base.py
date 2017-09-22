@@ -1,6 +1,16 @@
 from collections import OrderedDict
 import numpy as np
+
+from pyqtgraph.Qt import QtGui
+
 import matplotlib as mpl
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_qt4agg import \
+     FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt4agg import \
+     NavigationToolbar2QT as NavigationToolbar
+from mpl_toolkits.axes_grid1 import AxesGrid
+
 from traits.api import HasTraits, Str, Instance, Bool, Int, Property, \
      Float, on_trait_change, File, Button
 from traitsui.api import Item, RangeEditor, UItem, HGroup, FileEditor
@@ -16,6 +26,29 @@ colormaps = ['gray', 'jet', 'bwr', 'viridis', 'Blues', 'winter',
              'inferno', 'coolwarm', 'BrBG']
 colormaps.extend( [c + '_r' for c in colormaps] )
 colormaps = sorted(colormaps)
+
+# A no-frills QT window for MPL Figure (modified from SO:
+# https://stackoverflow.com/questions/12459811/how-to-embed-matplotlib-in-pyqt-for-dummies
+class SimpleFigure(QtGui.QDialog):
+    def __init__(self, parent=None, **fig_kwargs):
+        super(SimpleFigure, self).__init__(parent)
+
+        # a figure instance to plot on
+        self.figure = Figure(**fig_kwargs)
+
+        # this is the Canvas Widget that displays the `figure`
+        # it takes the `figure` instance as a parameter to __init__
+        self.canvas = FigureCanvas(self.figure)
+
+        # this is the Navigation widget
+        # it takes the Canvas widget and a parent
+        self.toolbar = NavigationToolbar(self.canvas, self)
+
+        # set the layout
+        layout = QtGui.QVBoxLayout()
+        layout.addWidget(self.canvas)
+        layout.addWidget(self.toolbar)
+        self.setLayout(layout)
 
 class MultiframeSavesFigure(SavesFigure):
     """
@@ -101,8 +134,12 @@ class MultiframeSavesFigure(SavesFigure):
 
 class FigureStack(OrderedDict):
 
-    def new_figure(self, **kwargs):
+    def _create_figure(self, **kwargs):
         fig, axes = subplots(**kwargs)
+        return fig, axes
+    
+    def new_figure(self, **kwargs):
+        fig, axes = self._create_figure(**kwargs)
         splot = SavesFigure.live_fig(fig)
         
         def remove_fig():
@@ -121,6 +158,28 @@ class FigureStack(OrderedDict):
             return
         k = self.keys()[-1]
         return self[k]
+
+class AxesGridStack(FigureStack):
+
+    def _create_figure(self, **kwargs):
+        # creates a figure and then an AxesGrid in the 111 position
+
+        # other than figsize, no other Figure kwargs allowed
+        figsize = kwargs.pop('figsize', None)
+        fig = Figure(figsize=figsize)
+        grid = AxesGrid(fig, 111, **kwargs)
+        self.grid = grid
+        self.next_grid = { grid : 0 }
+        return fig, grid
+
+    def current_frame(self):
+        _, grid = self.current_figure()
+        g_idx = self.next_grid[grid]
+        frame = grid[g_idx]
+        # roll-around counting
+        g_idx = (g_idx + 1) % len(grid)
+        self.next_grid[grid] = g_idx
+        return frame
 
 class PlotCounter(dict):
 
