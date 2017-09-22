@@ -6,40 +6,35 @@ from scipy.interpolate import interp1d
 from tqdm import tqdm
 from ecoglib.util import input_as_2d
 
-def h5mean(
-        array, axis, block_size=20000,
-        start=0, stop=None, rowmask=(), colmask=()
-        ):
+def h5mean(array, axis, block_size=20000, start=0, stop=None, rowmask=()):
     """Compute mean of a 2D HDF5 array in blocks"""
 
     shape = array.shape
     if axis < 0:
         axis += len(shape)
-    mn_size = shape[1 - axis]
-    mn = np.empty(mn_size, 'd')
-    b = 0
-    while True:
-        range = slice( b, min(mn_size, b + block_size) )
-        # to compute block x, either slice like:
-        # array[:, x].mean(0)
-        # array[x, :].mean(1)
-        if axis == 1:
-            sl = ( range, slice(start, stop) )
+
+    if axis==1 and len(rowmask):
+        mn_size = rowmask.sum()
+    else:
+        mn_size = shape[1 - axis]
+    mn = np.zeros(mn_size, 'd')
+    # For averaging in both dimensions, still iterate chunks in time
+    # If averaging over channels:
+    # * fill in the chunk averages along the way
+    # If averaging over time
+    # * accumulate the samples (scaled by 1/N)
+    itr = H5Chunks(array, axis=1, slices=True)
+    for n, sl in tqdm(enumerate(itr), desc='Computing mean',
+                      leave=True, total=itr.n_blocks):
+        x_sl = array[sl]
+
+        if len(rowmask):
+            x_sl = x_sl[rowmask]
+        
+        if axis == 0:
+            mn[sl[1]] = x_sl.mean(0)
         else:
-            sl = ( slice(start, stop), range )
-        if not (len(rowmask) or len(colmask)):
-            mn[range] = array[sl].mean(axis)
-        else:
-            tmp = array[sl]
-            # only average unmasked rows/columns
-            if len(rowmask):
-                tmp = tmp[rowmask]
-            if len(colmask):
-                tmp = tmp[:, colmask]
-            mn[range] = tmp.mean(axis)
-        b += block_size
-        if b >= mn_size:
-            break
+            mn[:] += x_sl.sum(1) / float(array.shape[1])
     return mn
 
 class ReadCache(object):
