@@ -180,7 +180,7 @@ def pipeline_factory(f_list, filter_modes):
             f.file.close()
             fw = h5py.File(f.name, 'w')
             y = fw.create_dataset('data', shape=x.shape,
-                                  dtype=x.dtype, chunks=x.chunks)
+                                  dtype=x.dtype, chunks=True)
         return y
         
     def run_list(x, axis=1):
