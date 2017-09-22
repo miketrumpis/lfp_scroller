@@ -25,6 +25,16 @@ class HMSAxis(pg.AxisItem):
         for x in values:
             strns.append('{0:02d}:{1:02d}:{2:02d}'.format(*self._to_hms(x)))
         return strns
+
+class PlainSecAxis(pg.AxisItem):
+
+    def tickStrings(self, values, scale, spacing):
+        strns = []
+        if len(values)==0:
+            return super(PlainSecAxis, self).tickStrings(values,scale,spacing)
+
+        strns = map(lambda x: str(int(x)), values)
+        return strns
         
 class HDF5Plot(pg.PlotCurveItem):
     def __init__(self, *args, **kwds):
@@ -183,10 +193,12 @@ class FastScroller(object):
         self.img.setLevels( (-y_spacing, y_spacing) )
         sub_layout.addItem(self.cb)
 
-        self.p1 = layout.addPlot(colspan=2, row=1, col=1)
+        axis = PlainSecAxis(orientation='bottom')
+        self.p1 = layout.addPlot(colspan=2, row=1, col=1,
+                                 axisItems={'bottom':axis})
         self.p1.enableAutoRange(False, False)
         self.p1.setLabel('left', 'Amplitude', units=units)
-        self.p1.setLabel('bottom', 'Time', units='s')
+        self.p1.setLabel('bottom', 'Time')
 
         # The image panel
         layout.nextRow()
@@ -196,7 +208,7 @@ class FastScroller(object):
         self.p2 = layout.addPlot(row=2, col=0, colspan=3,
                                  axisItems={'bottom':axis})
         self.p2.setLabel('left', 'Amplitude', units=units)
-        self.p2.setLabel('bottom', 'Time')#, units='s')
+        self.p2.setLabel('bottom', 'Time')
         self.region = pg.LinearRegionItem() 
         self.region.setZValue(10)
 
