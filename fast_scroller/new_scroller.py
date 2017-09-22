@@ -19,7 +19,7 @@ class VisWrapper(HasTraits):
 
     graph = Instance(QtGui.QWidget)
     x_scale = Float
-    y_spacing = Enum(0.5, [0, 0.1, 0.2, 0.5, 1, 2, 5])
+    y_spacing = Enum(0.2, [0, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5])
     chan_map = Any
     region = Event
     modules = List( [IntervalTraces,
