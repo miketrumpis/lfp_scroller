@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.ticker as ticker
+from scipy.ndimage import gaussian_filter1d
 
 from traits.api import Button, Bool, Enum, Property, Float, \
      Range, HasTraits, cached_property
@@ -77,6 +78,9 @@ class IntervalSpectrogram(PlotsInterval):
             tc = self.baseline
 
         m = tx < tc
+        if not m.any():
+            print 'Baseline too short: using 2 bins'
+            m[:2] = True
         if ptf.ndim < 3:
             ptf = ptf.reshape( (1,) + ptf.shape )
         nf = ptf.shape[1]
@@ -85,6 +89,8 @@ class IntervalSpectrogram(PlotsInterval):
         # get mean of baseline for each freq.
         jn = Jackknife(p_bl, axis=0)
         mn = jn.estimate(np.mean)
+        # smooth out mean across frequencies
+        mn = gaussian_filter1d(mn, 0.05 * len(mn), mode='reflect')
         assert len(mn) == nf, '?'
         if mode.lower() == 'divide':
             ptf = ptf.mean(0) / mn[:, None]
@@ -92,6 +98,7 @@ class IntervalSpectrogram(PlotsInterval):
             ptf = np.exp(ptf.mean(0)) - np.exp(mn[:,None])
         elif mode.lower() == 'z score':
             stdev = jn.estimate(np.std)
+            stdev = gaussian_filter1d(stdev, 0.05 * len(mn), mode='reflect')
             ptf = (ptf.mean(0) - mn[:,None]) / stdev[:,None]
         return ptf
 
