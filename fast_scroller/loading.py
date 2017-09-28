@@ -10,13 +10,14 @@ import numpy as np
 import h5py
 
 from traits.api import Instance, Button, HasTraits, Float, \
-     Str, List, Enum, Int, Bool
-from traitsui.api import View, VGroup, HGroup, UItem, \
+     Str, List, Enum, Int, Bool, cached_property, Range, Property
+from traitsui.api import View, VGroup, HGroup, UItem, Item, \
      Label, Handler, Tabbed, SetEditor
 
 from ecogana.devices.electrode_pinouts import get_electrode_map, electrode_maps
 from ecogana.devices.channel_picker import interactive_mask
 from ecoglib.util import ChannelMap, Bunch
+from ecogana.expconfig import params
 
 from .h5scroller import FastScroller
 from .h5data import h5mean
@@ -26,6 +27,8 @@ from .data_files import Mux7FileData, OpenEphysFileData, \
 from .filtering import FilterPipeline
 from .new_scroller import VisWrapper
 from .modules import ana_modules, default_modules
+
+MEM_CAP = float(params.memory_limit)
 
 class HeadstageHandler(Handler):
 
@@ -59,7 +62,10 @@ class VisLauncher(HasTraits):
     all_modules = List(ana_modules.keys())
     b = Button('Launch Visualization')
     offset = Enum(0.2, [0, 0.1, 0.2, 0.5, 1, 2, 5])
-    max_window_width = Float(1200.0)
+    #max_window_width = Float(1200.0)
+    _max_win = Property(Float, depends_on='file_data.file')
+    _min_win = Int(30)
+    max_window_width = Range(low='_min_win', high='_max_win', value=60)
     headstage = Enum('mux7',
                      ('mux3', 'mux5', 'mux6', 'mux7',
                       'stim v4', 'intan', 'unknown'))
@@ -76,6 +82,18 @@ class VisLauncher(HasTraits):
         super(VisLauncher, self).__init__(**traits)
         self.add_trait('filters', FilterPipeline())
 
+    @cached_property
+    def _get__max_win(self):
+        if not self.file_data or not self.file_data.file:
+            return 100
+        with h5py.File(self.file_data.file, 'r') as h5:
+            Fs = h5[self.file_data.fs_field].value
+            array_size = h5[self.file_data.data_field].shape
+        bytes_per_sec = Fs * array_size[0] * 8
+        mx = int(MEM_CAP / bytes_per_sec)
+        array_len = int(array_size[1] / Fs) + 1
+        return min(array_len, mx)
+    
     def _concat_tool_launch_fired(self):
         cft = ConcatFilesTool()
         cft.edit_traits()
@@ -204,17 +222,20 @@ class VisLauncher(HasTraits):
                     VGroup(
                         Label('Offset per channel (in mV)'),
                         UItem('offset', )
-                    ),
+                        ),
                     VGroup(
                         Label('Screen Channels?'),
                         UItem('screen_channels')
-                    ),
+                        ),
                     VGroup(
                         Label('Begin screening at x minutes'),
                         UItem('screen_start')
+                        )
+                    ),
+                HGroup(
+                    UItem('b'),
+                    Item('max_window_width', label='Max. window length')
                     )
-                ),
-                UItem('b'),
             ),
             resizable=True,
             title='Launch Visualization',
