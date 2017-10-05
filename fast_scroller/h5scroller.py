@@ -33,7 +33,8 @@ class PlainSecAxis(pg.AxisItem):
         if len(values)==0:
             return super(PlainSecAxis, self).tickStrings(values,scale,spacing)
 
-        strns = map(lambda x: str(int(x)), values)
+        #strns = map(lambda x: str(int(x)), values)
+        strns = map(lambda x: str(x), values)
         return strns
         
 class HDF5Plot(pg.PlotCurveItem):
