@@ -1,6 +1,12 @@
 import h5py
-from traits.api import Button, Str, File
-from traitsui.api import View, Group, UItem, Label, HGroup, EnumEditor, VGroup
+from traits.api import Button, Str, File, Bool, HasTraits, List, \
+     Instance, on_trait_change
+from traitsui.api import View, Group, UItem, Item, Label, HGroup, \
+     EnumEditor, VGroup, TableEditor
+from traitsui.table_column \
+    import ObjectColumn
+from traitsui.extras.checkbox_column \
+    import CheckboxColumn
 
 from pyqtgraph.Qt import QtCore
 import pyqtgraph as pg
@@ -11,30 +17,45 @@ from .base import VisModule
 
 __all__ = ['Timestamps']
 
-class Timestamps(VisModule):
-    name = Str('Time Stamps')
+color_cycle = {'r', 'c', 'm', 'y', 'g', 'b'}
 
+class TimeStampSet(HasTraits):
+    parent = Instance('fast_scroller.new_scroller.VisWrapper')
     file = File
+    name = Str
+    color = Str('r')
     timing_array = Str
     timing_channels = Str('0')
+    is_binary = Bool(True)
+    show = Bool(False)
 
-    load = Button('Show timestamps')
-    unload = Button('Hide timestamps')
+    #load = Button('Show timestamps')
+    #unload = Button('Hide timestamps')
 
     def _get_timestamps(self):
         array = h5py.File(self.file, 'r')[self.timing_array]
         chans = map(int, self.timing_channels.split(','))
-        time_stamps, _ = process_trigger( array[chans] )
-        time_stamps = time_stamps.astype('d') * self.parent.x_scale
+        if self.is_binary:
+            time_stamps, _ = process_trigger( array[chans] )
+            time_stamps = time_stamps.astype('d') * self.parent.x_scale
+        else:
+            time_stamps = array[chans[0]]
         return time_stamps
 
-    def _load_fired(self):
+    @on_trait_change('show')
+    def _toggle_visible(self):
+        if self.show:
+            self._load()
+        else:
+            self._unload()
+    
+    def _load(self):
         if not hasattr(self, 'stamps'):
             self.stamps = dict()
 
         if self.file not in self.stamps:
             # load new timestamps and hide old timestamps
-            self._unload_fired()
+            self._unload()
             self.stamps[self.file] = self._get_timestamps()
             N = len(self.stamps[self.file])
             self.p1_lines = [None for x in xrange(N)]
@@ -60,7 +81,8 @@ class Timestamps(VisModule):
     def _draw_lines_in_range(self, plot, line_set, x_range):
         ts = self.stamps[self.file]
         i1, i2 = ts.searchsorted(x_range)
-        pen = pg.mkPen('r', width=1, style=QtCore.Qt.DashLine)
+        #pen = pg.mkPen('r', width=1, style=QtCore.Qt.DashLine)
+        pen = pg.mkPen(self.color, width=1, style=QtCore.Qt.DashLine)
         for n in xrange(max(0, i1-1), i2):
             if line_set[n] is not None:
                 line_set[n].show()
@@ -69,7 +91,7 @@ class Timestamps(VisModule):
             plot.addItem(mark)
             line_set[n] = mark
 
-    def _unload_fired(self):
+    def _unload(self):
         if hasattr(self, 'p1_lines'):
             for line in self.p1_lines:
                 if line is not None:
@@ -93,6 +115,46 @@ class Timestamps(VisModule):
             vb = p2.getViewBox()
             vb.sigStateChanged.emit(vb)
 
+tab_editor = TableEditor(
+    columns = [
+        ObjectColumn(name='name', label='Name', editable=True),
+        ObjectColumn(name='color', label='Color', editable=True),
+        CheckboxColumn(name='is_binary', label='Binary?',
+                       editable=True, width=0.1),
+        CheckboxColumn(name='show', label='Visible', editable=True, width=0.1)
+        ],
+    auto_size=False,
+    row_factory = TimeStampSet,
+    selected='selected_set'
+    )
+
+class Timestamps(VisModule):
+    name = Str('Time Stamps')
+    file = File
+    timing_array = Str
+    timing_channels = Str('0')
+    time_set = List(TimeStampSet)
+    selected_set = Instance(TimeStampSet)
+    add_set = Button('Load timestamps')
+    pop_set = Button('Remove timestamps')
+
+    def _add_set_fired(self):
+        used_colors = set( [s.color for s in self.time_set] )
+        unused_colors = color_cycle - used_colors
+        clr = list(unused_colors)[0]
+        new_set = TimeStampSet(
+            name='Set ' + str( len(self.time_set) + 1 ),
+            color=clr, file=self.file, timing_array=self.timing_array,
+            timing_channels=self.timing_channels, parent=self.parent
+            )
+        self.time_set.append( new_set )
+
+    def _pop_set_fired(self):
+        set = self.selected_set
+        set._unload()
+        self.selected_set = None
+        self.time_set.remove( set )
+
     def default_traits_view(self):
         from ..data_files import FileHandler
         v = View(
@@ -104,10 +166,17 @@ class Timestamps(VisModule):
                             editor=EnumEditor(name='handler.fields'))),
                 Group(Label('Channel(s) with timing signal (comma-sep)'),
                       UItem('timing_channels')),
+                ## Item('is_binary', label='Binary series?'),
                 VGroup(
-                    UItem('load', enabled_when='len(timing_source) > 0'),
-                    UItem('unload', enabled_when='len(timing_source) > 0'))
+                    UItem('add_set', enabled_when='len(timing_source) > 0'),
+                    UItem('pop_set', enabled_when='len(timing_source) > 0')
+                    ),
+                Group(
+                    UItem('time_set', editor=tab_editor),
+                    show_border=True
+                    ),
                 ),
+                
             handler=FileHandler
             )
         return v
