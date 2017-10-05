@@ -86,13 +86,16 @@ class VisLauncher(HasTraits):
     def _get__max_win(self):
         if not self.file_data or not self.file_data.file:
             return 100
-        with h5py.File(self.file_data.file, 'r') as h5:
-            Fs = h5[self.file_data.fs_field].value
-            array_size = h5[self.file_data.data_field].shape
-        bytes_per_sec = Fs * array_size[0] * 8
-        mx = int(MEM_CAP / bytes_per_sec)
-        array_len = int(array_size[1] / Fs) + 1
-        return min(array_len, mx)
+        try:
+            with h5py.File(self.file_data.file, 'r') as h5:
+                Fs = h5[self.file_data.fs_field].value
+                array_size = h5[self.file_data.data_field].shape
+            bytes_per_sec = Fs * array_size[0] * 8
+            mx = int(MEM_CAP / bytes_per_sec)
+            array_len = int(array_size[1] / Fs) + 1
+            return min(array_len, mx)
+        except IOError:
+            return 100
     
     def _concat_tool_launch_fired(self):
         cft = ConcatFilesTool()
