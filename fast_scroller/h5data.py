@@ -87,7 +87,10 @@ class CommonReferenceReadCache(ReadCache):
             return self._array[sl].copy()
         if self._current_slice != range:
             all_sl = ( slice(None), range )
-            self._current_seg = self._array[all_sl].copy()
+            if self.dtype in np.sctypes['int']:
+                self._current_seg = self._array[all_sl].astype('d')
+            else:
+                self._current_seg = self._array[all_sl].copy()
             self._current_seg -= self._current_seg.mean(0)
             self._current_slice = range
         # always return the full range after slicing with possibly
