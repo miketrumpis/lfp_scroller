@@ -41,7 +41,7 @@ class HeadstageHandler(Handler):
         elif hs.lower() in ('mux5', 'mux6'):
             fd = Mux7FileData(gain=20)
         elif hs.lower() == 'mux7':
-            fd = Mux7FileData(gain=12)
+            fd = Mux7FileData(gain=3)
         elif hs.lower() == 'stim v4':
             fd = Mux7FileData(gain=4)
         elif hs.lower() == 'intan':
