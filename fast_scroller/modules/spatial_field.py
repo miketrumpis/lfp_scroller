@@ -17,10 +17,11 @@ from tqdm import tqdm
 from nitime.utils import autocov
 
 from ecoglib.vis.traitsui_bridge import MPLFigureEditor, PingPongStartup
-from ecoglib.util import channel_combinations, ChannelMap
+from ecoglib.util import ChannelMap
 from ecoglib.estimation.jackknife import Jackknife
 import ecoglib.estimation.spatial_variance as sv
 from ecogana.anacode.signal_testing import centered_pair_maps
+from ecogana.anacode.spatial_profiles import cxx_to_pairs, binned_obs
 from ecogana.anacode.anatool.gui_tools import ArrayMap
 import ecogana.anacode.seaborn_lite as sns
 from ecogana.anacode.plot_util import subplots, subplot2grid
@@ -231,7 +232,8 @@ class SpatialVariance(PlotsInterval):
             Ct /= np.outer(nrm, nrm)
 
         chan_map = self.parent._qtwindow.chan_map
-        chan_combs = channel_combinations(chan_map, scale=self.pitch)
+        #chan_combs = channel_combinations(chan_map, scale=self.pitch)
+        chan_combs = chan_map.site_combinations
 
         idx1 = chan_combs.idx1; idx2 = chan_combs.idx2
 
@@ -314,7 +316,8 @@ class SpatialVariance(PlotsInterval):
         
         pts = np.linspace(0, array.shape[1]-1, n_samps).astype('i')
         if isinstance(chan_map, ChannelMap):
-            combs = channel_combinations(chan_map, scale=scale)
+            #combs = channel_combinations(chan_map, scale=scale)
+            combs = chan_map.site_combinations
         else:
             combs = chan_map
         x = np.unique(combs.dist)
@@ -338,10 +341,9 @@ class SpatialVariance(PlotsInterval):
         pts = np.linspace(0, array.shape[1]-1, n_samps).astype('i')
         ## combs = channel_combinations(chan_map, scale=scale)
         ## x = np.unique(combs.dist)
-        import ecogana.anacode.spatial_profiles as sp
         svg = sv.ergodic_semivariogram(array[:, pts])
-        x, svg = sp.cxx_to_pairs(svg, chan_map, pitch=scale)
-        xb, svg, se = sp.binned_obs_error(*sp.binned_obs(x, svg))
+        x, svg = cxx_to_pairs(svg, chan_map, pitch=scale)
+        xb, svg, se = binned_obs_error(*sp.binned_obs(x, svg))
         return xb, svg, np.sqrt(se)
 
     def _plot_anim_fired(self):
@@ -364,7 +366,8 @@ class SpatialVariance(PlotsInterval):
         else:
             fn = self.compute_variogram
             cm = self.parent._qtwindow.chan_map
-            cm = channel_combinations(cm, scale=self.pitch)
+            #cm = channel_combinations(cm, scale=self.pitch)
+            cm = cm.site_combinations
             
         t0 = time.time()
         r = fn(y[:, 0][:,None], cm, n_samps=1, normalize=False, jackknife=False)
