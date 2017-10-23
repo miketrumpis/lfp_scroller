@@ -1,6 +1,7 @@
 import numpy as np
 
-from traits.api import Button, Bool, Enum, Property, Float, cached_property
+from traits.api import Button, Bool, Enum, Property, Float, \
+     cached_property, Str
 from traitsui.api import View, VGroup, HGroup, Item, UItem
      
 
@@ -23,6 +24,7 @@ class IntervalSpectrum(PlotsInterval):
     avg_spec = Bool(True)
     sem = Bool(True)
     adaptive = Bool(True)
+    label = Str
     plot = Button('Plot')
 
     def __default_mtm_kwargs(self, n):
@@ -52,8 +54,7 @@ class IntervalSpectrum(PlotsInterval):
         fx, pxx = self.spectrum(y)
 
         fig, ax = self._get_fig()
-                    
-        label = 't ~ {0:.1f}'.format(x.mean())
+        label = self.label if self.label else 't ~ {0:.1f}'.format(x.mean())
         plot_count = self._axplots[ax]
         if self.avg_spec:
             jn = Jackknife(np.log(pxx), axis=0)
@@ -79,6 +80,7 @@ class IntervalSpectrum(PlotsInterval):
         ax.set_xlabel('Frequency (Hz)')
         sns.despine(ax=ax)
         fig.tight_layout()
+        self.label = ''
         try:
             fig.canvas.draw_idle()
         except:
@@ -99,6 +101,7 @@ class IntervalSpectrum(PlotsInterval):
                     ),
                 HGroup(
                     UItem('plot'),
+                    Item('label', label='Plot label', width=15),
                     Item('_bandwidth', label='BW (Hz)',
                          style='readonly', width=4),
                     ),
