@@ -85,7 +85,7 @@ class HDF5Plot(pg.PlotCurveItem):
         start, stop = r
         # Decide by how much we should downsample 
         ds = int((stop-start) / self.limit) + 1
-
+        #ds = 1
         if ds == 1:
             # Small enough to display with no intervention.
             visible = self.y_visible
@@ -98,7 +98,7 @@ class HDF5Plot(pg.PlotCurveItem):
             N = len(self.y_visible)
             Nsub = N // ds
             y = self.y_visible[:Nsub * ds].reshape(Nsub, ds)
-            visible = np.empty(Nsub*2, dtype=self.hdf5.dtype)
+            visible = np.empty(Nsub*2, dtype='d') #dtype=self.hdf5.dtype)
             visible[0::2] = y.min(axis=1)
             visible[1::2] = y.max(axis=1)
 
