@@ -11,7 +11,7 @@ import h5py
 
 from traits.api import Instance, Button, HasTraits, Float, \
      Str, List, Enum, Int, Bool, cached_property, Range, Property
-from traitsui.api import View, VGroup, HGroup, UItem, Item, \
+from traitsui.api import View, Group, VGroup, HGroup, UItem, Item, \
      Label, Handler, Tabbed, SetEditor
 
 from ecogana.devices.electrode_pinouts import get_electrode_map, electrode_maps
@@ -22,8 +22,8 @@ from ecogana.expconfig import params
 from .h5scroller import FastScroller
 from .h5data import h5mean
 
-from .data_files import Mux7FileData, OpenEphysFileData, \
-     FileData, ConcatFilesTool
+from .data_files import Mux7FileData, OpenEphysFileData, BlackrockFileData, \
+     FileData, ConcatFilesTool, ActiveArrayFileData
 from .filtering import FilterPipeline
 from .new_scroller import VisWrapper
 from .modules import ana_modules, default_modules
@@ -46,10 +46,16 @@ class HeadstageHandler(Handler):
             fd = Mux7FileData(gain=4)
         elif hs.lower() == 'intan':
             fd = OpenEphysFileData()
+        elif hs.lower() == 'blackrock':
+            fd = BlackrockFileData()
+        elif hs.lower() == 'active':
+            fd = ActiveArrayFileData()
+            info.object.chan_map = 'active'
         else:
             fd = FileData()
         info.object.file_data = fd
 
+_subset_chan_maps = ('psv_244_mux1', 'psv_244_mux3')
 class VisLauncher(HasTraits):
     """
     Builds pyqtgraph/traitsui visualation using a timeseries
@@ -68,12 +74,16 @@ class VisLauncher(HasTraits):
     max_window_width = Range(low='_min_win', high='_max_win', value=60)
     headstage = Enum('mux7',
                      ('mux3', 'mux5', 'mux6', 'mux7',
-                      'stim v4', 'intan', 'unknown'))
+                      'stim v4', 'intan', 'blackrock', 'active', 'unknown'))
     chan_map = Enum(sorted(electrode_maps.keys())[0],
-                    sorted(electrode_maps.keys()) + ['unknown'])
+                    sorted(electrode_maps.keys()) + ['active', 'unknown'])
     n_chan = Int
     skip_chan = Str
     elec_geometry = Str
+    chan_map_connectors = Str
+    _is_subset_map = Property(
+        fget=lambda self: self.chan_map in _subset_chan_maps
+        )
     screen_channels = Bool(False)
     screen_start = Float(0)
     concat_tool_launch = Button('Launch Concat. Tool')
@@ -88,13 +98,14 @@ class VisLauncher(HasTraits):
             return 100
         try:
             with h5py.File(self.file_data.file, 'r') as h5:
-                Fs = h5[self.file_data.fs_field].value
+                #Fs = h5[self.file_data.fs_field].value
+                Fs = self.file_data.Fs
                 array_size = h5[self.file_data.data_field].shape
             bytes_per_sec = Fs * array_size[0] * 8
             mx = int(MEM_CAP / bytes_per_sec)
             array_len = int(array_size[1] / Fs) + 1
             return min(array_len, mx)
-        except IOError:
+        except (IOError, ValueError) as e:
             return 100
     
     def _concat_tool_launch_fired(self):
@@ -134,14 +145,22 @@ class VisLauncher(HasTraits):
             geo = map(int, self.elec_geometry.split(','))
             n_sig_chan = self.n_chan - len(nc)
             chan_map = ChannelMap(np.arange(n_sig_chan), geo)
+        elif self.chan_map == 'active':
+            chan_map, nc = self.file_data.make_channel_map()
+        elif self.chan_map in _subset_chan_maps:
+            cnx = self.chan_map_connectors.split(',')
+            cnx = [c.strip() for c in cnx]
+            chan_map, nc = get_electrode_map(self.chan_map,
+                                             connectors=cnx)
         else:
             chan_map, nc = get_electrode_map(self.chan_map)
 
         with h5py.File(self.file_data.file, 'r') as h5:
-            x_scale = h5[self.file_data.fs_field].value ** -1.0
+            #x_scale = h5[self.file_data.fs_field].value ** -1.0
+            x_scale = self.file_data.Fs ** -1.0
             array_size = h5[self.file_data.data_field].shape[0]
         num_vectors = len(chan_map) + len(nc)
-        
+
         data_channels = [self.file_data.data_channels[i]
                          for i in xrange(num_vectors) if i not in nc]
 
@@ -150,7 +169,8 @@ class VisLauncher(HasTraits):
         chan_order = chan_map.lookup(*zip( *sorted(chan_idx)[::-1] ))
         data_channels = [data_channels[i] for i in chan_order]
         chan_map = ChannelMap( [chan_map[i] for i in chan_order],
-                               chan_map.geometry, col_major=chan_map.col_major )
+                               chan_map.geometry, pitch=chan_map.pitch,
+                               col_major=chan_map.col_major )
 
         filters = self.filters.make_pipeline(x_scale ** -1.0)
         array = self.file_data._compose_arrays(filters)
@@ -209,6 +229,11 @@ class VisLauncher(HasTraits):
                             ),
                         visible_when='chan_map=="unknown"'
                         ),
+                    Group(
+                        Item('chan_map_connectors',
+                             label='Connectors (comma-sep)'),
+                        visible_when='_is_subset_map'
+                        )
                     ),
                 Tabbed(
                     UItem('file_data', style='custom'),

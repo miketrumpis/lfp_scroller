@@ -18,6 +18,7 @@ from traitsui.api import View, VGroup, HGroup, Item, UItem, \
 from ecogana.devices.load.open_ephys import hdf5_open_ephys_channels
 from ecogana.devices.load.mux import mux_sampling
 from ecoglib.filt.time import downsample
+from ecoglib.channel_map import ChannelMap
 
 from .h5data import FilteredReadCache, h5mean, ReadCache, \
      DCOffsetReadCache, CommonReferenceReadCache, interpolate_blanked
@@ -147,6 +148,85 @@ class FileData(HasTraits):
             resizable=True
         )
         return view
+
+from ecogana.devices.load.active_electrodes import get_daq_unmix, pitch_lookup
+class ActiveArrayFileData(FileData):
+
+    data_field = Property(fget=lambda self: 'data')
+    fs_field = Property(fget=lambda self: 'Fs')
+    daq = Enum('2t-as daq v1', ('2t-as daq v1', '2t-as daq v2') )
+    headstage = Enum('zif26 to 2x uhdmi',
+                     ('zif26 to 2x uhdmi',
+                      'zif26 to 2x 20 pins harwin to 2x uhdmi',
+                      'zif to 50mil',
+                      'zif51_p4-50_demux-14c20r'))
+    electrode = Enum('actv_64', ('actv_64',
+                                 'cardiac v1',
+                                 'active_1008ch_sp_v2'))
+    y_scale = Property(fget=lambda self: 1e3 / self.gain)
+    gain = Float(10)
+
+    def _get_data_channels(self):
+        # just returns the contiguous block of channels IN WHICH
+        # we find the data carrying channel
+        with h5py.File(self.file, 'r') as f:
+            ncol = f['numCol'].value
+            nrow = f['numRow'].value
+        return range(ncol * nrow)
+
+    def make_channel_map(self):
+        unmix = get_daq_unmix(self.daq, self.headstage, self.electrode)
+        with h5py.File(self.file, 'r') as f:
+            ncol_full = f['numChan'].value
+            ncol_data = f['numCol'].value
+            nrow = f['numRow'].value
+                          
+        pitch = pitch_lookup.get(self.electrode, 1.0)
+        # go through channels,
+        # if channel is data, put down the array matrix location
+        # else, put down a disconnected channel
+        data_rows = list(unmix.row)
+        data_cols = list(unmix.col)
+        chan_map = []
+        no_con = []
+        for c in self.data_channels:
+            col = c // nrow
+            row = c % nrow
+            if col in data_cols:
+                arow = data_rows.index(row)
+                acol = data_cols.index(col)
+                chan_map.append( arow * len(data_rows) + acol )
+            else:
+                no_con.append(c)
+        nr = len(unmix.row)
+        nc = len(unmix.col)
+        cm = ChannelMap(chan_map, (nr, nc), pitch=pitch, col_major=False)
+        return cm, no_con
+
+    def default_traits_view(self):
+        v = super(ActiveArrayFileData, self).default_traits_view()
+        vgrp = v.content.content[0]
+        new_group = HGroup(
+            Item('daq', label='daq'),
+            Item('headstage', label='headstage'),
+            Item('electrode', label='electrode')
+            )
+        vgrp.content.insert(0, new_group)
+        return v
+
+class BlackrockFileData(FileData):
+    data_field = Property(fget=lambda self: 'data')
+    fs_field = Property(fget=lambda self: 'Fs')
+    # 2**15 is 8 mV
+    y_scale = Float( 8.0 / 2**15 )
+
+    def _get_Fs(self):
+        try:
+            with h5py.File(self.file, 'r') as f:
+                return f[self.fs_field].value.squeeze()
+        except:
+            return None
+
 
 class OpenEphysFileData(FileData):
     file = File(filter=[u'*.h5', u'*.continuous'])
@@ -375,6 +455,10 @@ class ConcatFilesTool(HasTraits):
     file_size = Property(Str, depends_on='joined_files, downsample')
     file_suffix = Str('')
     set_Fs = Property(Str, depends_on='joined_files, downsample')
+
+    @on_trait_change('joined_files')
+    def _foo(self):
+        print self.joined_files
 
     def _default_file_map(self):
         if not hasattr(self, '_file_map'):
