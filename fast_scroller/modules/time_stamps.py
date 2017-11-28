@@ -1,3 +1,4 @@
+import numpy as np
 import h5py
 from traits.api import Button, Str, File, Bool, HasTraits, List, \
      Instance, on_trait_change
@@ -34,12 +35,16 @@ class TimeStampSet(HasTraits):
 
     def _get_timestamps(self):
         array = h5py.File(self.file, 'r')[self.timing_array]
-        chans = map(int, self.timing_channels.split(','))
+        if array.shape[-1] == array.size:
+            chans = array[:].squeeze()
+        else:
+            chans = map(int, self.timing_channels.split(','))
+            chans = array[chans]
         if self.is_binary:
-            time_stamps, _ = process_trigger( array[chans] )
+            time_stamps, _ = process_trigger( chans )
             time_stamps = time_stamps.astype('d') * self.parent.x_scale
         else:
-            time_stamps = array[chans[0]]
+            time_stamps = chans.astype('d') * self.parent.x_scale
         return time_stamps
 
     @on_trait_change('show')
