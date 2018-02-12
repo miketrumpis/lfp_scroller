@@ -224,9 +224,9 @@ class FastScroller(object):
 
         # curves will be itemized in order with the channel map
         self._curves = []
-        for i in load_channels:
+        for n, i in enumerate(load_channels):
             curve = HDF5Plot()
-            curve.setHDF5(array, i, y_spacing * i, scale=y_scale, dx=x_scale)
+            curve.setHDF5(array, i, y_spacing * n, scale=y_scale, dx=x_scale)
             self.p1.addItem(curve)
             self._curves.append( curve )
 
