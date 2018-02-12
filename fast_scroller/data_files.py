@@ -172,14 +172,14 @@ class ActiveArrayFileData(FileData):
         with h5py.File(self.file, 'r') as f:
             ncol = f['numCol'].value
             nrow = f['numRow'].value
-        return range(ncol * nrow)
+        return range(int(ncol * nrow))
 
     def make_channel_map(self):
         unmix = get_daq_unmix(self.daq, self.headstage, self.electrode)
         with h5py.File(self.file, 'r') as f:
-            ncol_full = f['numChan'].value
-            ncol_data = f['numCol'].value
-            nrow = f['numRow'].value
+            #ncol_full = f['numChan'].value
+            #ncol_data = f['numCol'].value
+            nrow = int(f['numRow'].value)
                           
         pitch = pitch_lookup.get(self.electrode, 1.0)
         # go through channels,
@@ -195,7 +195,7 @@ class ActiveArrayFileData(FileData):
             if col in data_cols:
                 arow = data_rows.index(row)
                 acol = data_cols.index(col)
-                chan_map.append( arow * len(data_rows) + acol )
+                chan_map.append( arow * len(data_cols) + acol )
             else:
                 no_con.append(c)
         nr = len(unmix.row)
@@ -343,7 +343,7 @@ class Mux7FileData(FileData):
             with h5py.File(self.file, 'r') as f:
                 if not self.data_field in f:
                     return []
-                n_row = f['numRow'].value
+                n_row = int(f['numRow'].value)
                 dig_order = mux_sampling.get(self.sampling_style, range(4))
                 chans  = [ range(i*n_row, (i+1)*n_row) for i in dig_order ]
                 return reduce(lambda x, y: x + y, chans)
