@@ -56,6 +56,12 @@ class HeadstageHandler(Handler):
         info.object.file_data = fd
 
 _subset_chan_maps = ('psv_244_mux1', 'psv_244_mux3')
+# append some non-standard channel maps for
+# 1) active electrodes (these are constructed on the fly based on geometry)
+# 2) unknown (can be built in the GUI)
+# 3) a value that is set programmatically via the .set_chan_map attribute
+available_chan_maps = sorted(electrode_maps.keys()) + \
+  ['active', 'unknown', 'settable']
 class VisLauncher(HasTraits):
     """
     Builds pyqtgraph/traitsui visualation using a timeseries
@@ -75,8 +81,8 @@ class VisLauncher(HasTraits):
     headstage = Enum('mux7',
                      ('mux3', 'mux5', 'mux6', 'mux7',
                       'stim v4', 'intan', 'blackrock', 'active', 'unknown'))
-    chan_map = Enum(sorted(electrode_maps.keys())[0],
-                    sorted(electrode_maps.keys()) + ['active', 'unknown'])
+    chan_map = Enum(available_chan_maps[0], available_chan_maps)
+
     n_chan = Int
     skip_chan = Str
     elec_geometry = Str
@@ -152,6 +158,9 @@ class VisLauncher(HasTraits):
             cnx = [c.strip() for c in cnx]
             chan_map, nc = get_electrode_map(self.chan_map,
                                              connectors=cnx)
+        elif self.chan_map == 'settable':
+            chan_map = self.set_chan_map
+            nc = []
         else:
             chan_map, nc = get_electrode_map(self.chan_map)
 
