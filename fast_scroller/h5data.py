@@ -151,7 +151,7 @@ class H5Chunks(object):
         while axis < 0:
             axis += len(chunk)
         if chunk[axis] < chunk[1-axis]:
-            print 'chunk size larger is other dimension!'
+            print 'chunk size larger in other dimension!'
 
         self.axis = axis
         self.size = h5array.shape[axis]

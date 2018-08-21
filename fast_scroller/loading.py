@@ -143,6 +143,8 @@ class VisLauncher(HasTraits):
     def launch(self):
         if not os.path.exists(self.file_data.file):
             return
+
+        # Logic to normalize channel mapping
         if self.chan_map == 'unknown':
             try:
                 nc = np.array( map(int, self.skip_chan.split(',')) )
@@ -163,6 +165,11 @@ class VisLauncher(HasTraits):
             nc = []
         else:
             chan_map, nc = get_electrode_map(self.chan_map)
+
+        # Check for transposed active data (coming from matlab)
+        if isinstance(self.file_data, ActiveArrayFileData) and self.file_data.is_transpose:
+            self.file_data.create_transposed()
+            print self.file_data.file
 
         with h5py.File(self.file_data.file, 'r') as h5:
             #x_scale = h5[self.file_data.fs_field].value ** -1.0
