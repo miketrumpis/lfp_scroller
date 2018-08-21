@@ -218,7 +218,9 @@ class ActiveArrayFileData(FileData):
                         fw[k] = h5[k].value
                     except (AttributeError, RuntimeError) as e:
                         print 'skipped key', k
-            chunk_iter = H5Chunks(h5['data'], axis=0, slices=True)
+            # keep chunk size to ~ 200 MB
+            min_size = int(200e6 / 8 / n_chan)
+            chunk_iter = H5Chunks(h5['data'], axis=0, slices=True, min_chunk=min_size)
             #for i in tqdm(xrange(n_chan), desc='Copying transpose'):
             for sl in tqdm(chunk_iter, desc='Copying transpose'):
                 arr_rows = arr[sl]
