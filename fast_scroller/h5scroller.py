@@ -199,6 +199,8 @@ class FastScroller(object):
             raise ValueError('cannot map the listed channels')
 
         self.array = array
+        self.y_scale = y_scale
+        self.load_channels = load_channels
 
         #self.win = pg.GraphicsWindow()
         self.win = pg.GraphicsView()

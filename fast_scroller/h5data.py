@@ -6,7 +6,7 @@ from scipy.interpolate import interp1d
 from tqdm import tqdm
 from ecoglib.util import input_as_2d
 
-def h5mean(array, axis, block_size=20000, start=0, stop=None, rowmask=()):
+def h5mean(array, axis, rowmask=()):
     """Compute mean of a 2D HDF5 array in blocks"""
 
     shape = array.shape
@@ -36,6 +36,23 @@ def h5mean(array, axis, block_size=20000, start=0, stop=None, rowmask=()):
         else:
             mn[:] += x_sl.sum(1) / float(array.shape[1])
     return mn
+
+
+def h5stat(array, fn, rowmask=()):
+    """Compute timeseries of a channel-wise statistic for a 2D HDF5 array in blocks"""
+
+    shape = array.shape
+    T = shape[1]
+    series = np.zeros(T, 'd')
+    itr = H5Chunks(array, axis=1, slices=True)
+    for n, sl in tqdm(enumerate(itr), desc='Computing series',
+                      leave=True, total=itr.n_blocks):
+        x_sl = array[sl]
+        if len(rowmask):
+            x_sl = x_sl[rowmask]
+        series[sl[1]] = fn(x_sl)
+    return series
+
 
 class ReadCache(object):
     # TODO -- enable catch for full slicing

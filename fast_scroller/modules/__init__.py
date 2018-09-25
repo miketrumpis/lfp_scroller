@@ -9,6 +9,7 @@ from .spectra import IntervalSpectrum
 from .spectrogram import IntervalSpectrogram
 from .time_stamps import Timestamps
 from .band_power_map import BandPowerMap
+from .navigators import NavigatorManager
 
 __all__ = ['AnimateInterval',
            'IntervalTraces',
@@ -17,6 +18,8 @@ __all__ = ['AnimateInterval',
            'IntervalSpectrum',
            'IntervalSpectrogram',
            'Timestamps',
+           'BandPowerMap',
+           'NavigatorManager',
            'YRange',
            'ana_modules',
            'default_modules']
@@ -46,7 +49,7 @@ ana_modules = {
     'Spectrogram' : IntervalSpectrogram,
     'Animator' : AnimateInterval,
     'Time stamps' : Timestamps,
-    'Band power map' : BandPowerMap
+    'Band power map' : BandPowerMap,
+    'Navigators' : NavigatorManager
     }
-default_modules = ('Stacked traces plot', 'Power spectrum',
-                   'Animator', 'Band power map')
+default_modules = ('Stacked traces plot', 'Power spectrum', 'Navigators', 'Animator', 'Band power map', 'Spectrogram')
