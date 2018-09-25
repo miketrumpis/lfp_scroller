@@ -42,6 +42,11 @@ class HDF5Plot(pg.PlotCurveItem):
         self.hdf5 = None
         self.limit = 6000 # maximum number of samples to be plotted
         pg.PlotCurveItem.__init__(self, *args, **kwds)
+        # This item also has a curve point and (in)visible text
+        #self.curve_point = pg.CurvePoint(self)
+        self.text = pg.TextItem('empty', anchor=(0.5, 1.0), color=(255, 98, 65), fill=(65, 222, 255, 180))
+        #self.text.setParent(self.curve_point)
+        self.text.setVisible(False)
         
     def setHDF5(self, data, index, offset, dx=1.0, scale=1):
         self.hdf5 = data
@@ -112,6 +117,31 @@ class HDF5Plot(pg.PlotCurveItem):
         self.setData(x=x_visible, y=visible) # update the plot
         #self.setPos(start*self._xscale, 0) # shift to match starting index
         self.resetTransform()
+        self.set_text_position()
+
+    def set_text_position(self):
+        if self.text.isVisible():
+            x_visible = self.x_visible
+            y_visible = self.y_visible + self.offset
+            # put text 20% from the left
+            x_pos = 0.8 * x_visible[0] + 0.2 * x_visible[-1]
+            # set height to the max in a 10% window around x_pos
+            wid = max(1, int(0.05 * len(y_visible)))
+            n_pos = int(0.2 * len(y_visible))
+            y_pos = y_visible[n_pos - wid:n_pos + wid].max()
+            self.text.setPos(x_pos, y_pos)
+
+    def toggle_text(self, i, j):
+        self.text.setText('({0}, {1})'.format(i, j))
+        vis = self.text.isVisible()
+        self.text.setVisible(not vis)
+        self.set_text_position()
+        print 'Is visible:', not vis
+        if not vis:
+            pen = pg.mkPen(color='c', width=4)
+        else:
+            pen = pg.mkPen(width=0)
+        self.setShadowPen(pen)
 
 class FastScroller(object):
 
@@ -227,7 +257,10 @@ class FastScroller(object):
         for n, i in enumerate(load_channels):
             curve = HDF5Plot()
             curve.setHDF5(array, i, y_spacing * n, scale=y_scale, dx=x_scale)
+            curve.setClickable(True, width=10)
+            curve.sigClicked.connect(self.highlight_curve)
             self.p1.addItem(curve)
+            self.p1.addItem(curve.text)
             self._curves.append( curve )
 
         # Add mean trace to bottom plot
@@ -267,6 +300,11 @@ class FastScroller(object):
             x[i] = self._curves[i].x_visible
             y[i] = self._curves[i].y_visible
         return x, y
+
+    def highlight_curve(self, curve):
+        n = self._curves.index(curve)
+        i, j = self.chan_map.rlookup(n)
+        curve.toggle_text(i, j)
         
     def jump_nav(self, evt):
         if QtGui.QApplication.keyboardModifiers() != QtCore.Qt.ShiftModifier:
