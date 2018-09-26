@@ -203,7 +203,7 @@ class VisLauncher(HasTraits):
 
         modules = [ana_modules[k] for k in self.module_set]
         new_vis = FastScroller(array, self.file_data.y_scale,
-                               self.offset, chan_map, nav,
+                               self.offset * 1e-3, chan_map, nav,
                                x_scale=x_scale,
                                load_channels=data_channels,
                                max_zoom=self.max_window_width)

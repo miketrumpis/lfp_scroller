@@ -131,7 +131,7 @@ class FileData(HasTraits):
                     Item('fs_field', label='Fs field',
                          editor=EnumEditor(name='handler.fields'))
                     ),
-                Label('Scales samples to voltage (mV)'),
+                Label('Scales samples to voltage (V)'),
                 UItem('y_scale'),
                 HGroup(
                     Item('zero_windows', label='Remove local DC?'),
@@ -163,7 +163,7 @@ class ActiveArrayFileData(FileData):
     electrode = Enum('actv_64', ('actv_64',
                                  'cardiac v1',
                                  'active_1008ch_sp_v2'))
-    y_scale = Property(fget=lambda self: 1e3 / self.gain)
+    y_scale = Property(fget=lambda self: 1.0 / self.gain)
     is_transpose = Property(depends_on='file')
     gain = Float(10)
 
@@ -276,7 +276,7 @@ class BlackrockFileData(FileData):
     data_field = Property(fget=lambda self: 'data')
     fs_field = Property(fget=lambda self: 'Fs')
     # 2**15 is 8 mV
-    y_scale = Float( 8.0 / 2**15 )
+    y_scale = Float( 8e-3 / 2**15 )
 
     def _get_Fs(self):
         try:
@@ -290,7 +290,7 @@ class OpenEphysFileData(FileData):
     file = File(filter=[u'*.h5', u'*.continuous'])
     data_field = Property(fget=lambda self: 'chdata')
     fs_field = Property(fget=lambda self: 'Fs')
-    y_scale = Float(0.001)
+    y_scale = Float(1e-6)
 
     # convert controls
     can_convert = Property
@@ -367,8 +367,8 @@ class OpenEphysFileData(FileData):
                     enabled_when='can_convert'
                     ),
                     
-                Label('Scales samples to mV'),
-                Label('(1.98e-4 if quantized, else 1e-3)'),
+                Label('Scales samples to V'),
+                Label('(1.98e-7 if quantized, else 1e-6)'),
                 UItem('y_scale'),
                 HGroup(
                     Item('zero_windows', label='Remove local DC?'),
@@ -387,7 +387,7 @@ class Mux7FileData(FileData):
     defaults to building an ReadCache with DC offset subraction.
     """
 
-    y_scale = Property(fget=lambda self: 1e3 / self.gain)
+    y_scale = Property(fget=lambda self: 1.0 / self.gain)
     gain = Enum( 12, (3, 4, 10, 12, 20) )
     data_field = Property(fget=lambda self: 'data')
     fs_field = Property(fget=lambda self: 'Fs')

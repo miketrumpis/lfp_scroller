@@ -48,6 +48,8 @@ class BandPowerMap(PlotsInterval):
 
     def _plot_fired(self):
         x, y = self.parent._qtwindow.current_data()
+        # convert to microvolts
+        y *= 1e6
         t = 0.5 * (x[0,0] + x[0,-1])
         dt = x[0,1] - x[0,0]
         # N = int( self.sub_block_pct * 0.01 * y.shape[-1] )
@@ -79,7 +81,7 @@ class BandPowerMap(PlotsInterval):
         f, ax = self._get_fig(figsize=(5, 5))
         chan_map = self.parent._qtwindow.chan_map
         f, cb = chan_map.image(band_power, ax=ax, cmap=self.cmap)
-        cb.set_label('Bandpass RMS (mV)')
+        cb.set_label('Bandpass RMS (uV)')
         ax.set_title(
             u'{0:0.1f} \u00b1 {1} Hz bandpass ~ {2:0.1f} s'.format(self.fc, self.BW, t)
             )

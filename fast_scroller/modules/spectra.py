@@ -51,6 +51,7 @@ class IntervalSpectrum(PlotsInterval):
 
     def _plot_fired(self):
         x, y = self.parent._qtwindow.current_data()
+        y *= 1e6
         fx, pxx = self.spectrum(y)
 
         fig, ax = self._get_fig()
@@ -76,7 +77,7 @@ class IntervalSpectrum(PlotsInterval):
                 fx, pxx.T, lw=.25, color=self._colors[plot_count]
                 )
             ax.legend(lns[:1], (label,))
-        ax.set_ylabel('Power Spectral Density (mV / Hz^2)')
+        ax.set_ylabel('Power Spectral Density (uV / Hz^2)')
         ax.set_xlabel('Frequency (Hz)')
         sns.despine(ax=ax)
         fig.tight_layout()

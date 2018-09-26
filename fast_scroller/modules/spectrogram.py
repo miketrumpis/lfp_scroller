@@ -119,6 +119,7 @@ class IntervalSpectrogram(PlotsInterval):
 
     def _plot_fired(self):
         x, y = self.parent._qtwindow.current_data()
+        y *= 1e3
         x = x[0]
         if self.channel.lower() != 'all':
             i, j = map(int, self.channel.split(','))

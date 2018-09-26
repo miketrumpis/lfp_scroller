@@ -495,6 +495,7 @@ class SpatialVariance(PlotsInterval):
 
     def _vis_tool_fired(self):
         _, y = self.parent._qtwindow.current_data()
+        y *= 1e6
         if self.normalize:
             cov = np.corrcoef(y)
         else:
@@ -508,6 +509,7 @@ class SpatialVariance(PlotsInterval):
 
     def _stsemivar_tool_fired(self):
         _, y = self.parent._qtwindow.current_data()
+        y *= 1e6
         chan_map = self.parent._qtwindow.chan_map
         bin_size = None if (self.dist_bin < 0) else self.dist_bin
         tool = STSemivar.from_array_and_lag(
@@ -522,6 +524,7 @@ class SpatialVariance(PlotsInterval):
 
     def _plot_acov_fired(self):
         t, y = self.parent._qtwindow.current_data()
+        y *= 1e6
         t_stamp = t[0].mean()
         t = (t[0] - t[0,0]) * 1e3
         dt = t[1] - t[0]
@@ -564,6 +567,7 @@ class SpatialVariance(PlotsInterval):
 
     def _plot_iso_stcov_fired(self):
         t, y = self.parent._qtwindow.current_data()
+        y *= 1e6
         t = (t[0] - t[0,0]) * 1e3
         dt = t[1] - t[0]
         # shoot for minimum of 1 ms per frame
@@ -622,6 +626,7 @@ class SpatialVariance(PlotsInterval):
             
     def _plot_stcov_fired(self):
         t, y = self.parent._qtwindow.current_data()
+        y *= 1e6
         t_stamp = t[0].mean()
         t = (t[0] - t[0,0]) * 1e3
         dt = t[1] - t[0]
@@ -766,6 +771,7 @@ class SpatialVariance(PlotsInterval):
             return
         
         t, y = self.parent._qtwindow.current_data()
+        y *= 1e6
         t = t[0]
         if self.normalize:
             y = y / np.std(y, axis=1, keepdims=1)
@@ -845,6 +851,7 @@ class SpatialVariance(PlotsInterval):
 
     def _plot_fired(self):
         t, y = self.parent._qtwindow.current_data()
+        y *= 1e6
         if self.estimator == 'ergodic':
             r = self.compute_ergodic_variogram(
                 y, self.parent._qtwindow.chan_map

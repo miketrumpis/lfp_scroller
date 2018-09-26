@@ -97,6 +97,7 @@ class AnimateInterval(VisModule):
             return
 
         x, y = self.parent._qtwindow.current_data()
+        y *= 1e6
         x = x[0]
         dt = x[1] - x[0]
         # fps is sampling frequency divided by time scale dilation
@@ -113,7 +114,7 @@ class AnimateInterval(VisModule):
         ani.write_frames(
             frames, self.video_file, timer='s', time=x, fps=fps,
             title='Scroller video', quicktime=True, colorbar=True,
-            cbar_label='mV', cmap=self.cmap, clim=clim,
+            cbar_label='uV', cmap=self.cmap, clim=clim,
             origin='upper'
             )
 

@@ -148,7 +148,7 @@ class FastScroller(object):
     def __init__(
             self, array, y_scale, y_spacing, chan_map,
             nav_trace, x_scale=1, load_channels='all',
-            max_zoom=120.0, units='mV'
+            max_zoom=120.0, units='V'
             ):
         """
         Scroller GUI loading a minimal amount of timeseries to
@@ -219,7 +219,7 @@ class FastScroller(object):
         self.img.setLookupTable(pgx.get_colormap_lut(name='bipolar'))
         self.p_img.addItem(self.img)
         self.p_img.autoRange()
-        self.img.setLevels( (-3, 3) )
+        # self.img.setLevels( (-3, 3) )
         self.cb = pgx.ColorBarItem(
             image=self.img, label='Voltage ({0})'.format(units)
             )

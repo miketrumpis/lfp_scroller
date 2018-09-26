@@ -46,7 +46,7 @@ class VisWrapper(HasTraits):
 
     @on_trait_change('y_spacing')
     def _change_spacing(self):
-        self._qtwindow.update_y_spacing(self.y_spacing)
+        self._qtwindow.update_y_spacing(self.y_spacing * 1e-3)
 
     def default_traits_view(self):
         ht = 1000
