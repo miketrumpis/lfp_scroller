@@ -14,6 +14,7 @@ from traits.api import Instance, Button, HasTraits, File, Float, \
 from traitsui.api import View, VGroup, HGroup, Item, UItem, \
      Label, Handler, EnumEditor, Tabbed, spring, \
      FileEditor, SetEditor
+from pyface.api import DirectoryDialog, MessageDialog, OK
 
 from ecogana.devices.load.open_ephys import hdf5_open_ephys_channels
 from ecogana.devices.load.mux import mux_sampling
@@ -85,19 +86,14 @@ class FileData(HasTraits):
             return
         fname = os.path.split(self.file)[1]
         fname, ext = os.path.splitext(fname)
-        #ds_fname = os.path.join( os.getcwd(), fname + '_ds.h5' )
-        with h5py.File(self.file, 'r') as h5, \
-          NamedTemporaryFile(mode='ab', dir=where,
-                             suffix=fname+'.h5', delete=False) as f:
-        
+        ds_name = os.path.join(where, fname + '_dnsamp{}.h5'.format(self.ds_rate))
+        with h5py.File(self.file, 'r') as h5, h5py.File(ds_name, 'w') as fw:
             arr = h5[self.data_field]
             Fs = h5[self.fs_field].value
             n_chan, len_ts = arr.shape
             n = len_ts // self.ds_rate
             if n * self.ds_rate < len_ts:
                 n += 1
-            f.file.close()
-            fw = h5py.File(f.name, 'w')
             y = fw.create_dataset(self.data_field, shape=(n_chan, n),
                                   dtype=arr.dtype, chunks=True)
             fw[self.fs_field] = Fs / float(self.ds_rate)
@@ -107,7 +103,7 @@ class FileData(HasTraits):
                     try:
                         fw[k] = h5[k].value
                     except (AttributeError, RuntimeError) as e:
-                        print 'skipped key', k
+                        print 'skipped key:', k
                     
             for i in tqdm(xrange(n_chan), desc='Downsampling'):
                 arr_row = arr[i]
@@ -116,7 +112,7 @@ class FileData(HasTraits):
                     arr_row = interpolate_blanked(arr_row, m, inplace=True)
                 x_ds, fs = downsample(arr_row, Fs, r=self.ds_rate)
                 y[i,:] = x_ds
-        return f.name
+        return ds_name
     
     def _downsample_fired(self):
         self.file = self.create_downsampled()
@@ -217,7 +213,7 @@ class ActiveArrayFileData(FileData):
                     try:
                         fw[k] = h5[k].value
                     except (AttributeError, RuntimeError) as e:
-                        print 'skipped key', k
+                        print 'skipped key:', k
             # keep chunk size to ~ 200 MB
             min_size = int(200e6 / 8 / n_chan)
             chunk_iter = H5Chunks(h5['data'], axis=0, slices=True, min_chunk=min_size)
@@ -449,7 +445,7 @@ class FilesHandler(Handler):
 
     def object_file_dir_changed(self, info):
         d = info.object.file_dir
-        info.object.joined_files = []
+        info.object.working_files = []
         if not d:
             return
         h5_files = sorted( glob( os.path.join(d, '*.h5') ) )
@@ -466,7 +462,8 @@ def concatenate_hdf5_files(files, new_file, filters=None):
     samp_res = []
     for fd in files:
         with h5py.File(fd.file, 'r') as h5:
-            samp_res.append( h5[fd.fs_field].value )
+            # samp_res.append( h5[fd.fs_field].value )
+            samp_res.append(fd.Fs)
             sizes.append( h5[fd.data_field].shape )
     samp_res = np.array(samp_res)
     assert (samp_res[0] == samp_res[1:]).all(), 'Inconsistent sampling'
@@ -499,24 +496,47 @@ def concatenate_hdf5_files(files, new_file, filters=None):
                     print 'picked up key', k
                     fw[k] = fr[k].value
     return new_file
+
+
+def batch_filter_hdf5_files(files, save_path, filters):
+
+    for fd in files:
+        save_file = os.path.join(save_path, os.path.split(fd.file)[1])
+        print 'input file:', fd.file, 'output file:', save_file
+        if filters is not None:
+            fpipe = filters.make_pipeline(fd.Fs, output_file=save_file, data_field=fd.data_field)
+        else:
+            fpipe = pipeline_factory([], None)
+        with h5py.File(fd.file, 'r') as fr:
+            fpipe(fr[fd.data_field])
+            # copy anything other singleton values from the last file?
+            with h5py.File(save_file, 'a') as fw:
+                # set down samp rate manually
+                fw[fd.fs_field] = fd.Fs
+                for k in set(fr.keys()) - {fd.fs_field, fd.data_field}:
+                    if hasattr(fr[k], 'shape') and not len(fr[k].shape):
+                        print 'picked up key', k
+                        fw[k] = fr[k].value
+
         
-class ConcatFilesTool(HasTraits):
+class BatchFilesTool(HasTraits):
     file_dir = Directory
     _available_hdf5_files = List(Str)
-    joined_files = List([])
+    working_files = List([])
     join = Button('Join files')
+    batch_proc = Button('Batch filter')
     downsample = Button('Downsample')
     ds_rate = Int(10)
     filters = Instance(FilterPipeline, ())
     headstage_flavor = Enum(Mux7FileData, (Mux7FileData, OpenEphysFileData))
 
-    file_size = Property(Str, depends_on='joined_files, downsample')
+    file_size = Property(Str, depends_on='working_files, downsample')
     file_suffix = Str('')
-    set_Fs = Property(Str, depends_on='joined_files, downsample')
+    set_Fs = Property(Str, depends_on='working_files, downsample')
 
-    @on_trait_change('joined_files')
+    @on_trait_change('working_files')
     def _foo(self):
-        print self.joined_files
+        print self.working_files
 
     def _default_file_map(self):
         if not hasattr(self, '_file_map'):
@@ -526,21 +546,21 @@ class ConcatFilesTool(HasTraits):
         # 1) keep any existing file name to FileData map
         # 2) create new FileData map for novel keys
         # 3) remove unused/stale keys
-        for f in self.joined_files:
+        for f in self.working_files:
             if f in self._file_map:
                 continue
             full_file = os.path.join(self.file_dir, f + '.h5')
             fd = klass(file=full_file)
             self._file_map[f] = fd
-        for f in ( set(self._file_map.keys()) - set(self.joined_files) ):
+        for f in ( set(self._file_map.keys()) - set(self.working_files)):
             self._file_map.pop(f)
         return self._file_map
-    
+
     def _join_fired(self):
-        if not len(self.joined_files):
+        if not len(self.working_files):
             return
         self._default_file_map()
-        file_names = self.joined_files
+        file_names = self.working_files
         file_objs = [self._file_map[f] for f in file_names]
         new_file_name = '-'.join(file_names)
         if self.file_suffix:
@@ -548,12 +568,29 @@ class ConcatFilesTool(HasTraits):
         full_file = os.path.join(self.file_dir, new_file_name + '.h5')
         concatenate_hdf5_files(file_objs, full_file, filters=self.filters)
 
+    def _batch_proc_fired(self):
+        new_dir = DirectoryDialog(
+            new_directory=True,
+            message='Choose a directory to save batch-processed files'
+        )
+        if new_dir.open() != OK:
+            return
+        if new_dir.path == self.file_dir:
+            MessageDialog(message='Not letting you over-write the current directory!! Choose another').open()
+            return
+        file_names = self.working_files
+        file_objs = [self._file_map[f] for f in file_names]
+        print 'Batch path:', new_dir.path
+        batch_filter_hdf5_files(file_objs, new_dir.path, self.filters)
+        self.filters.save_pipeline(os.path.join(new_dir.path, 'filters.txt'))
+
+
     def _downsample_fired(self):
-        if not len(self.joined_files):
+        if not len(self.working_files):
             return
         klass = self.headstage_flavor
         self._default_file_map()
-        for f in self.joined_files:
+        for f in self.working_files:
             # use existing FileData if already mapped
             # (e.g. for sequential resampling)
             if f in self._file_map:
@@ -567,7 +604,7 @@ class ConcatFilesTool(HasTraits):
 
     @cached_property
     def _get_set_Fs(self):
-        if not len(self.joined_files):
+        if not len(self.working_files):
             return ''
         samps = np.array([fd.Fs for fd in self._default_file_map().values()])
         if (samps[1:] == samps[0]).all():
@@ -597,17 +634,18 @@ class ConcatFilesTool(HasTraits):
                     Item('headstage_flavor', label='HS Type'),
                     Item('file_dir', label='Data directory'),
                     Tabbed(
-                        UItem('joined_files',
+                        UItem('working_files',
                               editor=SetEditor(
                                   name='_available_hdf5_files',
                                   left_column_title='Available files',
-                                  right_column_title='Files to concat',
+                                  right_column_title='Files to process',
                                   ordered=True
                                   )
                             ),
                         UItem('filters', style='custom')
                     ),
                     HGroup(
+                        UItem('batch_proc'),
                         UItem('join'),
                         spring,
                         Item('file_suffix', label='File suffix'),

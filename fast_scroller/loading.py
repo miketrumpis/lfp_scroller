@@ -23,7 +23,7 @@ from .h5scroller import FastScroller
 from .h5data import h5mean
 
 from .data_files import Mux7FileData, OpenEphysFileData, BlackrockFileData, \
-     FileData, ConcatFilesTool, ActiveArrayFileData
+     FileData, BatchFilesTool, ActiveArrayFileData
 from .filtering import FilterPipeline
 from .new_scroller import VisWrapper
 from .modules import ana_modules, default_modules
@@ -92,7 +92,7 @@ class VisLauncher(HasTraits):
         )
     screen_channels = Bool(False)
     screen_start = Float(0)
-    concat_tool_launch = Button('Launch Concat. Tool')
+    concat_tool_launch = Button('Launch Batch Tool')
 
     def __init__(self, **traits):
         super(VisLauncher, self).__init__(**traits)
@@ -115,10 +115,10 @@ class VisLauncher(HasTraits):
             return 100
     
     def _concat_tool_launch_fired(self):
-        cft = ConcatFilesTool()
-        cft.edit_traits()
+        bft = BatchFilesTool()
+        bft.edit_traits()
         # hold onto this reference or else window closes if idle?
-        self.__cft = cft
+        self.__bft = bft
         
     def _get_screen(self, array, channels, chan_map, Fs):
         from ecogana.expconfig import params
