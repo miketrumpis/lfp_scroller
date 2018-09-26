@@ -6,15 +6,19 @@ from scipy.interpolate import interp1d
 from tqdm import tqdm
 from ecoglib.util import input_as_2d
 
-def h5mean(array, axis, rowmask=()):
+def h5mean(array, axis, rowmask=(), start=0, stop=None):
     """Compute mean of a 2D HDF5 array in blocks"""
 
     shape = array.shape
     if axis < 0:
         axis += len(shape)
-
-    if axis==1 and len(rowmask):
-        mn_size = rowmask.sum()
+    if stop is None:
+        stop = shape[1]
+    if axis==1:
+        if len(rowmask):
+            mn_size = rowmask.sum()
+        else:
+            mn_size = shape[0]
     else:
         mn_size = shape[1 - axis]
     mn = np.zeros(mn_size, 'd')
@@ -24,10 +28,24 @@ def h5mean(array, axis, rowmask=()):
     # If averaging over time
     # * accumulate the samples (scaled by 1/N)
     itr = H5Chunks(array, axis=1, slices=True)
-    for n, sl in tqdm(enumerate(itr), desc='Computing mean',
-                      leave=True, total=itr.n_blocks):
+    for n, sl in tqdm(enumerate(itr), desc='Computing mean', leave=True, total=itr.n_blocks):
+        t_sl = sl[1]
+        # just pass until t_sl.start < requested start < t_sl.stop
+        if start >= t_sl.stop:
+            print 'Continuing'
+            continue
+        # now modify first good slice
+        elif start > t_sl.start:
+            t_sl = slice(start, t_sl.stop)
+            sl = (sl[0], t_sl)
+        # break loops if stop < t_sl.start
+        if stop < t_sl.start:
+            break
+        # now modify lsat good slice
+        elif stop < t_sl.stop:
+            t_sl = slice(t_sl.start, stop)
+            sl = (sl[0], t_sl)
         x_sl = array[sl]
-
         if len(rowmask):
             x_sl = x_sl[rowmask]
         
