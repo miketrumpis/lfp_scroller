@@ -445,6 +445,9 @@ class FilesHandler(Handler):
 
     def object_file_dir_changed(self, info):
         d = info.object.file_dir
+        if os.path.split(d)[1] == 'untitled' and not os.path.exists(d):
+            d = os.path.split(d)[0]
+            info.object.file_dir = d
         info.object.working_files = []
         if not d:
             return
