@@ -2,27 +2,130 @@ from functools import partial
 import numpy as np
 import pyqtgraph as pg
 
-from traits.api import Button, Str, on_trait_change, Bool
-from traitsui.api import View, HGroup, Group, UItem, Item
+from traits.api import Button, Str, on_trait_change, Bool, Float, HasTraits, Instance, List, Enum
+from traitsui.api import View, HGroup, Group, UItem, Handler, ListEditor
 
 from .base import VisModule
 from ..h5data import h5stat
-
+from ..filtering import AutoPanel
 
 __all__ = ['NavigatorManager']
+
+class NavigatorBuilder(AutoPanel):
+    orientation = 'horizontal'
+    visible = Bool(False, info_text='Visible')
+    color = Str('r', info_text='Trace color')
+    width = Float(0.5, info_text='Trace width')
+
+    def __init__(self, array, x_scale, y_scale, rowmask):
+        super(NavigatorBuilder, self).__init__()
+        self._array = array
+        self._x_scale = x_scale
+        self._y_scale = y_scale
+        self._rowmask = rowmask
+        self._curves = ()
+
+
+    @on_trait_change('color, width')
+    def _change_pen(self):
+        for curve in self._curves:
+            curve.setPen(pg.mkPen(color=self.color, width=self.width))
+
+
+    @on_trait_change('visible')
+    def _change_visibility(self):
+        self.toggle_visible(status=self.visible)
+
+
+    def toggle_visible(self, status=None):
+        if not self._curves:
+            return
+        if status is None:
+            status = not self._curves[0].isVisible()
+        for curve in self._curves:
+            curve.setVisible(status)
+        self.trait_setq(visible=status)
+        return status
+
+
+class StdevTrace(NavigatorBuilder):
+
+    def compute(self):
+        stdev_fn = partial(np.std, axis=0)
+        mean_fn = partial(np.mean, axis=0)
+        mu = h5stat(self._array, mean_fn, rowmask=self._rowmask)
+        stdev = h5stat(self._array, stdev_fn, rowmask=self._rowmask)
+        # now make pg.PlotCurveItems in the navigator plot and set visibility to true
+        t = np.arange(len(stdev)) * self._x_scale
+        curve1 = pg.PlotCurveItem(x=t, y=(mu - stdev) * self._y_scale)
+        curve2 = pg.PlotCurveItem(x=t, y=(mu + stdev) * self._y_scale)
+        self._curves = (curve1, curve2)
+        self._change_pen()
+        return self._curves
+
+
+class PercentileTrace(NavigatorBuilder):
+    percentiles = Str('10, 90', info_text='Percentiles (comma-sep)')
+
+    def compute(self):
+        pcts = map(float, self.percentiles.split(','))
+        curves = []
+        for p in pcts:
+            p_fun = lambda x: np.percentile(x, p, axis=0)
+            v = h5stat(self._array, p_fun, rowmask=self._rowmask)
+            t = np.arange(len(v)) * self._x_scale
+            c = pg.PlotCurveItem(x=t, y=v * self._y_scale)
+            curves.append(c)
+        self._curves = tuple(curves)
+        self._change_pen()
+        return self._curves
+
+
+class NavigatorHandler(Handler):
+
+    def object_name_changed(self, info):
+        name = info.object.name.lower()
+        if name == 'stdev':
+            info.object.nav_menu = StdevTrace(*info.object._nav_args)
+        elif name == 'percentiles':
+            info.object.nav_menu = PercentileTrace(*info.object._nav_args)
+
+
+navigator_types = ('Stdev', 'Percentiles')
+
+class NavigatorTrace(HasTraits):
+    name = Str
+    nav_menu = Instance(NavigatorBuilder)
+
+    def __init__(self, array, x_scale, y_scale, rowmask, **traits):
+        self._nav_args = (array, x_scale, y_scale, rowmask)
+        super(NavigatorTrace, self).__init__(**traits)
+
+
+    view = View(
+        HGroup(
+            UItem('name', style='readonly'),
+            Group(UItem('nav_menu', style='custom'), label='Param menu')
+        ),
+        handler=NavigatorHandler,
+    )
+
+
+trace_tabs = ListEditor(
+    use_notebook=True,
+    dock_style='tab',
+    page_name='.name',
+    selected='selected'
+)
 
 
 class NavigatorManager(VisModule):
     name = 'Navigators'
-
-    percentiles = Str
-    draw_percentiles = Button('Draw')
-    percentile_visible = Bool(False)
-    _percentile_computed = Bool(False)
-
-    draw_stdev = Button('Draw')
-    stdev_visible = Bool(False)
-    _stdev_computed = Bool(False)
+    navigators = List(NavigatorTrace)
+    selected = Instance(NavigatorTrace)
+    nav_type = Enum(navigator_types[0], navigator_types)
+    add_navigator = Button('Add navigator')
+    draw_navigator = Button('Draw navigator')
 
 
     def __init__(self, **traits):
@@ -31,63 +134,50 @@ class NavigatorManager(VisModule):
         data_channels = self.parent._qtwindow.load_channels
         self.row_mask = np.zeros(self._data_array.shape[0], '?')
         self.row_mask[data_channels] = True
-        print self.row_mask.shape, self.row_mask.dtype
-        self._stored_percentiles = dict()
-        self._stdev_curves = None
 
 
-    def set_curve_visible(curve, status=None):
-        if status is None:
-            status = not curve.isVisible()
-        curve.setVisible(status)
-        return status
+    def _add_navigator_fired(self):
+        nav = NavigatorTrace(
+            self._data_array,
+            self.parent.x_scale,
+            self.parent._qtwindow.y_scale,
+            self.row_mask,
+            name=self.nav_type
+        )
+        self.navigators.append(nav)
+        # This ensures something is selected when there's only one tab
+        if len(self.navigators) == 1:
+            self.selected = nav
 
-
-    def _draw_stdev_fired(self):
-        # Hitting draw either creates curves or sets them visible
-        if self._stdev_curves is not None:
-            self.set_curve_visible(self._stdev_curves[0], True)
-            self.set_curve_visible(self._stdev_curves[1], True)
-            self.trait_setq(stdev_visible=True)
-            return
-        stdev_fn = partial(np.std, axis=0)
-        mean_fn = partial(np.mean, axis=0)
-        scale = self.parent._qtwindow.y_scale
-        mu = h5stat(self._data_array, mean_fn, rowmask=self.row_mask)
-        stdev = h5stat(self._data_array, stdev_fn, rowmask=self.row_mask)
-        # now make pg.PlotCurveItems in the navigator plot and set visibility to true
-        t = np.arange(len(stdev)) * self.parent.x_scale
-        curve1 = pg.PlotCurveItem(x=t, y=(mu - stdev) * scale, pen='r')
-        curve2 = pg.PlotCurveItem(x=t, y=(mu + stdev) * scale, pen='r')
-        self._stdev_curves = (curve1, curve2)
-        self.parent._qtwindow.p2.addItem(curve1)
-        self.parent._qtwindow.p2.addItem(curve2)
-        self.trait_setq(stdev_visible=True)
-        self._stdev_computed = True
+    def _draw_navigator_fired(self):
+        nav_builder = self.selected.nav_menu
+        curves = nav_builder.compute()
+        for c in curves:
+            self.parent._qtwindow.p2.addItem(c)
+        nav_builder.trait_setq(visible=True)
 
 
     @on_trait_change('stdev_visible')
     def _toggle_stdev(self):
-        self.set_curve_visible(self._stdev_curves[0], self.stdev_visible)
-        self.set_curve_visible(self._stdev_curves[1], self.stdev_visible)
+        self.set_curve_visible(self._stdev_curves[0], status=self.stdev_visible)
+        self.set_curve_visible(self._stdev_curves[1], status=self.stdev_visible)
 
 
     def default_traits_view(self):
         v = View(
             HGroup(
                 Group(
-                    UItem('draw_stdev'),
-                    Item('stdev_visible', label='Visible', enabled_when='_stdev_computed'),
-                    label='Stdev margins'
+                    UItem('nav_type'),
+                    UItem('add_navigator'),
+                    UItem('draw_navigator')
                 ),
                 Group(
-                    UItem('draw_percentiles'),
-                    Item('percentile_visible', label='Visible', enabled_when='_percentile_computed'),
-                    Item('percentiles', label='Percentiles'),
-                    label='Percentile margins'
+                    UItem('navigators', style='custom', editor=trace_tabs),
+                    show_border=True
                 ),
-                label='Navigation traces'
+                springy=True
             ),
+            title=self.name
         )
         return v
 

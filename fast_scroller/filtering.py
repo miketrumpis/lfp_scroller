@@ -20,10 +20,13 @@ from .h5data import bfilter, block_nan_filter
 
 
 class ReportsTraits(HasTraits):
+    """Creates a dictionary of its own traits values"""
 
-    def to_dict(self, values=True):
+    def to_dict(self, values=True, private=False):
         t = self.traits()
-        excluded = ('trait_added', 'trait_modified')
+        excluded = ['trait_added', 'trait_modified']
+        if not private:
+            excluded.extend([k for k in t.keys() if k.startswith('_')])
         if values:
             items = dict()
             for k in t.keys():
@@ -35,10 +38,9 @@ class ReportsTraits(HasTraits):
         return items
 
 
-class FilterMenu(ReportsTraits):
-    """Edits filter arguments."""
-
-    filtfilt = Bool(False, info_text='Forward/reverse filter')
+class AutoPanel(ReportsTraits):
+    """Auto-populates a view panel"""
+    orientation='vertical'
 
     def default_traits_view(self):
         # builds a panel automatically from traits
@@ -48,7 +50,17 @@ class FilterMenu(ReportsTraits):
                 items.extend( [Label(v.info_text), UItem(k, style='simple')] )
             else:
                 items.extend( [UItem(k, style='simple')] )
-        return View(*items, resizable=True)
+        if self.orientation == 'vertical':
+            group = VGroup(*items)
+        else:
+            group = HGroup(*items)
+        return View(group, resizable=True)
+
+
+class FilterMenu(AutoPanel):
+    """Edits filter arguments."""
+
+    filtfilt = Bool(False, info_text='Forward/reverse filter')
 
 
 class NaNFilterMenu(FilterMenu):
