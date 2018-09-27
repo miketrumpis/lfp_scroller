@@ -1,7 +1,7 @@
 from __future__ import division
 
 from traits.api import HasTraits, Instance, Float, Enum, \
-     Any, List, on_trait_change, Event
+     Any, List, on_trait_change, Event, Str
 from traitsui.api import View, UItem, VSplit, CustomEditor, \
      HSplit, Group, Label, ListEditor
 
@@ -27,6 +27,7 @@ class VisWrapper(HasTraits):
                      IntervalSpectrum,
                      IntervalSpectrogram,
                      SpatialVariance] )
+    recording = Str
 
     def __init__(self, qtwindow, **traits):
         self._qtwindow = qtwindow
@@ -74,7 +75,7 @@ class VisWrapper(HasTraits):
             width=1200,
             height=ht,
             resizable=True,
-            title='Quick Scanner'
+            title=self.recording
         )
         return v
     
