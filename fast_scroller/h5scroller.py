@@ -266,7 +266,8 @@ class FastScroller(object):
             self._curves.append( curve )
 
         # Add mean trace to bottom plot
-        self.p2.plot(x=np.arange(len(nav_trace))*x_scale, y=nav_trace)
+        self.nav_trace = pg.PlotCurveItem(x=np.arange(len(nav_trace)) * x_scale, y=nav_trace)
+        self.p2.addItem(self.nav_trace)
         self.p2.setXRange(0, min(5e4, len(nav_trace))*x_scale)
         self.p2.setYRange(*np.percentile(nav_trace, [1, 99]))
         

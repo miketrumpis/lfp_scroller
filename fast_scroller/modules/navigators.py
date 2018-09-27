@@ -17,8 +17,8 @@ class NavigatorBuilder(AutoPanel):
     color = Str('r', info_text='Trace color')
     width = Float(0.5, info_text='Trace width')
 
-    def __init__(self, array, x_scale, y_scale, rowmask):
-        super(NavigatorBuilder, self).__init__()
+    def __init__(self, array, x_scale, y_scale, rowmask, **traits):
+        super(NavigatorBuilder, self).__init__(**traits)
         self._array = array
         self._x_scale = x_scale
         self._y_scale = y_scale
@@ -48,9 +48,22 @@ class NavigatorBuilder(AutoPanel):
         return status
 
 
+class MeanTrace(NavigatorBuilder):
+    """This does not really compute, but just grabs the existing mean curve"""
+
+    def set_curve(self, curve):
+        self._curves = (curve,)
+
+
+    def compute(self):
+        return self._curves
+
+
 class StdevTrace(NavigatorBuilder):
 
     def compute(self):
+        if len(self._curves):
+            return self._curves
         stdev_fn = partial(np.std, axis=0)
         mean_fn = partial(np.mean, axis=0)
         mu = h5stat(self._array, mean_fn, rowmask=self._rowmask)
@@ -68,6 +81,8 @@ class PercentileTrace(NavigatorBuilder):
     percentiles = Str('10, 90', info_text='Percentiles (comma-sep)')
 
     def compute(self):
+        if len(self._curves):
+            return self._curves
         pcts = map(float, self.percentiles.split(','))
         curves = []
         for p in pcts:
@@ -134,33 +149,39 @@ class NavigatorManager(VisModule):
         data_channels = self.parent._qtwindow.load_channels
         self.row_mask = np.zeros(self._data_array.shape[0], '?')
         self.row_mask[data_channels] = True
+        self.add_navigator_by_type('mean')
+        mean_nav = self.navigators[0]
+        mean_nav.nav_menu = MeanTrace(*mean_nav._nav_args)
+        mean_nav.nav_menu.set_curve(self.parent._qtwindow.nav_trace)
+        mean_nav.nav_menu.visible = True
+        self.selected = mean_nav
 
 
-    def _add_navigator_fired(self):
+    def add_navigator_by_type(self, nav_type):
         nav = NavigatorTrace(
             self._data_array,
             self.parent.x_scale,
             self.parent._qtwindow.y_scale,
             self.row_mask,
-            name=self.nav_type
+            name=nav_type
         )
         self.navigators.append(nav)
         # This ensures something is selected when there's only one tab
         if len(self.navigators) == 1:
             self.selected = nav
 
+
+    def _add_navigator_fired(self):
+        self.add_navigator_by_type(self.nav_type)
+
+
     def _draw_navigator_fired(self):
         nav_builder = self.selected.nav_menu
         curves = nav_builder.compute()
         for c in curves:
-            self.parent._qtwindow.p2.addItem(c)
-        nav_builder.trait_setq(visible=True)
-
-
-    @on_trait_change('stdev_visible')
-    def _toggle_stdev(self):
-        self.set_curve_visible(self._stdev_curves[0], status=self.stdev_visible)
-        self.set_curve_visible(self._stdev_curves[1], status=self.stdev_visible)
+            if c not in self.parent._qtwindow.p2.items:
+                self.parent._qtwindow.p2.addItem(c)
+        nav_builder.visible = True
 
 
     def default_traits_view(self):
@@ -169,7 +190,7 @@ class NavigatorManager(VisModule):
                 Group(
                     UItem('nav_type'),
                     UItem('add_navigator'),
-                    UItem('draw_navigator')
+                    UItem('draw_navigator', enabled_when='len(selected.nav_menu._curves) == 0')
                 ),
                 Group(
                     UItem('navigators', style='custom', editor=trace_tabs),
