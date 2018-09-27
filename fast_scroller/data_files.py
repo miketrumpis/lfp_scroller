@@ -662,7 +662,7 @@ class BatchFilesTool(HasTraits):
                         )
                     ),
                 handler=FilesHandler,
-                title='File concatenation tool',  
+                title='Batch processing tool',
                 resizable=True
                 )
         return v
