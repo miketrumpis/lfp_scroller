@@ -387,7 +387,7 @@ class Mux7FileData(FileData):
     gain = Enum( 12, (3, 4, 10, 12, 20) )
     data_field = Property(fget=lambda self: 'data')
     fs_field = Property(fget=lambda self: 'Fs')
-    dc_subtract = Bool(True)
+    dc_subtract = Bool(False)
     sampling_style = Enum( 'mux7_1card', _sampling )
 
     def _get_data_channels(self):
