@@ -600,7 +600,8 @@ class BatchFilesTool(HasTraits):
                 fd = self._file_map[f]
             else:
                 full_file = os.path.join(self.file_dir, f + '.h5')
-                fd = klass(file=full_file, ds_rate=self.ds_rate)
+                fd = klass(file=full_file)
+            fd.ds_rate = self.ds_rate
             fd.file = fd.create_downsampled(where=self.file_dir)
             self._file_map[f] = fd
         self.file_size
