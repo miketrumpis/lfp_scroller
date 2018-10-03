@@ -145,6 +145,7 @@ class VisLauncher(HasTraits):
             return
 
         # Logic to normalize channel mapping
+        # TODO: handle reference channels correctly
         if self.chan_map == 'unknown':
             try:
                 nc = np.array( map(int, self.skip_chan.split(',')) )
@@ -158,13 +159,14 @@ class VisLauncher(HasTraits):
         elif self.chan_map in _subset_chan_maps:
             cnx = self.chan_map_connectors.split(',')
             cnx = [c.strip() for c in cnx]
-            chan_map, nc = get_electrode_map(self.chan_map,
-                                             connectors=cnx)
+            chan_map, nc, rf = get_electrode_map(self.chan_map, connectors=cnx)
+            nc = list(set(nc).union(rf))
         elif self.chan_map == 'settable':
             chan_map = self.set_chan_map
             nc = []
         else:
-            chan_map, nc = get_electrode_map(self.chan_map)
+            chan_map, nc, rf = get_electrode_map(self.chan_map)
+            nc = list(set(nc).union(rf))
 
         # Check for transposed active data (coming from matlab)
         if isinstance(self.file_data, ActiveArrayFileData) and self.file_data.is_transpose:
