@@ -8,15 +8,18 @@ from __future__ import division
 import os
 import numpy as np
 import h5py
+import cPickle
 
 from traits.api import Instance, Button, HasTraits, Float, \
      Str, List, Enum, Int, Bool, cached_property, Range, Property
 from traitsui.api import View, Group, VGroup, HGroup, UItem, Item, \
      Label, Handler, Tabbed, SetEditor
+from pyface.api import MessageDialog
 
 from ecogana.devices.electrode_pinouts import get_electrode_map, electrode_maps
 from ecogana.devices.channel_picker import interactive_mask
-from ecoglib.util import ChannelMap, Bunch
+from ecoglib.util import Bunch
+from ecoglib.channel_map import ChannelMap
 from ecogana.expconfig import params
 
 from .h5scroller import FastScroller
@@ -28,7 +31,29 @@ from .filtering import FilterPipeline
 from .new_scroller import VisWrapper
 from .modules import ana_modules, default_modules
 
+
 MEM_CAP = float(params.memory_limit)
+
+
+class NoPickleError(Exception):
+    pass
+
+
+def find_pickled_map(hdf_file):
+    with h5py.File(hdf_file, 'r') as f:
+        if 'b_pickle' not in f.keys():
+            raise NoPickleError
+        arr = f['b_pickle'][0][:]
+        b = cPickle.loads(arr.tostring())
+    chan_map = None
+    for k in b.keys():
+        if isinstance(b[k], ChannelMap):
+            chan_map = b[k]
+            break
+    if chan_map is None:
+        raise NoPickleError
+    return chan_map
+
 
 class HeadstageHandler(Handler):
 
@@ -55,13 +80,16 @@ class HeadstageHandler(Handler):
             fd = FileData()
         info.object.file_data = fd
 
+
 _subset_chan_maps = ('psv_244_mux1', 'psv_244_mux3')
 # append some non-standard channel maps for
 # 1) active electrodes (these are constructed on the fly based on geometry)
 # 2) unknown (can be built in the GUI)
 # 3) a value that is set programmatically via the .set_chan_map attribute
 available_chan_maps = sorted(electrode_maps.keys()) + \
-  ['active', 'unknown', 'settable']
+  ['active', 'pickled', 'unknown', 'settable']
+
+
 class VisLauncher(HasTraits):
     """
     Builds pyqtgraph/traitsui visualation using a timeseries
@@ -164,6 +192,13 @@ class VisLauncher(HasTraits):
         elif self.chan_map == 'settable':
             chan_map = self.set_chan_map
             nc = []
+        elif self.chan_map == 'pickled':
+            try:
+                chan_map = find_pickled_map(self.file_data.file)
+                nc = []
+            except NoPickleError:
+                MessageDialog(message='No pickled ChannelMap').open()
+                return
         else:
             chan_map, nc, rf = get_electrode_map(self.chan_map)
             nc = list(set(nc).union(rf))
