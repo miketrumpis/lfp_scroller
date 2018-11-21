@@ -877,6 +877,7 @@ class SpatialVariance(PlotsInterval):
             sill = np.median(y.var(1))
             ax.axhline(sill, color=clr, ls='--')
         #ax.set_ylim(0, 1.05 * sill)
+        ax.set_xlim(xmin=0)
         ax.autoscale(axis='y', enable=True)
         ax.set_ylim(ymin=0)
         ax.legend()
