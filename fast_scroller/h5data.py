@@ -6,6 +6,7 @@ from scipy.interpolate import interp1d
 from tqdm import tqdm
 from ecoglib.util import input_as_2d
 
+
 def h5mean(array, axis, rowmask=(), start=0, stop=None):
     """Compute mean of a 2D HDF5 array in blocks"""
 
@@ -113,6 +114,7 @@ class ReadCache(object):
         new_sl = (indx, new_range)
         return self._current_seg[new_sl].copy()
 
+
 class CommonReferenceReadCache(ReadCache):
     """Returns common-average re-referenced blocks"""
 
@@ -133,6 +135,7 @@ class CommonReferenceReadCache(ReadCache):
         new_range = slice(None)
         new_sl = (indx, new_range)
         return self._current_seg[new_sl].copy()
+
 
 class FilteredReadCache(ReadCache):
     """
@@ -156,11 +159,13 @@ class FilteredReadCache(ReadCache):
             y_[:] = f(x_)
         return y
 
+
 def _make_subtract(z):
     def _f(x):
         return x - z
     return _f
     
+
 class DCOffsetReadCache(FilteredReadCache):
     """
     A filtered read cache with a simple offset subtraction.
@@ -218,6 +223,7 @@ class H5Chunks(object):
             return sl
         return self.h5array[sl]
 
+
 def bfilter(b, a, x, axis=-1, out=None, filtfilt=False):
     """
     Apply linear filter inplace over array x streaming from disk.
@@ -270,6 +276,7 @@ def bfilter(b, a, x, axis=-1, out=None, filtfilt=False):
     del xc
     del xcf
 
+
 @input_as_2d(in_arr=(0, 1))
 def interpolate_blanked(x, mask, inplace=False, kind='linear'):
     if inplace:
@@ -285,6 +292,7 @@ def interpolate_blanked(x, mask, inplace=False, kind='linear'):
         row_y[row_m] = f( a[row_m] )
     return y
     
+
 def block_nan_filter(x, y, kind='linear'):
     itr = H5Chunks(x, axis=1, slices=True)
     for n, sl in tqdm(enumerate(itr), desc='NaN Filtering',
@@ -297,16 +305,19 @@ def block_nan_filter(x, y, kind='linear'):
         xc = interpolate_blanked(xc, nan_mask, inplace=True, kind=kind)
         y[sl] = xc
         
-        ## yc = np.empty_like(xc)
-        ## nm = np.isnan(xc)
-        ## if not nm.any():
-        ##     y[sl] = xc
-        ##     continue
-        ## a = np.arange(xc.shape[1])
-        ## for row_x, row_y, nan_row in zip(xc, yc, nm):
-        ##     fv = np.nanmean(row_x)
-        ##     f = interp1d(a[~nan_row], row_x[~nan_row], kind=kind,
-        ##                  bounds_error=False, fill_value=fv)
-        ##     row_y[~nan_row] = row_x[~nan_row]
-        ##     row_y[nan_row] = f( a[nan_row] )
-        ## y[sl] = yc
+
+def square_filter(x, y):
+    itr = H5Chunks(x, axis=1, slices=True)
+    for n, sl in tqdm(enumerate(itr), desc='Squaring',
+                      leave=True, total=itr.n_blocks):
+        xc = x[sl]
+        y[sl] = xc ** 2
+
+
+def abs_filter(x, y):
+    itr = H5Chunks(x, axis=1, slices=True)
+    for n, sl in tqdm(enumerate(itr), desc='Rectifying',
+                      leave=True, total=itr.n_blocks):
+        xc = x[sl]
+        y[sl] = np.abs(xc)
+

@@ -16,7 +16,7 @@ from ecoglib.filt.time.design import butter_bp, cheby1_bp, cheby2_bp, \
      notch, ellip_bp, savgol
 from ecoglib.filt.time import ma_highpass
 
-from .h5data import bfilter, block_nan_filter
+from .h5data import bfilter, block_nan_filter, square_filter, abs_filter
 
 
 class ReportsTraits(HasTraits):
@@ -63,7 +63,7 @@ class FilterMenu(AutoPanel):
     filtfilt = Bool(False, info_text='Forward/reverse filter')
 
 
-class NaNFilterMenu(FilterMenu):
+class NaNFilterMenu(AutoPanel):
     """Interpolate through NaN code values"""
 
     interp_order = Enum('linear', ('linear', 'nearest', 'zero',
@@ -71,6 +71,20 @@ class NaNFilterMenu(FilterMenu):
 
     def make_filter(self, Fs):
         return partial(block_nan_filter, kind=self.interp_order)
+
+
+class SquareFilterMenu(AutoPanel):
+    """Square voltage values"""
+
+    def make_filter(self, Fs):
+        return square_filter
+
+
+class AbsFilterMenu(AutoPanel):
+    """Rectify voltage values"""
+
+    def make_filter(self, Fs):
+        return abs_filter
 
 
 class BandpassMenu(FilterMenu):
@@ -174,6 +188,12 @@ class FilterHandler(Handler):
         elif info.object.filt_type == 'NaN filter':
             if not isinstance(info.object.filt_menu, NaNFilterMenu):
                 info.object.filt_menu = NaNFilterMenu()
+        elif info.object.filt_type == 'square rectifier':
+            if not isinstance(info.object.filt_menu, SquareFilterMenu):
+                info.object.filt_menu = SquareFilterMenu()
+        elif info.object.filt_type == 'abs rectifier':
+            if not isinstance(info.object.filt_menu, AbsFilterMenu):
+                info.object.filt_menu = AbsFilterMenu()
 
 
 available_filters = ('NaN filter',
@@ -183,7 +203,9 @@ available_filters = ('NaN filter',
                      'elliptical',
                      'notch',
                      'm-avg hp',
-                     'savitzky-golay')
+                     'savitzky-golay',
+                     'square rectifier',
+                     'abs rectifier')
 
 
 class Filter(HasTraits):
@@ -239,15 +261,20 @@ def pipeline_factory(f_list, filter_modes, output_file=None, data_field='data'):
             y = copy_x(x)
         else:
             y = anonymous_copy_x(x)
-        # possible that 1st filter is the NaN filter
+        # call first filter to initialize y
         if callable(f_list[0]):
             nf = f_list[0]
             nf(x, y)
         else:
             b, a = f_list[0]
             bfilter(b, a, x, axis=axis, out=y, filtfilt=filter_modes[0])
-        for (b, a), ff in zip(f_list[1:], filter_modes[1:]):
-            bfilter(b, a, y, axis=axis, filtfilt=ff)
+        # cycle through the rest of the filters as y <- F(y)
+        for filt, ff_mode in zip(f_list[1:], filter_modes[1:]):
+            if callable(filt):
+                filt(y, y)
+            else:
+                b, a = filt
+                bfilter(b, a, y, axis=axis, filtfilt=ff_mode)
         return y
 
     return run_list
@@ -301,7 +328,12 @@ class FilterPipeline(HasTraits):
 
     def make_pipeline(self, Fs, **kwargs):
         filters = [f.filt_menu.make_filter(Fs) for f in self.filters]
-        filtfilt = [f.filt_menu.filtfilt for f in self.filters]
+        filtfilt = []
+        for f in self.filters:
+            try:
+                filtfilt.append(f.filt_menu.filtfilt)
+            except AttributeError:
+                filtfilt.append(None)
         return pipeline_factory(filters, filtfilt, **kwargs)
 
 
