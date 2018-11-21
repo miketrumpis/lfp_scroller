@@ -19,7 +19,8 @@ class VisWrapper(HasTraits):
 
     graph = Instance(QtGui.QWidget)
     x_scale = Float
-    y_spacing = Enum(0.2, [0, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5])
+    y_spacing = Enum(200, [0, 20, 50, 100, 200, 500, 1000, 2000, 5000, 'entry'])
+    _y_spacing_entry = Float(0.0)
     chan_map = Any
     region = Event
     modules = List( [IntervalTraces,
@@ -45,9 +46,13 @@ class VisWrapper(HasTraits):
         for m in mods:
             self.modules.append( m(parent=self) )
 
-    @on_trait_change('y_spacing')
+    @on_trait_change('y_spacing, _y_spacing_entry')
     def _change_spacing(self):
-        self._qtwindow.update_y_spacing(self.y_spacing * 1e-3)
+        if self.y_spacing == 'entry':
+            y_spacing = self._y_spacing_entry
+        else:
+            y_spacing = self.y_spacing
+        self._qtwindow.update_y_spacing(y_spacing * 1e-6)
 
     def default_traits_view(self):
         ht = 1000
@@ -60,9 +65,10 @@ class VisWrapper(HasTraits):
                       #height=(ht-150)),
                       height=0.85),
                 HSplit(
-                    Group(Label('Trace spacing (mv)'),
-                          UItem('y_spacing', resizable=True)),
-                                
+                    Group(Label('Trace spacing (uV)'),
+                          UItem('y_spacing', resizable=True),
+                          Label('Enter spacing (uV)'),
+                          UItem('_y_spacing_entry')),
                     UItem('modules', style='custom', resizable=True,
                           editor=ListEditor(use_notebook=True,
                                             deletable=False, 

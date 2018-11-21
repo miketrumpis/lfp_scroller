@@ -101,7 +101,7 @@ class VisLauncher(HasTraits):
     module_set = List(default_modules)
     all_modules = List(ana_modules.keys())
     b = Button('Launch Visualization')
-    offset = Enum(0.2, [0, 0.1, 0.2, 0.5, 1, 2, 5])
+    offset = Enum(200, [0, 100, 200, 500, 1000, 2000, 5000])
     #max_window_width = Float(1200.0)
     _max_win = Property(Float, depends_on='file_data.file')
     _min_win = Int(30)
@@ -303,7 +303,7 @@ class VisLauncher(HasTraits):
                     ),
                 HGroup(
                     VGroup(
-                        Label('Offset per channel (in mV)'),
+                        Label('Offset per channel (in uV)'),
                         UItem('offset', )
                         ),
                     VGroup(
