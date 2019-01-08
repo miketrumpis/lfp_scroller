@@ -86,7 +86,8 @@ class AnimateInterval(VisModule):
             print p_lo, p_hi
             return np.percentile(array.ravel(), [p_lo, p_hi])
         else:
-            return self.parent._qtwindow.cb.axis.range
+            clim = self.parent._qtwindow.cb.axis.range
+            return clim[0] * 1e6, clim[1] * 1e6
 
     def _write_frames_fired(self):
         if not validate_file_path(self.video_file):

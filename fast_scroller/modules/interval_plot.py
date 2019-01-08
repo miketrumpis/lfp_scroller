@@ -32,7 +32,7 @@ class IntervalTraces(PlotsInterval):
 
     def _plot_fired(self):
         x, y = self.parent._qtwindow.current_data()
-        y *= 1e3
+        y *= 1e6
         x = x[0]
         dy = self.parent.y_spacing
         f, ax = self._get_fig()
@@ -114,6 +114,7 @@ class IntervalTraces(PlotsInterval):
             label = _hh_mm_ss(t)
 
         clim = self.parent._qtwindow.img.getLevels()
+        clim = (1e6 * clim[0], 1e6 * clim[1])
         im = ax.imshow(img, origin='upper', clim=clim, cmap=self.cmaps)
         ax.set_title(label, fontsize=8)
         if self._cbar is None:
