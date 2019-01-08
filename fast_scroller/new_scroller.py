@@ -5,17 +5,15 @@ from traits.api import HasTraits, Instance, Float, Enum, \
 from traitsui.api import View, UItem, VSplit, CustomEditor, \
      HSplit, Group, Label, ListEditor
 
-import matplotlib as mpl
-mpl.rcParams['interactive'] = True
-mpl.use('Qt4Agg')
 from pyqtgraph.Qt import QtGui
 
+from .helpers import PersistentWindow
 from .modules import *
 
 def setup_qwidget_control(parent, editor, qwidget):
     return qwidget
 
-class VisWrapper(HasTraits):
+class VisWrapper(PersistentWindow):
 
     graph = Instance(QtGui.QWidget)
     x_scale = Float
@@ -32,7 +30,7 @@ class VisWrapper(HasTraits):
 
     def __init__(self, qtwindow, **traits):
         self._qtwindow = qtwindow
-        HasTraits.__init__(self, **traits)
+        super(VisWrapper, self).__init__(**traits)
         # connect the region-changed signal to signal a traits callback
         qtwindow.region.sigRegionChanged.connect(self._region_did_change)
         self._make_modules()

@@ -19,7 +19,7 @@ from ecoglib.vis.ani import write_anim
 from ecogana.anacode.plot_util import subplots
 from ecogana.anacode.anatool.gui_tools import SavesFigure
 
-from .. import Error, validate_file_path
+from ..helpers import Error, validate_file_path
 
 # useful colormaps
 colormaps = ['gray', 'jet', 'bwr', 'viridis', 'Blues', 'winter',
@@ -143,7 +143,6 @@ class FigureStack(OrderedDict):
         splot = SavesFigure.live_fig(fig)
         
         def remove_fig():
-            print 'catch closing'
             try:
                 self.pop(splot)
             except ValueError:

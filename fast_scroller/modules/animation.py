@@ -11,7 +11,7 @@ from pyface.timer.api import Timer
 import ecoglib.vis.ani as ani
 
 from .base import VisModule, colormaps
-from .. import Error, validate_file_path
+from ..helpers import Error, validate_file_path
 
 __all__ = ['AnimateInterval']
 

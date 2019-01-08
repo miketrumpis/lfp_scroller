@@ -35,10 +35,11 @@ from ecogana.anacode.plot_util import subplots, subplot2grid
 from ecogana.anacode.anatool.gui_tools import SavesFigure
 
 from .base import PlotsInterval, MultiframeSavesFigure, colormaps
+from ..helpers import PersistentWindow
 
 __all__ = ['ArrayVarianceTool', 'SpatialVariance']
 
-class ArrayVarianceTool(HasTraits):
+class ArrayVarianceTool(PersistentWindow):
     """Stand-alone UI to image covariance seeded at chosen sites"""
     array_plot = Instance(ArrayMap)
     selected_site = Int(-1)
@@ -149,7 +150,7 @@ def make_matern_label(**params):
     
     return label.format(**params)
 
-class STSemivar(HasTraits):
+class STSemivar(PersistentWindow):
 
     sv_fig = Instance(Figure)
     array_frame = Instance(Figure)
@@ -209,8 +210,8 @@ class STSemivar(HasTraits):
         self.cnx = Figure(figsize=(5, 5))
         ax = self.cnx.add_subplot(111)
         i, j = chan_map.to_mat()
-        ax.scatter(i, j, s=10)
-        ax.set_ylim(7.5, -0.5)
+        ax.scatter(j, i, s=10)
+        ax.set_ylim(i.max() + 0.5, i.min() - 0.5)
         ax.axis('image')
         self._cnx_lines = None
         
@@ -382,7 +383,7 @@ class STSemivar(HasTraits):
             mask = self._bin_map == xbin
         else:
             mask = combs.dist == x
-        lines = [ (i1, i2)
+        lines = [ (i2, i1)
                   for i1, i2 in zip(combs.idx1[mask], combs.idx2[mask]) ]
         self._cnx_lc = LineCollection(
             lines, linewidths=0.5, alpha=0.5, colors='r')
@@ -575,7 +576,7 @@ class SpatialVariance(PlotsInterval):
         while dt*skip <= 1:
             skip += 1
         N = int(self.n_lags / (dt * skip))
-        print self.n_lags, dt, N, skip
+        # print self.n_lags, dt, N, skip
         y = y - y.mean(axis=1, keepdims=1)
         N = min( len(t)-1, N )
         Ct = np.empty( (N, len(y), len(y)), 'd' )
@@ -601,7 +602,7 @@ class SpatialVariance(PlotsInterval):
         Xmesh = np.tile( xb[None, :], (N, 1) )
         # T can use repeat
         Tmesh = np.repeat( np.arange(0, N) * (dt*skip), len(xb) ).reshape(covar.shape)
-        print Xmesh[0], Tmesh[0], Xmesh.shape, Tmesh.shape, covar.shape
+        # Xmesh[0], Tmesh[0], Xmesh.shape, Tmesh.shape, covar.shape
         fig, ax = subplots(figsize=(6, 7))
         mn = covar.min(); mx = covar.max()
         if mn * mx > 0:
@@ -635,7 +636,7 @@ class SpatialVariance(PlotsInterval):
         while dt*skip <= 1:
             skip += 1
         N = int(self.n_lags / (dt * skip))
-        print self.n_lags, dt, N, skip
+        # print self.n_lags, dt, N, skip
         y = y - y.mean(axis=1, keepdims=1)
         N = min( len(t)-1, N )
         Ct = np.empty( (N, len(y), len(y)), 'd' )
@@ -669,7 +670,6 @@ class SpatialVariance(PlotsInterval):
         fig = Figure(figsize=(6, 8))
         ax = subplot2grid(fig, (2, 2), (0, 0), colspan=2)
         mx = np.nanmax(np.abs(stcov))
-        print mx
         im = ax.imshow(
             stcov[0], cmap='bwr', clim=(-mx, mx),
             extent=[xx[0], xx[-1], yy[0], yy[-1]]
@@ -687,7 +687,6 @@ class SpatialVariance(PlotsInterval):
         ax2 = subplot2grid(fig, (2, 2), (1, 0) )
         st_xt = np.nanmean(stcov, axis=1)
         mx = np.nanmax(np.abs(st_xt))
-        print mx
         im = ax2.imshow(
             st_xt, extent=[xx[0], xx[-1], t[N*skip], 0],
             clim=(-mx, mx), cmap='bwr', origin='upper'
@@ -701,7 +700,6 @@ class SpatialVariance(PlotsInterval):
         ax3 = subplot2grid(fig, (2, 2), (1, 1) )
         st_yt = np.nanmean(stcov, axis=2)
         mx = np.nanmax(np.abs(st_yt))
-        print mx
         im = ax3.imshow(
             st_yt, extent=[yy[0], yy[-1], t[N*skip], 0],
             clim=(-mx, mx), cmap='bwr', origin='upper'
@@ -737,7 +735,6 @@ class SpatialVariance(PlotsInterval):
             combs = chan_map
         svg = []
         bin_size = None if (self.dist_bin < 0) else self.dist_bin
-        print np.unique(combs.dist)
         # XXX: can a semivariance cloud be returned for mean +/- SE?
         x, mn, se = sv.semivariogram(
             array[:, pts], combs, robust=robust, xbin=bin_size,
@@ -817,7 +814,7 @@ class SpatialVariance(PlotsInterval):
         N = y.shape[1]
         blks = N // f_skip
         y = y[:, :blks*f_skip].reshape(-1, blks, f_skip).mean(-1)
-        print y.mean()
+        # print y.mean()
         def _step(n):
             c.draw()
             print 'frame', n

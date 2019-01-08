@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-import matplotlib
-matplotlib.use('Qt4Agg')
+
 from fast_scroller.loading import VisLauncher
 
 if __name__ == '__main__':

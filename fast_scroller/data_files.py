@@ -24,7 +24,7 @@ from ecoglib.channel_map import ChannelMap
 from .h5data import FilteredReadCache, h5mean, ReadCache, \
      DCOffsetReadCache, CommonReferenceReadCache, interpolate_blanked, H5Chunks
 from .filtering import FilterPipeline, pipeline_factory
-from . import Error
+from .helpers import Error, PersistentWindow
 
 class FileHandler(Handler):
 
@@ -522,7 +522,7 @@ def batch_filter_hdf5_files(files, save_path, filters):
                         fw[k] = fr[k].value
 
         
-class BatchFilesTool(HasTraits):
+class BatchFilesTool(PersistentWindow):
     file_dir = Directory
     _available_hdf5_files = List(Str)
     working_files = List([])
