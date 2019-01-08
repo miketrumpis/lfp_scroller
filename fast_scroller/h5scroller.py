@@ -145,6 +145,7 @@ class HDF5Plot(pg.PlotCurveItem):
 
 class FastScroller(object):
 
+    # noinspection PyStatementEffect
     def __init__(
             self, array, y_scale, y_spacing, chan_map,
             nav_trace, x_scale=1, load_channels='all',
@@ -225,6 +226,11 @@ class FastScroller(object):
             )
         self.img.setLevels( (-y_spacing, y_spacing) )
         sub_layout.addItem(self.cb)
+        mid_x, top_y = self.chan_map.geometry[1] / 2.0, self.chan_map.geometry[0] + 2.0
+        # add a text label on top of the box ("anchor" has text box is centered on its x, y position)
+        self.frame_text = pg.TextItem('empty', anchor=(0.5, 0.5), color=(255, 255, 255))
+        self.frame_text.setPos(mid_x, top_y)
+        self.p_img.addItem(self.frame_text)
 
         axis = PlainSecAxis(orientation='bottom')
         self.p1 = layout.addPlot(colspan=2, row=1, col=1,
@@ -343,7 +349,8 @@ class FastScroller(object):
             for i in xrange(len(self.chan_map)):
                 frame_vec[i] = self._curves[i].y_visible[idx]
         frame = self.chan_map.embed(frame_vec, fill=0)[::-1].copy()
-        self.img.setImage( frame, autoLevels=False )
+        self.img.setImage(frame, autoLevels=False)
+        self.frame_text.setText('Time {:.3f}s'.format(x))
         if move_vline and x is not None:
             self.vline.setPos(x)
         
@@ -353,8 +360,10 @@ class FastScroller(object):
         image = np.empty( len(self.chan_map), 'd' )
         for i in xrange(len(self.chan_map)):
             image[i] = self._curves[i].y_visible.std()
-        self.img.setImage( self.chan_map.embed(image, fill=0)[::-1].copy(),
-                           autoLevels=False )
+        x_vis = self._curves[0].x_visible
+        x_avg = 0.5 * (x_vis[0] + x_vis[-1])
+        self.img.setImage(self.chan_map.embed(image, fill=0)[::-1].copy(), autoLevels=False)
+        self.frame_text.setText('Time ~ {:.3f}s'.format(x_avg))
         
     def update(self):
         self.region.setZValue(10)
