@@ -1,5 +1,6 @@
 import os
 import time
+from multiprocessing import Process
 import numpy as np
 from pyqtgraph.Qt import QtCore
 
@@ -18,7 +19,7 @@ __all__ = ['AnimateInterval']
 class AnimateInterval(VisModule):
     name = 'Animate window'
     anim_frame = Button('Animate')
-    anim_time_scale = Enum(50, [0.1, 0.5, 1, 5, 10, 20, 50, 100])
+    anim_time_scale = Enum(50, [0.1, 0.5, 1, 5, 10, 20, 50, 100, 200, 500])
     _has_ffmpeg = Bool(False)
     write_frames = Button('Write movie')
     drop_video_frames = Int(1)
@@ -109,16 +110,13 @@ class AnimateInterval(VisModule):
             y = y[..., ::self.drop_video_frames]
             fps /= float(self.drop_video_frames)
         frames = chan_map.embed(y.T, axis=1)
-        clim = np.percentile(y.ravel(), [2, 98])
         clim = self._get_clim(y)
 
-        ani.write_frames(
-            frames, self.video_file, timer='s', time=x, fps=fps,
-            title='Scroller video', quicktime=True, colorbar=True,
-            cbar_label='uV', cmap=self.cmap, clim=clim,
-            origin='upper'
-            )
-
+        args = (frames, self.video_file)
+        kwargs = dict(timer='s', time=x, fps=fps, title='Scroller video', quicktime=True, colorbar=True,
+                      cbar_label='uV', cmap=self.cmap, clim=clim, origin='upper', qtdpi=100)
+        proc = Process(target=ani.write_frames, args=args, kwargs=kwargs)
+        proc.start()
 
     def default_traits_view(self):
         v = View(
