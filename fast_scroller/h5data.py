@@ -237,15 +237,17 @@ def bfilter(b, a, x, axis=-1, out=None, filtfilt=False):
         
     zi_sl = [np.newaxis] * x.ndim
     zi_sl[axis] = slice(None)
+    zi_sl = tuple(zi_sl)
     xc_sl = [slice(None)] * x.ndim
     xc_sl[axis] = slice(0,1)
+    xc_sl = tuple(xc_sl)
     fir_size = len(b)
     itr = H5Chunks(x, axis=axis, min_chunk=fir_size, slices=True)
     for n, sl in tqdm(enumerate(itr), desc='Blockwise filtering',
                       leave=True, total=itr.n_blocks):
         xc = x[sl]
         if n == 0:
-            zi = zii[ tuple(zi_sl) ] * xc[ tuple(xc_sl) ]
+            zi = zii[zi_sl] * xc[xc_sl]
         xcf, zi = lfilter(b, a, xc, axis=axis, zi=zi)
         if out is None:
             x[sl] = xcf
@@ -259,6 +261,7 @@ def bfilter(b, a, x, axis=-1, out=None, filtfilt=False):
 
     rev_sl = [ slice(None) ] * x.ndim
     rev_sl[axis] = slice(None, None, -1)
+    rev_sl = tuple(rev_sl)
     itr = H5Chunks(x, axis=axis, min_chunk=fir_size, slices=True, reverse=True)
     for n, sl in tqdm(enumerate(itr), desc='Blockwise filtering (reverse)',
                       leave=True, total=itr.n_blocks):
@@ -267,7 +270,7 @@ def bfilter(b, a, x, axis=-1, out=None, filtfilt=False):
         else:
             xc = out[sl][rev_sl]
         if n == 0:
-            zi = zii[ tuple(zi_sl) ] * xc[ tuple(xc_sl) ]
+            zi = zii[zi_sl] * xc[xc_sl]
         xcf, zi = lfilter(b, a, xc, axis=axis, zi=zi)
         if out is None:
             x[sl] = xcf[rev_sl]
