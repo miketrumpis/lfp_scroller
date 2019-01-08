@@ -146,7 +146,7 @@ class VisLauncher(HasTraits):
         bft = BatchFilesTool()
         bft.edit_traits()
         # hold onto this reference or else window closes if idle?
-        self.__bft = bft
+        # self.__bft = bft
         
     def _get_screen(self, array, channels, chan_map, Fs):
         from ecogana.expconfig import params
@@ -250,7 +250,7 @@ class VisLauncher(HasTraits):
                            y_spacing=self.offset, modules=modules, recording=file_name)
         view = v_win.default_traits_view()
         view.kind = 'live'
-        v_win.edit_traits(view=view)
+        ui = v_win.edit_traits(view=view)
         return v_win
         
     def _b_fired(self):
