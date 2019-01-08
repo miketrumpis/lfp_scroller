@@ -295,6 +295,10 @@ class FastScroller(object):
         self.win.centralWidget.layout.setRowStretchFactor(1, 5)
         self.win.centralWidget.layout.setRowStretchFactor(2, 2.5)
 
+        # a callable frame filter may be set on this object to affect frame display
+        self.frame_filter = None
+
+
     def current_frame(self):
         return self.region.getRegion()
 
@@ -349,6 +353,8 @@ class FastScroller(object):
             for i in xrange(len(self.chan_map)):
                 frame_vec[i] = self._curves[i].y_visible[idx]
         frame = self.chan_map.embed(frame_vec, fill=0)[::-1].copy()
+        if self.frame_filter:
+            frame = self.frame_filter(frame)
         self.img.setImage(frame, autoLevels=False)
         self.frame_text.setText('Time {:.3f}s'.format(x))
         if move_vline and x is not None:

@@ -10,6 +10,7 @@ from .spectrogram import IntervalSpectrogram
 from .time_stamps import Timestamps
 from .band_power_map import BandPowerMap
 from .navigators import NavigatorManager
+from .frame_filters import FrameFilters
 
 __all__ = ['AnimateInterval',
            'IntervalTraces',
@@ -20,6 +21,7 @@ __all__ = ['AnimateInterval',
            'Timestamps',
            'BandPowerMap',
            'NavigatorManager',
+           'FrameFilters',
            'YRange',
            'ana_modules',
            'default_modules']
@@ -43,13 +45,14 @@ class YRange(VisModule):
         return v
 
 ana_modules = {
-    'Stacked traces plot' : IntervalTraces,
-    'Spatial variance tool' : SpatialVariance,
-    'Power spectrum' : IntervalSpectrum,
-    'Spectrogram' : IntervalSpectrogram,
-    'Animator' : AnimateInterval,
-    'Time stamps' : Timestamps,
-    'Band power map' : BandPowerMap,
-    'Navigators' : NavigatorManager
+    'Stacked traces plot': IntervalTraces,
+    'Spatial variance tool': SpatialVariance,
+    'Power spectrum': IntervalSpectrum,
+    'Spectrogram': IntervalSpectrogram,
+    'Animator': AnimateInterval,
+    'Time stamps': Timestamps,
+    'Band power map': BandPowerMap,
+    'Navigators': NavigatorManager,
+    'Spatial filters': FrameFilters
     }
 default_modules = ('Stacked traces plot', 'Power spectrum', 'Navigators', 'Animator', 'Band power map', 'Spectrogram')
