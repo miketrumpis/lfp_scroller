@@ -1,10 +1,11 @@
 from __future__ import division
 import numpy as np
 from scipy.linalg import LinAlgError
-from scipy.signal import lfilter, lfilter_zi
+from scipy.signal import lfilter, lfilter_zi, hilbert
 from scipy.interpolate import interp1d
 from tqdm import tqdm
 from ecoglib.util import input_as_2d
+from ecoglib.numutil import nextpow2
 
 
 def h5mean(array, axis, rowmask=(), start=0, stop=None):
@@ -298,8 +299,7 @@ def interpolate_blanked(x, mask, inplace=False, kind='linear'):
 
 def block_nan_filter(x, y, kind='linear'):
     itr = H5Chunks(x, axis=1, slices=True)
-    for n, sl in tqdm(enumerate(itr), desc='NaN Filtering',
-                      leave=True, total=itr.n_blocks):
+    for sl in tqdm(itr, desc='NaN Filtering', leave=True, total=itr.n_blocks):
         xc = x[sl]
         nan_mask = np.isnan(xc)
         if not nan_mask.any():
@@ -311,16 +311,34 @@ def block_nan_filter(x, y, kind='linear'):
 
 def square_filter(x, y):
     itr = H5Chunks(x, axis=1, slices=True)
-    for n, sl in tqdm(enumerate(itr), desc='Squaring',
-                      leave=True, total=itr.n_blocks):
+    for sl in tqdm(itr, desc='Squaring', leave=True, total=itr.n_blocks):
         xc = x[sl]
         y[sl] = xc ** 2
 
 
 def abs_filter(x, y):
     itr = H5Chunks(x, axis=1, slices=True)
-    for n, sl in tqdm(enumerate(itr), desc='Rectifying',
-                      leave=True, total=itr.n_blocks):
+    for sl in tqdm(itr, desc='Rectifying', leave=True, total=itr.n_blocks):
         xc = x[sl]
         y[sl] = np.abs(xc)
+
+
+def hilbert_envelope_filter(x, y):
+    itr = H5Chunks(x, axis=1, slices=True)
+    for sl in tqdm(itr, desc='Hilbert Transform', leave=True, total=itr.n_blocks):
+        xc = x[sl]
+        n = xc.shape[1]
+        nfft = nextpow2(n)
+
+        # if n is closer to the previous power of 2, then split this block into two computations
+        if (nfft - n) > (n - nfft / 2):
+            n1 = int(n / 2)
+            nfft = int(nfft / 2)
+            y1 = hilbert(xc[..., :n1], N=nfft)[..., :n1]
+            y2 = hilbert(xc[..., n1:], N=nfft)[..., :n - n1]
+            y[sl] = np.hstack((np.abs(y1), np.abs(y2)))
+        else:
+            y1 = hilbert(xc, N=nfft)[..., :n]
+            y[sl] = np.abs(y1)
+
 

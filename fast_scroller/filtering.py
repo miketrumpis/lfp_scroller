@@ -16,7 +16,7 @@ from ecoglib.filt.time.design import butter_bp, cheby1_bp, cheby2_bp, \
      notch, ellip_bp, savgol
 from ecoglib.filt.time import ma_highpass
 
-from .h5data import bfilter, block_nan_filter, square_filter, abs_filter
+from .h5data import bfilter, block_nan_filter, square_filter, abs_filter, hilbert_envelope_filter
 
 
 class ReportsTraits(HasTraits):
@@ -85,6 +85,13 @@ class AbsFilterMenu(AutoPanel):
 
     def make_filter(self, Fs):
         return abs_filter
+
+
+class HilbertEnvMenu(AutoPanel):
+    """Rectify voltage values"""
+
+    def make_filter(self, Fs):
+        return hilbert_envelope_filter
 
 
 class BandpassMenu(FilterMenu):
@@ -194,8 +201,12 @@ class FilterHandler(Handler):
         elif info.object.filt_type == 'abs rectifier':
             if not isinstance(info.object.filt_menu, AbsFilterMenu):
                 info.object.filt_menu = AbsFilterMenu()
+        elif info.object.filt_type == 'hilbert envelope':
+            if not isinstance(info.object.filt_menu, HilbertEnvMenu):
+                info.object.filt_menu = HilbertEnvMenu()
 
 
+# These items match the name and case of filt_types in the switch statement in FilterHandler
 available_filters = ('NaN filter',
                      'butterworth',
                      'cheby 1',
@@ -205,7 +216,8 @@ available_filters = ('NaN filter',
                      'm-avg hp',
                      'savitzky-golay',
                      'square rectifier',
-                     'abs rectifier')
+                     'abs rectifier',
+                     'hilbert envelope')
 
 
 class Filter(HasTraits):
