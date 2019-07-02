@@ -512,7 +512,7 @@ def batch_filter_hdf5_files(files, save_path, filters):
             fpipe = pipeline_factory([], None)
         with h5py.File(fd.file, 'r') as fr:
             fpipe(fr[fd.data_field])
-            # copy anything other singleton values from the last file?
+            # copy any other values from the last file?
             with h5py.File(save_file, 'a') as fw:
                 # set down samp rate manually
                 fw[fd.fs_field] = fd.Fs
@@ -520,6 +520,8 @@ def batch_filter_hdf5_files(files, save_path, filters):
                     if hasattr(fr[k], 'shape') and not len(fr[k].shape):
                         print 'picked up key', k
                         fw[k] = fr[k].value
+                    else:
+                        fr.copy(k, fw)
 
         
 class BatchFilesTool(PersistentWindow):
