@@ -4,6 +4,11 @@ New timeseries scrolling tool with baseline analysis modules.
 
 from distutils.version import StrictVersion
 # these imports set up some qt runtime stuff
+# prefer PySide (?) but fall back on default PyQtx
+try:
+    import PySide
+except ImportError:
+    pass
 import matplotlib
 import pyqtgraph as pg
 qt_version = pg.Qt.VERSION_INFO.split()[-1]
