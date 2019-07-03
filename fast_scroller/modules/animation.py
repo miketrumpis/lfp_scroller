@@ -5,7 +5,7 @@ import numpy as np
 from pyqtgraph.Qt import QtCore
 
 from traits.api import Button, Enum, Bool, Int, File
-from traitsui.api import View, VGroup, Group, HGroup, UItem, \
+from traitsui.api import View, VGroup, HGroup, UItem, \
      Item, FileEditor, RangeEditor
 from pyface.timer.api import Timer
 
@@ -13,6 +13,7 @@ import ecoglib.vis.ani as ani
 
 from .base import VisModule, colormaps
 from ..helpers import Error, validate_file_path
+from .. import pyf_new_api
 
 __all__ = ['AnimateInterval']
 
@@ -39,14 +40,20 @@ class AnimateInterval(VisModule):
         x = self.__x
         y = self.__y
         if n >= self.__n_frames:
-            self._atimer.Stop()
+            if pyf_new_api:
+                self._atimer.stop()
+            else:
+                self._atimer.Stop()
             return
         t0 = time.time()
         scaled_dt = self.anim_time_scale * (x[1] - x[0])
         try:
             self.parent._qtwindow.set_image_frame(x=x[n], frame_vec=y[:,n])
         except IndexError:
-            self._atimer.Stop()
+            if pyf_new_api:
+                self._atimer.stop()
+            else:
+                self._atimer.Stop()
         QtCore.QCoreApplication.instance().processEvents()
         # calculate the difference between the desired interval
         # and the time it just took to draw (per "frame")
@@ -55,7 +62,11 @@ class AnimateInterval(VisModule):
         if t_pause < 0:
             self.__f_skip += 1
         else:
-            self._atimer.setInterval(t_pause * 1000.0)
+            # timer is in the middle of API change
+            if pyf_new_api:
+                self._atimer.interval = t_pause
+            else:
+                self._atimer.setInterval(t_pause * 1000.0)
             # check to see if the frame skip can be decreased (e.g.
             # real-time is slowed down)
             while elapsed / max(1, self.__f_skip - 1) < scaled_dt:
@@ -65,9 +76,13 @@ class AnimateInterval(VisModule):
         self.__n += self.__f_skip
 
     def _anim_frame_fired(self):
-        if hasattr(self, '_atimer') and self._atimer.IsRunning():
-            self._atimer.Stop()
-            return
+        if hasattr(self, '_atimer'):
+            if pyf_new_api and self._atimer.active:
+                self._atimer.stop()
+                return
+            elif not pyf_new_api and self._atimer.IsRunning():
+                self._atimer.Stop()
+                return
         
         x, self.__y = self.parent._qtwindow.current_data()
         self.__f_skip = 1

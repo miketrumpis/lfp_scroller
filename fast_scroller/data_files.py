@@ -39,7 +39,7 @@ class FileHandler(Handler):
 
 class FileData(HasTraits):
     """Basic model for an HDF5 file holding an array timeseries."""
-    file = File(filter=[u'*.h5'])
+    file = File(filter=[u'*.h5'], exists=True)
     data_field = Str
     fs_field = Str
     y_scale = Float(1.0)
@@ -283,7 +283,7 @@ class BlackrockFileData(FileData):
 
 
 class OpenEphysFileData(FileData):
-    file = File(filter=[u'*.h5', u'*.continuous'])
+    file = File(filter=[u'*.h5', u'*.continuous'], exists=True)
     data_field = Property(fget=lambda self: 'chdata')
     fs_field = Property(fget=lambda self: 'Fs')
     y_scale = Float(1e-6)
