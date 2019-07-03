@@ -221,9 +221,9 @@ class VisLauncher(HasTraits):
         chan_idx = zip(*chan_map.to_mat())
         chan_order = chan_map.lookup(*zip( *sorted(chan_idx)[::-1] ))
         data_channels = [data_channels[i] for i in chan_order]
-        chan_map = ChannelMap( [chan_map[i] for i in chan_order],
-                               chan_map.geometry, pitch=chan_map.pitch,
-                               col_major=chan_map.col_major )
+        cls = type(chan_map)
+        chan_map = cls([chan_map[i] for i in chan_order], chan_map.geometry, pitch=chan_map.pitch,
+                       col_major=chan_map.col_major)
 
         filters = self.filters.make_pipeline(x_scale ** -1.0)
         array = self.file_data._compose_arrays(filters)

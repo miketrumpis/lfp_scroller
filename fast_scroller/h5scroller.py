@@ -1,13 +1,23 @@
 from __future__ import division
+
 import numpy as np
-#import PySide
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 pg.setConfigOptions(imageAxisOrder='row-major')
 import pyqtgraph_extensions as pgx
-from ecoglib.util import ChannelMap
+from ecoglib.channel_map import ChannelMap, CoordinateChannelMap
 
 from h5data import *
+
+
+def embed_frame(channel_map, vector):
+    if isinstance(channel_map, CoordinateChannelMap):
+        frame = channel_map.embed(vector, interpolate='cubic')
+        frame = frame.filled(0)[::-1].copy()
+    else:
+        frame = channel_map.embed(vector, fill=0)[::-1].copy()
+    return frame
+
 
 class HMSAxis(pg.AxisItem):
 
@@ -156,7 +166,7 @@ class FastScroller(object):
         display.
 
         X-units are currently assumed to be seconds.
-	
+
         Parameters
         ----------
         array : array-like
@@ -173,10 +183,9 @@ class FastScroller(object):
             timeseries. If not given, then mean of channels is used.
             **THIS MAY BE A COSTLY COMPUTATION**
         x_scale : float (optional)
-	        X-axis scale (e.g. sampling interval)
+            X-axis scale (e.g. sampling interval)
         load_channels : sequence | 'all'
-	        Order of (subset of) channels to load.  Otherwise load all
-            in array.
+            Order of (subset of) channels to load. Otherwise load all in array.
         units : str
             Y-axis units
 
@@ -192,10 +201,10 @@ class FastScroller(object):
             # "load_channels" indexes an array of recording channels
             # that may include grounded channels or other junk.
             raise NotImplementedError('cannot yet subset data channels')
-            new_cm = ChannelMap( [chan_map[i] for i in load_channels],
-                                  chan_map.geometry,
-                                  col_major=chan_map.col_major )
-            self.chan_map = new_cm
+            # new_cm = ChannelMap( [chan_map[i] for i in load_channels],
+            #                       chan_map.geometry,
+            #                       col_major=chan_map.col_major )
+            # self.chan_map = new_cm
         else:
             raise ValueError('cannot map the listed channels')
 
@@ -203,24 +212,23 @@ class FastScroller(object):
         self.y_scale = y_scale
         self.load_channels = load_channels
 
-        #self.win = pg.GraphicsWindow()
+        # The main window + layout
         self.win = pg.GraphicsView()
         layout = pg.GraphicsLayout(border=(10,10,10))
-        #sub_layout = layout.addLayout(row=0, col=0, rowspan=2, colspan=3)
         self.win.setCentralItem(layout)
+        # Adding columns to layout: just titles on the top row
         layout.addLabel('Array heatmap')
         layout.addLabel('Zoomed plot')
         layout.addLabel('|')
+        # Next row has 1) the heatmap image with the colorbar widget
         layout.nextRow()
         sub_layout = layout.addLayout(colspan=1)
         self.p_img = sub_layout.addViewBox(lockAspect=True)
 
-        ## self.img = pg.ImageItem(np.random.randn(*self.chan_map.geometry))
-        self.img = pgx.ImageItem(np.random.randn(*self.chan_map.geometry).T)
+        self.img = pgx.ImageItem(np.random.randn(*self.chan_map.geometry))
         self.img.setLookupTable(pgx.get_colormap_lut(name='bipolar'))
         self.p_img.addItem(self.img)
         self.p_img.autoRange()
-        # self.img.setLevels( (-3, 3) )
         self.cb = pgx.ColorBarItem(
             image=self.img, label='Voltage ({0})'.format(units)
             )
@@ -232,6 +240,7 @@ class FastScroller(object):
         self.frame_text.setPos(mid_x, top_y)
         self.p_img.addItem(self.frame_text)
 
+        # 2) the stacked traces plot (colspan 2)
         axis = PlainSecAxis(orientation='bottom')
         self.p1 = layout.addPlot(colspan=2, row=1, col=1,
                                  axisItems={'bottom':axis})
@@ -239,7 +248,7 @@ class FastScroller(object):
         self.p1.setLabel('left', 'Amplitude', units=units)
         self.p1.setLabel('bottom', 'Time')
 
-        # The image panel
+        # Next layout row has the navigator plot (colspan 3)
         layout.nextRow()
 
         # The navigator plot
@@ -352,7 +361,8 @@ class FastScroller(object):
             frame_vec = np.empty( len(self.chan_map), 'd' )
             for i in xrange(len(self.chan_map)):
                 frame_vec[i] = self._curves[i].y_visible[idx]
-        frame = self.chan_map.embed(frame_vec, fill=0)[::-1].copy()
+
+        frame = embed_frame(self.chan_map, frame_vec)
         if self.frame_filter:
             frame = self.frame_filter(frame)
         self.img.setImage(frame, autoLevels=False)
@@ -368,7 +378,8 @@ class FastScroller(object):
             image[i] = self._curves[i].y_visible.std()
         x_vis = self._curves[0].x_visible
         x_avg = 0.5 * (x_vis[0] + x_vis[-1])
-        self.img.setImage(self.chan_map.embed(image, fill=0)[::-1].copy(), autoLevels=False)
+        frame = embed_frame(self.chan_map, image)
+        self.img.setImage(frame, autoLevels=False)
         self.frame_text.setText('Time ~ {:.3f}s'.format(x_avg))
         
     def update(self):
