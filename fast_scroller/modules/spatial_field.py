@@ -1,6 +1,7 @@
 import os
 import time
 from collections import Counter
+from functools import partial
 
 import numpy as np
 import scipy.optimize as so
@@ -23,12 +24,10 @@ from nitime.utils import autocov
 
 from ecoglib.vis.traitsui_bridge import MPLFigureEditor, PingPongStartup
 from ecoglib.util import ChannelMap
-from ecoglib.estimation.jackknife import Jackknife
 import ecoglib.estimation.spatial_variance as sv
 from ecoglib.filt.blocks import BlockedSignal
 from ecogana.anacode.signal_testing import centered_pair_maps
-from ecogana.anacode.spatial_profiles import cxx_to_pairs, binned_obs, \
-     binned_obs_error, matern_semivariogram, matern_spectrum
+from ecogana.anacode.spatial_profiles import cxx_to_pairs, matern_semivariogram, matern_spectrum
 from ecogana.anacode.anatool.gui_tools import ArrayMap
 import ecogana.anacode.seaborn_lite as sns
 from ecogana.anacode.plot_util import subplots, subplot2grid
@@ -470,7 +469,8 @@ class SpatialVariance(PlotsInterval):
     plot = Button('plot')
     normalize = Bool(True)
     robust = Bool(True)
-    jackknife = Bool(False)
+    cloud = Bool(False)
+    se = Bool(False)
     n_samps = Int(100)
     dist_bin = Float(0.5)
     estimator = Enum('ergodic', ('ergodic', 'spot'))
@@ -591,7 +591,7 @@ class SpatialVariance(PlotsInterval):
         # covar will be matrix with shape T, X
         covar = list()
         for y_ in y_pts:
-            xb, yb = binned_obs(x_pts, y_)
+            xb, yb = sv.binned_variance(x_pts, y_)
             covar.append( map(np.mean, yb) )
 
         covar = np.array(covar)
@@ -721,10 +721,22 @@ class SpatialVariance(PlotsInterval):
 
 
     def compute_variogram(self, array, chan_map, **kwargs):
+        """
+        Returns variogram points from the field defined by an array and channel map.
+        The number of parameters returned depends on whether a variogram cloud is requested.
+        If the cloud is not requested, then binned aggregates (x, y, se, Nd) are returned (that is: distance bins,
+        mean semivariance at each distance, standard error of mean, and number of points in the original sample).
+        Else, those binned aggregates are returned pre-pended by the non-aggregated (xcloud, ycloud) points.
+
+        :param array:
+        :param chan_map:
+        :param kwargs:
+        :return:
+        """
         robust = kwargs.pop('robust', self.robust)
         n_samps = kwargs.pop('n_samps', self.n_samps)
         normed = kwargs.pop('normalize', self.normalize)
-        jackknife = kwargs.pop('jackknife', self.jackknife)
+        cloud = kwargs.pop('cloud', self.cloud)
         if normed:
             array = array / np.std(array, axis=1, keepdims=1)
         
@@ -733,31 +745,28 @@ class SpatialVariance(PlotsInterval):
             combs = chan_map.site_combinations
         else:
             combs = chan_map
-        svg = []
-        bin_size = None if (self.dist_bin < 0) else self.dist_bin
-        # XXX: can a semivariance cloud be returned for mean +/- SE?
-        x, mn, se = sv.semivariogram(
-            array[:, pts], combs, robust=robust, xbin=bin_size,
-            trimmed=True, se=True
-            )
-        return x, mn, se
 
-    def compute_ergodic_variogram(self, array, chan_map, **kwargs):
-        n_samps = kwargs.pop('n_samps', self.n_samps)
-        normed = kwargs.pop('normalize', self.normalize)
-        if normed:
-            array = array / np.std(array, axis=1, keepdims=1)
-        pts = np.linspace(0, array.shape[1]-1, n_samps).astype('i')
-        if isinstance(chan_map, ChannelMap):
-            combs = chan_map.site_combinations
+        # I think turn off binning if a cloud is requested
+        bin_size = None if (self.dist_bin < 0 or cloud) else self.dist_bin
+        # Turn off se if cloud is True
+        se = not cloud
+        counts = not cloud
+        if self.estimator == 'ergodic':
+            vg_method = partial(sv.fast_semivariogram, xbin=bin_size, trimmed=True, se=se, cloud=cloud, counts=counts)
         else:
-            combs = chan_map
-        bin_size = None if (self.dist_bin < 0) else self.dist_bin
-        x, svg, se = sv.fast_semivariogram(
-                array[:, pts], combs, xbin=bin_size, trimmed=True,
-                se=True
-                )
-        return x, svg, se
+            vg_method = partial(sv.semivariogram, robust=robust, xbin=bin_size, trimmed=True, se=se, cloud=cloud,
+                                counts=counts)
+        if cloud:
+            bin_size = None if self.dist_bin < 0 else self.dist_bin
+            xc, yc = vg_method(array[:, pts], combs)
+            xb, yb = sv.binned_variance(xc, yc, binsize=bin_size)
+            Nd = [len(y) for y in yb if len(y) > 1]
+            # this will bring back mean and sem by default
+            xb, yb, se = sv.binned_variance_aggregate(xb, yb)
+            return xc, yc, xb, yb, se, Nd
+        x, y, se, Nd = vg_method(array[:, pts], combs)
+        return x, y, se, Nd
+
 
     def _plot_anim_fired(self):
         if not hasattr(self, '_animating'):
@@ -774,16 +783,10 @@ class SpatialVariance(PlotsInterval):
             y = y / np.std(y, axis=1, keepdims=1)
             #y = y / np.std(y, axis=0, keepdims=1)
 
-        if self.estimator == 'ergodic':
-            fn = self.compute_ergodic_variogram
-            cm = self.parent._qtwindow.chan_map
-        else:
-            fn = self.compute_variogram
-            cm = self.parent._qtwindow.chan_map
-            cm = cm.site_combinations
-            
+        cm = self.parent._qtwindow.chan_map
+
         t0 = time.time()
-        r = fn(y[:, 0][:,None], cm, n_samps=1, normalize=False, jackknife=False)
+        r = self.compute_variogram(y[:, 0][:,None], cm, n_samps=1, normalize=False, cloud=False)
         t_call = time.time() - t0
         scaled_dt = self.anim_time_scale * (t[1] - t[0])
         
@@ -798,7 +801,7 @@ class SpatialVariance(PlotsInterval):
         fig, axes = subplots()
         c = FigureCanvas(fig)
 
-        x, svg, svg_se = r
+        x, svg, svg_se, Nd = r
         # also compute how long it takes to draw the errorbars
         line = axes.plot(x, svg, marker='s', ms=6, ls='--')[0]
         t0 = time.time()
@@ -818,8 +821,8 @@ class SpatialVariance(PlotsInterval):
         def _step(n):
             c.draw()
             print 'frame', n
-            x, svg, svg_se = fn(
-                y[:, n:n+1], cm, n_samps=1, normalize=False, jackknife=False
+            x, svg, svg_se, Nd = self.compute_variogram(
+                y[:, n:n+1], cm, n_samps=1, normalize=False
                 )
             #ec.remove()
             line.set_data(x, svg)
@@ -849,16 +852,16 @@ class SpatialVariance(PlotsInterval):
     def _plot_fired(self):
         t, y = self.parent._qtwindow.current_data()
         y *= 1e6
-        if self.estimator == 'ergodic':
-            r = self.compute_ergodic_variogram(
-                y, self.parent._qtwindow.chan_map
-                )
+        r = self.compute_variogram(y, self.parent._qtwindow.chan_map)
+        if self.cloud:
+            xc, yc, x, svg, svg_se, Nd = r
         else:
-            r = self.compute_variogram(y, self.parent._qtwindow.chan_map)
-        x, svg, svg_se = r
+            x, svg, svg_se, Nd = r
         fig, ax = self._get_fig()
         label = 't ~ {0:.1f}'.format(t.mean())
         clr = self._colors[self._axplots[ax]]
+        if self.cloud:
+            ax.scatter(xc, yc, s=4, alpha=0.25, c=clr)
         ax.plot(
             x, svg, marker='s', ms=6, ls='--',
             color=clr, label=label
@@ -867,12 +870,12 @@ class SpatialVariance(PlotsInterval):
             x, svg, svg_se, fmt='none',
             ecolor=clr
             )
-        if self.normalize:
-            sill = 1.0
-            ax.axhline(1.0, color=clr, ls='--')
-        else:
-            sill = np.median(y.var(1))
-            ax.axhline(sill, color=clr, ls='--')
+        # if self.normalize:
+        #     sill = 1.0
+        #     ax.axhline(1.0, color=clr, ls='--')
+        # else:
+        #     sill = np.median(y.var(1))
+        #     ax.axhline(sill, color=clr, ls='--')
         #ax.set_ylim(0, 1.05 * sill)
         ax.set_xlim(xmin=0)
         ax.autoscale(axis='y', enable=True)
@@ -898,7 +901,8 @@ class SpatialVariance(PlotsInterval):
                     ),
                 VGroup(
                     Item('estimator', label='Estimator'),
-                    Item('jackknife', label='Jackknife'),
+                    Item('cloud', label='Cloud'),
+                    Item('se', label='Std Err'),
                     Item('n_samps', label='# of samples'),
                     Item('dist_bin', label='Distance bin (mm)'),
                     Item('normalize', label='Normalized'),
