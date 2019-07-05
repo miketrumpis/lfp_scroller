@@ -53,7 +53,7 @@ class ArrayVarianceTool(PersistentWindow):
         self.cov = cov
         self._cv_mn = cov.min()
         self._cv_mx = cov.max()
-        array_plot = ArrayMap(chan_map)
+        array_plot = ArrayMap(chan_map, vec=self.cov.mean(1))
         HasTraits.__init__(
             self, array_plot=array_plot,
             _c_lo=self._cv_mn, _c_hi=self._cv_mx
