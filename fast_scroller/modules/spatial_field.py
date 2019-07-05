@@ -28,10 +28,10 @@ import ecoglib.estimation.spatial_variance as sv
 from ecoglib.filt.blocks import BlockedSignal
 from ecogana.anacode.signal_testing import centered_pair_maps
 from ecogana.anacode.spatial_profiles import cxx_to_pairs, matern_semivariogram, matern_spectrum
-from ecogana.anacode.anatool.gui_tools import ArrayMap
+from ecoglib.vis.gui_tools import ArrayMap
 import ecogana.anacode.seaborn_lite as sns
 from ecogana.anacode.plot_util import subplots, subplot2grid
-from ecogana.anacode.anatool.gui_tools import SavesFigure
+from ecoglib.vis.gui_tools import SavesFigure
 
 from .base import PlotsInterval, MultiframeSavesFigure, colormaps
 from ..helpers import PersistentWindow
