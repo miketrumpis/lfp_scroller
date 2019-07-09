@@ -1,8 +1,9 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name='lfp_scroller',
     version='0.1',
-    packages=['fast_scroller'],
+    packages=find_packages(),
+    package_data={'fast_scroller.pyqtgraph_extensions': ['*.png']},
     scripts=['launch_scroller.py']
     )
