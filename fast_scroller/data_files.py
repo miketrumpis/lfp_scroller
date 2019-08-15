@@ -53,7 +53,7 @@ class FileData(HasTraits):
     def _get_Fs(self):
         try:
             with h5py.File(self.file, 'r') as f:
-                return f[self.fs_field].value
+                return f[self.fs_field][()]
         except:
             return None
 
@@ -89,7 +89,7 @@ class FileData(HasTraits):
         ds_name = os.path.join(where, fname + '_dnsamp{}.h5'.format(self.ds_rate))
         with h5py.File(self.file, 'r') as h5, h5py.File(ds_name, 'w') as fw:
             arr = h5[self.data_field]
-            Fs = h5[self.fs_field].value
+            Fs = h5[self.fs_field][()]
             n_chan, len_ts = arr.shape
             n = len_ts // self.ds_rate
             if n * self.ds_rate < len_ts:
@@ -101,7 +101,7 @@ class FileData(HasTraits):
             for k in h5.keys():
                 if k not in (self.data_field, self.fs_field):
                     try:
-                        fw[k] = h5[k].value
+                        fw[k] = h5[k][()]
                     except (AttributeError, RuntimeError) as e:
                         print 'skipped key:', k
                     
@@ -166,7 +166,7 @@ class ActiveArrayFileData(FileData):
     def _get_Fs(self):
         try:
             with h5py.File(self.file, 'r') as f:
-                return float(f[self.fs_field].value)
+                return float(f[self.fs_field][()])
         except:
             return None
 
@@ -174,8 +174,8 @@ class ActiveArrayFileData(FileData):
         # just returns the contiguous block of channels IN WHICH
         # we find the data carrying channel
         with h5py.File(self.file, 'r') as f:
-            ncol = f['numCol'].value
-            nrow = f['numRow'].value
+            ncol = f['numCol'][()]
+            nrow = f['numRow'][()]
         return range(int(ncol * nrow))
 
 
@@ -183,8 +183,8 @@ class ActiveArrayFileData(FileData):
         if not self.file:
             return
         with h5py.File(self.file, 'r') as fr:
-            nrow = int(fr['numRow'].value)
-            ncol = int(fr['numChan'].value)
+            nrow = int(fr['numRow'][()])
+            ncol = int(fr['numChan'][()])
             shape = fr['data'].shape
         return shape[1] == nrow * ncol
 
@@ -211,7 +211,7 @@ class ActiveArrayFileData(FileData):
             for k in h5.keys():
                 if k not in (self.data_field,):
                     try:
-                        fw[k] = h5[k].value
+                        fw[k] = h5[k][()]
                     except (AttributeError, RuntimeError) as e:
                         print 'skipped key:', k
             # keep chunk size to ~ 200 MB
@@ -231,9 +231,9 @@ class ActiveArrayFileData(FileData):
     def make_channel_map(self):
         unmix = get_daq_unmix(self.daq, self.headstage, self.electrode)
         with h5py.File(self.file, 'r') as f:
-            #ncol_full = f['numChan'].value
-            #ncol_data = f['numCol'].value
-            nrow = int(f['numRow'].value)
+            #ncol_full = f['numChan'][()]
+            #ncol_data = f['numCol'][()]
+            nrow = int(f['numRow'][()])
                           
         pitch = pitch_lookup.get(self.electrode, 1.0)
         # go through channels,
@@ -277,7 +277,7 @@ class BlackrockFileData(FileData):
     def _get_Fs(self):
         try:
             with h5py.File(self.file, 'r') as f:
-                return f[self.fs_field].value.squeeze()
+                return f[self.fs_field][()].squeeze()
         except:
             return None
 
@@ -397,7 +397,7 @@ class Mux7FileData(FileData):
             with h5py.File(self.file, 'r') as f:
                 if not self.data_field in f:
                     return []
-                n_row = int(f['numRow'].value)
+                n_row = int(f['numRow'][()])
                 dig_order = mux_sampling.get(self.sampling_style, range(4))
                 chans  = [ range(i*n_row, (i+1)*n_row) for i in dig_order ]
                 return reduce(lambda x, y: x + y, chans)
@@ -465,7 +465,7 @@ def concatenate_hdf5_files(files, new_file, filters=None):
     samp_res = []
     for fd in files:
         with h5py.File(fd.file, 'r') as h5:
-            # samp_res.append( h5[fd.fs_field].value )
+            # samp_res.append( h5[fd.fs_field][()] )
             samp_res.append(fd.Fs)
             sizes.append( h5[fd.data_field].shape )
     samp_res = np.array(samp_res)
@@ -497,7 +497,7 @@ def concatenate_hdf5_files(files, new_file, filters=None):
             for k in set(fr.keys()) - {fd.fs_field, fd.data_field}:
                 if hasattr(fr[k], 'shape') and not len(fr[k].shape):
                     print 'picked up key', k
-                    fw[k] = fr[k].value
+                    fw[k] = fr[k][()]
     return new_file
 
 
@@ -519,7 +519,7 @@ def batch_filter_hdf5_files(files, save_path, filters):
                 for k in set(fr.keys()) - {fd.fs_field, fd.data_field}:
                     if hasattr(fr[k], 'shape') and not len(fr[k].shape):
                         print 'picked up key', k
-                        fw[k] = fr[k].value
+                        fw[k] = fr[k][()]
                     else:
                         fr.copy(k, fw)
 
