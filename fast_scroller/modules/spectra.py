@@ -77,7 +77,7 @@ class IntervalSpectrum(PlotsInterval):
                 fx, pxx.T, lw=.25, color=self._colors[plot_count]
                 )
             ax.legend(lns[:1], (label,))
-        ax.set_ylabel('Power Spectral Density (uV / Hz^2)')
+        ax.set_ylabel('Power Spectral Density (uV^2 / Hz)')
         ax.set_xlabel('Frequency (Hz)')
         sns.despine(ax=ax)
         fig.tight_layout()
