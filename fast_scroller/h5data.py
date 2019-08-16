@@ -209,7 +209,7 @@ class H5Chunks(object):
     def __iter__(self):
         return self
 
-    def next(self):
+    def __next__(self):
         if self.__it >= self.n_blocks or self.__it < 0:
             raise StopIteration()
         n = self.__it

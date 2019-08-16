@@ -15,7 +15,7 @@ class GLViewWidget(pgl.GLViewWidget,IPythonPNGRepr):
         if title is None:
             title={}
         self.title={'string':None,'color':(1,1,1),'font':pg.QtGui.QApplication.font()}
-        if isinstance(title,basestring):
+        if isinstance(title,str):
             self.title['string']=title
         else:
             self.title.update(title)

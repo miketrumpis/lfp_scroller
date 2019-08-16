@@ -231,7 +231,7 @@ def export(o,filename,fmt='png',mkdir=False,fmt_opts={},exporter_params={}):
         raise ValueError('Don''t know how to export it')
     if fmt in ('png','tif'):
         exporter=pgex.ImageExporter(item)
-        for key,value in exporter_params.items():
+        for key,value in list(exporter_params.items()):
             exporter.parameters()[key]=value
         exporter.export(filename+'.'+fmt)
     elif fmt=='svg':

@@ -22,8 +22,8 @@ class IntervalTraces(PlotsInterval):
     new_figure = Bool(True)
     label_channels = Bool(False)
 
-    map_row = Enum(1, range(1, 11))
-    map_col = Enum(1, range(1, 11))
+    map_row = Enum(1, list(range(1, 11)))
+    map_col = Enum(1, list(range(1, 11)))
     map_rms = Bool(True)
     cmaps = Enum('gray', colormaps)
     new_maps = Button('Create map grid')

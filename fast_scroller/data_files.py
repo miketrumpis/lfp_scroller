@@ -38,7 +38,7 @@ class FileHandler(Handler):
 
 class FileData(HasTraits):
     """Basic model for an HDF5 file holding an array timeseries."""
-    file = File(filter=[u'*.h5'], exists=True)
+    file = File(filter=['*.h5'], exists=True)
     data_field = Str
     fs_field = Str
     y_scale = Float(1.0)
@@ -62,7 +62,7 @@ class FileData(HasTraits):
         try:
             with h5py.File(self.file, 'r') as f:
                 if self.data_field in f:
-                    return range( f[self.data_field].shape[0] )
+                    return list(range( f[self.data_field].shape[0]))
                 else:
                     return []
         except IOError:
@@ -175,7 +175,7 @@ class ActiveArrayFileData(FileData):
         with h5py.File(self.file, 'r') as f:
             ncol = f['numCol'][()]
             nrow = f['numRow'][()]
-        return range(int(ncol * nrow))
+        return list(range(int(ncol * nrow)))
 
 
     def _get_is_transpose(self):
@@ -282,7 +282,7 @@ class BlackrockFileData(FileData):
 
 
 class OpenEphysFileData(FileData):
-    file = File(filter=[u'*.h5', u'*.continuous'], exists=True)
+    file = File(filter=['*.h5', '*.continuous'], exists=True)
     data_field = Property(fget=lambda self: 'chdata')
     fs_field = Property(fget=lambda self: 'Fs')
     y_scale = Float(1e-6)
@@ -397,7 +397,7 @@ class Mux7FileData(FileData):
                 if not self.data_field in f:
                     return []
                 n_row = int(f['numRow'][()])
-                dig_order = mux_sampling.get(self.sampling_style, range(4))
+                dig_order = mux_sampling.get(self.sampling_style, list(range(4)))
                 chans = list()
                 for i in dig_order:
                     chans.extend(range(i*n_row, (i+1)*n_row))

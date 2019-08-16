@@ -83,7 +83,7 @@ class ArrayVarianceTool(PersistentWindow):
         # cycle through sites, update image, and use
         # PdfPages.savefig(self.array_plot.fig)
         chan_map = self.array_plot.chan_map
-        ij = zip(*chan_map.to_mat())
+        ij = list(zip(*chan_map.to_mat()))
         ij = sorted(ij)
         pdf_file = self.save_file
         if not pdf_file.endswith('.pdf'):
@@ -137,15 +137,15 @@ class ArrayVarianceTool(PersistentWindow):
 
 def make_matern_label(**params):
     """Helper function for plot labels."""
-    label = u''
+    label = ''
     if 'nu' in params:
-        label = label + u'\u03BD {nu:.1f} '
+        label = label + '\u03BD {nu:.1f} '
     if 'theta' in params:
-        label = label + u'\u03B8 {theta:.1f} '
+        label = label + '\u03B8 {theta:.1f} '
     if 'nugget' in params:
-        label = label + u'\u03C3 {nugget:.2f} '
+        label = label + '\u03C3 {nugget:.2f} '
     if 'sill' in params:
-        label = label + u'\u03C2 {sill:.2f} '
+        label = label + '\u03C2 {sill:.2f} '
     
     return label.format(**params)
 

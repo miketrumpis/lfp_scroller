@@ -73,7 +73,7 @@ class MultiframeSavesFigure(SavesFigure):
         self.frames = frames
         self._mx = len(frames)-1
         if not len(frame_index):
-            frame_index = range(len(frames))
+            frame_index = list(range(len(frames)))
         self.frame_index = frame_index
 
     def _get_mode_value(self):

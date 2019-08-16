@@ -98,7 +98,7 @@ class VisLauncher(HasTraits):
     file_data = Instance(FileData)
     filters = Instance(FilterPipeline)
     module_set = List(default_modules)
-    all_modules = List(ana_modules.keys())
+    all_modules = List(list(ana_modules.keys()))
     b = Button('Launch Visualization')
     offset = Enum(200, [0, 100, 200, 500, 1000, 2000, 5000])
     #max_window_width = Float(1200.0)
@@ -175,7 +175,7 @@ class VisLauncher(HasTraits):
         # TODO: handle reference channels correctly
         if self.chan_map == 'unknown':
             try:
-                nc = np.array( map(int, self.skip_chan.split(',')) )
+                nc = np.array( list(map(int, self.skip_chan.split(','))) )
             except:
                 nc = []
             geo = list(map(int, self.elec_geometry.split(',')))
@@ -217,8 +217,8 @@ class VisLauncher(HasTraits):
                          for i in range(num_vectors) if i not in nc]
 
         # permute  channels to stack rows
-        chan_idx = zip(*chan_map.to_mat())
-        chan_order = chan_map.lookup(*zip( *sorted(chan_idx)[::-1] ))
+        chan_idx = list(zip(*chan_map.to_mat()))
+        chan_order = chan_map.lookup(*list(zip( *sorted(chan_idx)[::-1] )))
         data_channels = [data_channels[i] for i in chan_order]
         cls = type(chan_map)
         chan_map = cls([chan_map[i] for i in chan_order], chan_map.geometry, pitch=chan_map.pitch,

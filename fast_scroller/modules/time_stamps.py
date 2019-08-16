@@ -38,7 +38,7 @@ class TimeStampSet(HasTraits):
         if array.shape[-1] == array.size:
             chans = array[:].squeeze()
         else:
-            chans = map(int, self.timing_channels.split(','))
+            chans = list(map(int, self.timing_channels.split(',')))
             chans = array[chans]
         if self.is_binary:
             time_stamps, _ = process_trigger( chans )

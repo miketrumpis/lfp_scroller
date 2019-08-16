@@ -122,7 +122,7 @@ class IntervalSpectrogram(PlotsInterval):
         y *= 1e6
         x = x[0]
         if self.channel.lower() != 'all':
-            i, j = map(float, self.channel.split(','))
+            i, j = list(map(float, self.channel.split(',')))
             y = y[self.parent.chan_map.lookup(i, j)]
 
         if self.high_res:

@@ -82,7 +82,7 @@ class BandPowerMap(PlotsInterval):
         f, cb = chan_map.image(band_power, ax=ax, cmap=self.cmap)
         cb.set_label('Bandpass RMS (uV)')
         ax.set_title(
-            u'{0:0.1f} \u00b1 {1} Hz bandpass ~ {2:0.1f} s'.format(self.fc, self.BW, t)
+            '{0:0.1f} \u00b1 {1} Hz bandpass ~ {2:0.1f} s'.format(self.fc, self.BW, t)
             )
         
     

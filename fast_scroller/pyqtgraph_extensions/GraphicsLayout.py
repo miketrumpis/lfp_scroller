@@ -98,7 +98,7 @@ class GraphicsLayoutWidget(pg.GraphicsView): #,IPythonPNGRepr):
     def clear(self):
         self.ci.clear()
         # Remove additional top-level items in scene
-        items=[item for item in self.scene().items() if item is not self.ci and item.parentItem() is None]
+        items=[item for item in list(self.scene().items()) if item is not self.ci and item.parentItem() is None]
         for item in items:
             self.scene().removeItem(item)
             

@@ -2,7 +2,7 @@ import pyqtgraph as pg
 from pyqtgraph import QtCore,QtGui
 from . import AxisItem
 from .misc import LegendItem,ImageItem
-from pyqtgraph.python2_3 import basestring
+from pyqtgraph.python2_3 import str
 
 class AlignedPlotItem(QtCore.QObject):
     sigRangeChanged = QtCore.Signal(object, object)    ## Emitted when the ViewBox range has changed
@@ -77,7 +77,7 @@ class AlignedPlotItem(QtCore.QObject):
                 labels[label] = kargs[label]
                 del kargs[label]
         for k in labels:
-            if isinstance(labels[k], basestring):
+            if isinstance(labels[k], str):
                 labels[k] = (labels[k],)
             self.setLabel(k, *labels[k])
                 
@@ -208,11 +208,11 @@ class AlignedPlotItem(QtCore.QObject):
         Keyword arguments can be 'title', 'left', 'bottom', 'right', or 'top'.
         Values may be strings or a tuple of arguments to pass to setLabel.
         """
-        for k,v in kwds.items():
+        for k,v in list(kwds.items()):
             if k == 'title':
                 self.setTitle(v)
             else:
-                if isinstance(v, basestring):
+                if isinstance(v, str):
                     v = (v,)
                 self.setLabel(k, *v)
         
