@@ -8,7 +8,7 @@ from traitsui.api import View, Group, VGroup, HGroup, Item, UItem, \
      Label, EnumEditor
      
 
-from ecoglib.numutil import nextpow2
+from ecogdata.numutil import nextpow2
 from ecoglib.estimation.jackknife import Jackknife
 import ecoglib.estimation.multitaper as msp
 

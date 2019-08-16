@@ -15,10 +15,10 @@ from traitsui.api import View, VGroup, HGroup, Item, UItem, \
      FileEditor, SetEditor
 from pyface.api import DirectoryDialog, MessageDialog, OK
 
-from ecogana.devices.load.open_ephys import hdf5_open_ephys_channels
-from ecogana.devices.load.mux import mux_sampling
-from ecoglib.filt.time import downsample
-from ecoglib.channel_map import ChannelMap
+from ecogdata.devices.load.open_ephys import hdf5_open_ephys_channels
+from ecogdata.devices.load.mux import mux_sampling
+from ecogdata.filt.time import downsample
+from ecogdata.channel_map import ChannelMap
 
 from .h5data import FilteredReadCache, h5mean, ReadCache, \
      DCOffsetReadCache, CommonReferenceReadCache, interpolate_blanked, H5Chunks
@@ -144,7 +144,7 @@ class FileData(HasTraits):
         )
         return view
 
-from ecogana.devices.load.active_electrodes import get_daq_unmix, pitch_lookup
+from ecogdata.devices.load.active_electrodes import get_daq_unmix, pitch_lookup
 class ActiveArrayFileData(FileData):
 
     data_field = Property(fget=lambda self: 'data')

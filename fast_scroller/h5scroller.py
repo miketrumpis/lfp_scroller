@@ -3,9 +3,9 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 pg.setConfigOptions(imageAxisOrder='row-major')
 import .pyqtgraph_extensions as pgx
-from ecoglib.channel_map import ChannelMap, CoordinateChannelMap
+from ecogdata.channel_map import ChannelMap, CoordinateChannelMap
 
-from h5data import *
+from .h5data import *
 
 
 def embed_frame(channel_map, vector):

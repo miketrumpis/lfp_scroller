@@ -23,9 +23,9 @@ from tqdm import tqdm
 from nitime.utils import autocov
 
 from ecoglib.vis.traitsui_bridge import MPLFigureEditor, PingPongStartup
-from ecoglib.util import ChannelMap
+from ecogdata.util import ChannelMap
 import ecoglib.estimation.spatial_variance as sv
-from ecoglib.filt.blocks import BlockedSignal
+from ecogdata.filt.blocks import BlockedSignal
 from ecogana.anacode.signal_testing import centered_pair_maps
 from ecogana.anacode.spatial_profiles import cxx_to_pairs, matern_semivariogram, matern_spectrum
 from ecoglib.vis.gui_tools import ArrayMap

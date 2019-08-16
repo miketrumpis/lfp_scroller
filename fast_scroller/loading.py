@@ -15,11 +15,11 @@ from traitsui.api import View, Group, VGroup, HGroup, UItem, Item, \
      Label, Handler, Tabbed, SetEditor
 from pyface.api import MessageDialog
 
-from ecogana.devices.electrode_pinouts import get_electrode_map, electrode_maps
-from ecogana.devices.channel_picker import interactive_mask
-from ecoglib.util import Bunch
-from ecoglib.channel_map import ChannelMap
-from ecogana.expconfig import params
+from ecogdata.devices.electrode_pinouts import get_electrode_map, electrode_maps
+from ecogdata.devices.channel_picker import interactive_mask
+from ecogdata.util import Bunch
+from ecogdata.channel_map import ChannelMap
+from ecogdata.expconfig import params
 
 from .h5scroller import FastScroller
 from .h5data import h5mean
@@ -148,7 +148,7 @@ class VisLauncher(HasTraits):
         # self.__bft = bft
         
     def _get_screen(self, array, channels, chan_map, Fs):
-        from ecogana.expconfig import params
+        from ecogdata.expconfig import params
         mem_guideline = float(params.memory_limit)
         n_chan = len(array)
         word_size = array.dtype.itemsize

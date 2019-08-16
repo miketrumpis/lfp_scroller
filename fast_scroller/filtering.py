@@ -11,9 +11,9 @@ from traitsui.api import View, VGroup, HGroup, Item, UItem, \
 from traitsui.table_column import ObjectColumn
 from pyface.api import FileDialog, OK
 
-from ecoglib.filt.time.design import butter_bp, cheby1_bp, cheby2_bp, \
+from ecogdata.filt.time.design import butter_bp, cheby1_bp, cheby2_bp, \
      notch, ellip_bp, savgol
-from ecoglib.filt.time import ma_highpass
+from ecogdata.filt.time import ma_highpass
 
 from .h5data import bfilter, block_nan_filter, square_filter, abs_filter, hilbert_envelope_filter
 

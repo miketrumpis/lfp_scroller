@@ -5,9 +5,9 @@ from traits.api import Button, Bool, Enum, Property, Float, \
 from traitsui.api import View, VGroup, HGroup, Item, UItem
      
 
-from ecoglib.numutil import nextpow2
+from ecogdata.numutil import nextpow2
 from ecoglib.estimation.jackknife import Jackknife
-from sandbox.split_methods import multi_taper_psd
+from ecogdata.parallel.split_methods import multi_taper_psd
 
 from ecogana.anacode.plot_util import filled_interval
 import ecogana.anacode.seaborn_lite as sns

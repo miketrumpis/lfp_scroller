@@ -12,7 +12,7 @@ from traitsui.extras.checkbox_column \
 from pyqtgraph.Qt import QtCore
 import pyqtgraph as pg
 
-from ecoglib.trigger_fun import process_trigger
+from ecogdata.trigger_fun import process_trigger
 
 from .base import VisModule
 

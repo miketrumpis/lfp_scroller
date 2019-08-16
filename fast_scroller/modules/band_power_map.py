@@ -4,7 +4,6 @@ from traits.api import Button, Bool, Float, Instance, Property, property_depends
 from traitsui.api import View, HGroup, Group, UItem, Item, Label
 
 from nitime.algorithms import dpss_windows
-from ecoglib.filt.time.projection_filters import moving_projection
 
 from .base import PlotsInterval, colormaps
 
