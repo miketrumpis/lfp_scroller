@@ -1,5 +1,5 @@
 from pyqtgraph.opengl import *
-from pyqtgraph_extensions.opengl import *
+from .pyqtgraph_extensions.opengl import *
 
 if __name__=="__main__":
     def test_GLViewWidget():

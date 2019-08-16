@@ -155,7 +155,7 @@ class FigureStack(OrderedDict):
     def current_figure(self):
         if not len(self):
             return
-        k = self.keys()[-1]
+        k = list(self.keys())[-1]
         return self[k]
 
 class AxesGridStack(FigureStack):

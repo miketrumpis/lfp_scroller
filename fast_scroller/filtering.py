@@ -1,8 +1,7 @@
-from __future__ import division
 from tempfile import NamedTemporaryFile
 from functools import partial
 import h5py
-import cPickle
+import pickle
 import json
 
 from traits.api import Instance, Button, HasTraits, Float, \
@@ -310,7 +309,7 @@ class FilterPipeline(HasTraits):
             f_params['filter type'] = f.filt_type
             f_seq.append(f_params)
         d['filters'] = f_seq
-        d['filters_pickle'] = cPickle.dumps(self.filters)
+        d['filters_pickle'] = pickle.dumps(self.filters)
         return json.dumps(d, sort_keys=True, indent=2, separators=(',', ':'))
 
 
@@ -322,7 +321,7 @@ class FilterPipeline(HasTraits):
     def load_pipeline(self, path):
         with open(path, 'r') as fp:
             pipe_info = json.load(fp)
-        pipeline = cPickle.loads(str(pipe_info['filters_pickle']))
+        pipeline = pickle.loads(str(pipe_info['filters_pickle']))
         self.filters = pipeline
 
 

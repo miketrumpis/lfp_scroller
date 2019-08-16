@@ -1,5 +1,3 @@
-from __future__ import division
-
 from traits.api import HasTraits, Instance, Float, Enum, \
      Any, List, on_trait_change, Event, Str
 from traitsui.api import View, UItem, VSplit, CustomEditor, \

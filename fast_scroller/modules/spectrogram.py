@@ -79,7 +79,7 @@ class IntervalSpectrogram(PlotsInterval):
 
         m = tx < tc
         if not m.any():
-            print 'Baseline too short: using 2 bins'
+            print('Baseline too short: using 2 bins')
             m[:2] = True
         if ptf.ndim < 3:
             ptf = ptf.reshape( (1,) + ptf.shape )

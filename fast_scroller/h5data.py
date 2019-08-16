@@ -1,4 +1,3 @@
-from __future__ import division
 import numpy as np
 from scipy.linalg import LinAlgError
 from scipy.signal import lfilter, lfilter_zi, hilbert
@@ -34,7 +33,7 @@ def h5mean(array, axis, rowmask=(), start=0, stop=None):
         t_sl = sl[1]
         # just pass until t_sl.start < requested start < t_sl.stop
         if start >= t_sl.stop:
-            print 'Continuing'
+            print('Continuing')
             continue
         # now modify first good slice
         elif start > t_sl.start:
@@ -192,7 +191,7 @@ class H5Chunks(object):
         while axis < 0:
             axis += len(chunk)
         if chunk[axis] < chunk[1-axis]:
-            print 'chunk size larger in other dimension!'
+            print('chunk size larger in other dimension!')
 
         self.axis = axis
         self.size = h5array.shape[axis]

@@ -152,7 +152,7 @@ class AxisItem(pg.AxisItem):
             
     def aset_lmt_btn_clicked(self,type):
         v=self.linkedView()
-        if v==None:
+        if v is None:
             return
         bounds=v.childrenBoundingRect()
         if self.orientation in {'left','right'}:
@@ -170,7 +170,7 @@ class AxisItem(pg.AxisItem):
             
     def set_view_range(self,type,value):
         v=self.linkedView()
-        if v==None:
+        if v is None:
             range=self.range
             range[type]=value
             self.setRange(*range)
@@ -194,7 +194,7 @@ class AxisItem(pg.AxisItem):
                 
     def enable_auto_range_btn_clicked(self):
         v=self.linkedView()
-        if v==None:
+        if v is None:
             return
         if self.auto_range_enabled:
             v.disableAutoRange(self.axis())
@@ -320,7 +320,7 @@ class TimeAxisItem(AxisItem):
             string = '%H:%M:%S'
             label1 = '%b %d -'
             label2 = ' %b %d, %Y'
-        elif rng >= 3600*24 and rng < 3600*24*30:
+        elif 3600*24 <= rng < 3600*24*30:
             string = '%d'
             label1 = '%b - '
             label2 = '%b, %Y'

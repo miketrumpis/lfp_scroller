@@ -99,7 +99,7 @@ class AnimateInterval(VisModule):
         if self.clim.endswith('%'):
             clim = self.clim.replace('[', '').replace(']', '').replace('%', '')
             p_lo, p_hi = map(float, clim.split('-'))
-            print p_lo, p_hi
+            print(p_lo, p_hi)
             return np.percentile(array.ravel(), [p_lo, p_hi])
         else:
             clim = self.parent._qtwindow.cb.axis.range

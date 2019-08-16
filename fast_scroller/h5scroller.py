@@ -1,10 +1,8 @@
-from __future__ import division
-
 import numpy as np
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 pg.setConfigOptions(imageAxisOrder='row-major')
-import pyqtgraph_extensions as pgx
+import .pyqtgraph_extensions as pgx
 from ecoglib.channel_map import ChannelMap, CoordinateChannelMap
 
 from h5data import *
@@ -25,7 +23,7 @@ class HMSAxis(pg.AxisItem):
         h = x // 3600
         m = (x - h*3600) // 60
         s = x - h * 3600 - m * 60
-        return map(int, (h, m, s))
+        return list(map(int, (h, m, s)))
     
     def tickStrings(self, values, scale, spacing):
         strns = []
@@ -39,12 +37,9 @@ class HMSAxis(pg.AxisItem):
 class PlainSecAxis(pg.AxisItem):
 
     def tickStrings(self, values, scale, spacing):
-        strns = []
         if len(values)==0:
             return super(PlainSecAxis, self).tickStrings(values,scale,spacing)
-
-        #strns = map(lambda x: str(int(x)), values)
-        strns = map(lambda x: str(x), values)
+        strns = list(map(lambda x: str(x), values))
         return strns
         
 class HDF5Plot(pg.PlotCurveItem):
@@ -75,7 +70,7 @@ class HDF5Plot(pg.PlotCurveItem):
             return  # no ViewBox yet
         # Determine what data range must be read from HDF5
         xrange = self.parentWidget().viewRange()[0]
-        srange = map(lambda x: int(x / self._xscale), xrange)
+        srange = list(map(lambda x: int(x / self._xscale), xrange))
         start = max(0,int(srange[0])-1)
         stop = min(self.hdf5.shape[-1], int(srange[1]+2))
         return start, stop
@@ -146,7 +141,7 @@ class HDF5Plot(pg.PlotCurveItem):
         vis = self.text.isVisible()
         self.text.setVisible(not vis)
         self.set_text_position()
-        print 'Is visible:', not vis
+        print('Is visible:', not vis)
         if not vis:
             pen = pg.mkPen(color='c', width=4)
         else:
@@ -193,7 +188,7 @@ class FastScroller(object):
 
         nchan = array.shape[0]
         if isinstance(load_channels, str) and load_channels.lower() == 'all':
-            load_channels = xrange(nchan)
+            load_channels = range(nchan)
             self.chan_map = chan_map
         elif len(load_channels) == len(chan_map):
             self.chan_map = chan_map
@@ -318,7 +313,7 @@ class FastScroller(object):
         y = np.empty( (len(self._curves), len(y_vis)), y_vis.dtype )
         x[0] = x_vis
         y[0] = y_vis
-        for i in xrange(1, len(self._curves)):
+        for i in range(1, len(self._curves)):
             x[i] = self._curves[i].x_visible
             y[i] = self._curves[i].y_visible
         return x, y
@@ -359,7 +354,7 @@ class FastScroller(object):
                 return
             idx = self._curves[0].x_visible.searchsorted(x)
             frame_vec = np.empty( len(self.chan_map), 'd' )
-            for i in xrange(len(self.chan_map)):
+            for i in range(len(self.chan_map)):
                 frame_vec[i] = self._curves[i].y_visible[idx]
 
         frame = embed_frame(self.chan_map, frame_vec)
@@ -374,7 +369,7 @@ class FastScroller(object):
         if not hasattr(self._curves[0], 'y_visible'):
             return
         image = np.empty( len(self.chan_map), 'd' )
-        for i in xrange(len(self.chan_map)):
+        for i in range(len(self.chan_map)):
             image[i] = self._curves[i].y_visible.std()
         x_vis = self._curves[0].x_visible
         x_avg = 0.5 * (x_vis[0] + x_vis[-1])
@@ -396,7 +391,7 @@ class FastScroller(object):
         self.region.setRegion(rgn)
 
     def update_y_spacing(self, offset):
-        for i in xrange(len(self._curves)):
+        for i in range(len(self._curves)):
             self._curves[i].offset = i * offset
         x1, x2 = self.current_frame()
         self.region.setRegion([x1, x2+.001])

@@ -63,8 +63,8 @@ class TimeStampSet(HasTraits):
             self._unload()
             self.stamps[self.file] = self._get_timestamps()
             N = len(self.stamps[self.file])
-            self.p1_lines = [None for x in xrange(N)]
-            self.p2_lines = [None for x in xrange(N)]
+            self.p1_lines = [None for x in range(N)]
+            self.p2_lines = [None for x in range(N)]
 
         # connect a callback that adds only the needed lines
         # when the scroller's xrange changes
@@ -88,7 +88,7 @@ class TimeStampSet(HasTraits):
         i1, i2 = ts.searchsorted(x_range)
         #pen = pg.mkPen('r', width=1, style=QtCore.Qt.DashLine)
         pen = pg.mkPen(self.color, width=1, style=QtCore.Qt.DashLine)
-        for n in xrange(max(0, i1-1), i2):
+        for n in range(max(0, i1-1), i2):
             if line_set[n] is not None:
                 line_set[n].show()
                 continue

@@ -1,4 +1,3 @@
-from __future__ import division
 import os
 from glob import glob
 from functools import partial
@@ -34,7 +33,7 @@ class FileHandler(Handler):
             self.fields = []
             return
         h5 = h5py.File(info.object.file, 'r')
-        self.fields = h5.keys()
+        self.fields = list(h5.keys())
         h5.close()
 
 class FileData(HasTraits):
@@ -103,9 +102,9 @@ class FileData(HasTraits):
                     try:
                         fw[k] = h5[k][()]
                     except (AttributeError, RuntimeError) as e:
-                        print 'skipped key:', k
+                        print('skipped key:', k)
                     
-            for i in tqdm(xrange(n_chan), desc='Downsampling'):
+            for i in tqdm(range(n_chan), desc='Downsampling'):
                 arr_row = arr[i]
                 m = np.isnan(arr_row)
                 if m.any():
@@ -213,11 +212,11 @@ class ActiveArrayFileData(FileData):
                     try:
                         fw[k] = h5[k][()]
                     except (AttributeError, RuntimeError) as e:
-                        print 'skipped key:', k
+                        print('skipped key:', k)
             # keep chunk size to ~ 200 MB
             min_size = int(200e6 / 8 / n_chan)
             chunk_iter = H5Chunks(h5['data'], axis=0, slices=True, min_chunk=min_size)
-            #for i in tqdm(xrange(n_chan), desc='Copying transpose'):
+            #for i in tqdm(range(n_chan), desc='Copying transpose'):
             for sl in tqdm(chunk_iter, desc='Copying transpose'):
                 arr_rows = arr[sl]
                 # m = np.isnan(arr_row)
@@ -310,7 +309,7 @@ class OpenEphysFileData(FileData):
     def _do_convert_fired(self):
         # check extension
         if os.path.splitext(self.file) == '.h5':
-            print 'already an HDF5 file!!'
+            print('already an HDF5 file!!')
             return
         # self.file is '/exp/rec/file.continuous'
         rec, _ = os.path.split(self.file)
@@ -338,7 +337,7 @@ class OpenEphysFileData(FileData):
                     )
                 ev.edit_traits()
                 return
-            print 'converting to', self.conv_file
+            print('converting to', self.conv_file)
             hdf5_open_ephys_channels(
                 exp, rec, self.conv_file,
                 downsamp=self.downsamp, quantized=self.quantized
@@ -376,7 +375,7 @@ class OpenEphysFileData(FileData):
         )
         return v
         
-_sampling = mux_sampling.keys() + ['mux3', 'unknown']
+_sampling = list(mux_sampling.keys()) + ['mux3', 'unknown']
 class Mux7FileData(FileData):
     """
     An HDF5 array holding timeseries from the MUX headstages:
@@ -399,14 +398,15 @@ class Mux7FileData(FileData):
                     return []
                 n_row = int(f['numRow'][()])
                 dig_order = mux_sampling.get(self.sampling_style, range(4))
-                chans  = [ range(i*n_row, (i+1)*n_row) for i in dig_order ]
-                return reduce(lambda x, y: x + y, chans)
+                chans = list()
+                for i in dig_order:
+                    chans.extend(range(i*n_row, (i+1)*n_row))
         except IOError:
             return []
     
     def _compose_arrays(self, filter):
         if not self.dc_subtract or self.zero_windows or self.car_windows:
-            print 'not removing dc'
+            print('not removing dc')
             return super(Mux7FileData, self)._compose_arrays(filter)
         f = h5py.File(self.file, 'r')
         array = filter(f[self.data_field])
@@ -496,7 +496,7 @@ def concatenate_hdf5_files(files, new_file, filters=None):
         with h5py.File(fd.file, 'r') as fr:
             for k in set(fr.keys()) - {fd.fs_field, fd.data_field}:
                 if hasattr(fr[k], 'shape') and not len(fr[k].shape):
-                    print 'picked up key', k
+                    print('picked up key', k)
                     fw[k] = fr[k][()]
     return new_file
 
@@ -505,7 +505,7 @@ def batch_filter_hdf5_files(files, save_path, filters):
 
     for fd in files:
         save_file = os.path.join(save_path, os.path.split(fd.file)[1])
-        print 'input file:', fd.file, 'output file:', save_file
+        print('input file:', fd.file, 'output file:', save_file)
         if filters is not None:
             fpipe = filters.make_pipeline(fd.Fs, output_file=save_file, data_field=fd.data_field)
         else:
@@ -518,7 +518,7 @@ def batch_filter_hdf5_files(files, save_path, filters):
                 fw[fd.fs_field] = fd.Fs
                 for k in set(fr.keys()) - {fd.fs_field, fd.data_field}:
                     if hasattr(fr[k], 'shape') and not len(fr[k].shape):
-                        print 'picked up key', k
+                        print('picked up key', k)
                         fw[k] = fr[k][()]
                     else:
                         fr.copy(k, fw)
@@ -541,7 +541,7 @@ class BatchFilesTool(PersistentWindow):
 
     @on_trait_change('working_files')
     def _foo(self):
-        print self.working_files
+        print(self.working_files)
 
     def _default_file_map(self):
         if not hasattr(self, '_file_map'):
@@ -557,7 +557,7 @@ class BatchFilesTool(PersistentWindow):
             full_file = os.path.join(self.file_dir, f + '.h5')
             fd = klass(file=full_file)
             self._file_map[f] = fd
-        for f in ( set(self._file_map.keys()) - set(self.working_files)):
+        for f in (set(self._file_map.keys()) - set(self.working_files)):
             self._file_map.pop(f)
         return self._file_map
 
@@ -585,7 +585,7 @@ class BatchFilesTool(PersistentWindow):
             return
         file_names = self.working_files
         file_objs = [self._file_map[f] for f in file_names]
-        print 'Batch path:', new_dir.path
+        print('Batch path:', new_dir.path)
         batch_filter_hdf5_files(file_objs, new_dir.path, self.filters)
         self.filters.save_pipeline(os.path.join(new_dir.path, 'filters.txt'))
 

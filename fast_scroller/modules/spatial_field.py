@@ -247,7 +247,7 @@ class STSemivar(PersistentWindow):
         block_time = []
         combs = chan_map.site_combinations
         
-        for i in xrange(xb.nblock):
+        for i in range(xb.nblock):
 
             xb_ = xb.block(i)
             if normed:
@@ -390,8 +390,8 @@ class STSemivar(PersistentWindow):
         # 3) change site radius based on connectivity
         i1 = combs.idx1[mask]
         i2 = combs.idx2[mask]
-        c = Counter( map(tuple, np.row_stack( (i1, i2) ).tolist()) )
-        sizes = [ c.get( ij, 0 ) for ij in zip(*self._chan_map.to_mat()) ]
+        c = Counter(map(tuple, np.row_stack((i1, i2)).tolist()))
+        sizes = [c.get(ij, 0) for ij in zip(*self._chan_map.to_mat())]
         sizes = np.array(sizes) - np.min(sizes)
         pc = self.cnx.axes[0].collections[0]
         pc.set_sizes(sizes * 5)
@@ -581,7 +581,7 @@ class SpatialVariance(PlotsInterval):
         N = min( len(t)-1, N )
         Ct = np.empty( (N, len(y), len(y)), 'd' )
         T = len(t)
-        for n in tqdm(xrange(0, skip*N, skip),
+        for n in tqdm(range(0, skip*N, skip),
                       desc='Computing S-T functions', leave=True):
             Ct_ = np.einsum('ik,jk->ij', y[:, :T-n], y[:, n:])
             Ct[n//skip] = Ct_ / (T-n)
@@ -592,7 +592,7 @@ class SpatialVariance(PlotsInterval):
         covar = list()
         for y_ in y_pts:
             xb, yb = sv.binned_variance(x_pts, y_)
-            covar.append( map(np.mean, yb) )
+            covar.append(list(map(np.mean, yb)))
 
         covar = np.array(covar)
         if self.norm_kernel:
@@ -641,7 +641,7 @@ class SpatialVariance(PlotsInterval):
         N = min( len(t)-1, N )
         Ct = np.empty( (N, len(y), len(y)), 'd' )
         T = len(t)
-        for n in tqdm(xrange(0, skip*N, skip),
+        for n in tqdm(range(0, skip*N, skip),
                       desc='Computing S-T functions', leave=True):
             Ct_ = np.einsum('ik,jk->ij', y[:, :T-n], y[:, n:])
             Ct[n//skip] = Ct_ / (T-n)
@@ -663,7 +663,7 @@ class SpatialVariance(PlotsInterval):
         y, x = stcov.shape[-2:]
         midx = int( x/2 ); xx = (np.arange(x) - midx) * chan_map.pitch
         midy = int( y/2 ); yy = (np.arange(y) - midy) * chan_map.pitch
-        for n in xrange(N):
+        for n in range(N):
             stcov[n, midy, midx] = np.mean(Ct[n].diagonal())
 
         #fig, ax = subplots(figsize=(6, 5))
@@ -795,7 +795,7 @@ class SpatialVariance(PlotsInterval):
         while t_pause < 0:
             f_skip += 1
             t_pause = scaled_dt - t_call / float(f_skip)
-            print 'skipping', f_skip, 'samples and pausing', t_pause, 'sec'
+            print('skipping', f_skip, 'samples and pausing', t_pause, 'sec')
 
         # this figure lives outside of figure "management"
         fig, axes = subplots()
@@ -811,8 +811,8 @@ class SpatialVariance(PlotsInterval):
         while t_pause < 0:
             f_skip += 1
             t_pause = scaled_dt - t_call / float(f_skip)
-            print 'skipping', f_skip, 'samples and pausing', t_pause, 'sec'
-        
+            print('skipping', f_skip, 'samples and pausing', t_pause, 'sec')
+
         # average together frames at the skip rate?
         N = y.shape[1]
         blks = N // f_skip
@@ -820,7 +820,7 @@ class SpatialVariance(PlotsInterval):
         # print y.mean()
         def _step(n):
             c.draw()
-            print 'frame', n
+            print('frame', n)
             x, svg, svg_se, Nd = self.compute_variogram(
                 y[:, n:n+1], cm, n_samps=1, normalize=False
                 )

@@ -91,7 +91,7 @@ class IntervalTraces(PlotsInterval):
 
     def map_current_frame(self):
         if not hasattr(self, '_grid'):
-            print 'create figure forced'
+            print('create figure forced')
             self.create_maps()
         ax = self._grid[self._g_idx]
         self._g_idx = (self._g_idx + 1) % len(self._grid)
@@ -105,7 +105,7 @@ class IntervalTraces(PlotsInterval):
             label = '~ '+_hh_mm_ss( 0.5 * (x[0] + x[-1]))
         else:
             t = self.parent._qtwindow.vline.getPos()[0]
-            print t
+            print(t)
             if (x[0] <= t) and (t <= x[-1]):
                 img = chan_map.embed(y[:, x.searchsorted(t)])
             else:

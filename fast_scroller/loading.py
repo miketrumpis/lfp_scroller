@@ -4,11 +4,10 @@ Objects for loading/filtering HDF5 data streams and launching the
 pyqtgraph / traitsui vis tool.
 """
 
-from __future__ import division
 import os
 import numpy as np
 import h5py
-import cPickle
+import pickle
 
 from traits.api import Instance, Button, HasTraits, Float, \
      Str, List, Enum, Int, Bool, cached_property, Range, Property
@@ -44,7 +43,7 @@ def find_pickled_map(hdf_file):
         if 'b_pickle' not in f.keys():
             raise NoPickleError
         arr = f['b_pickle'][0][:]
-        b = cPickle.loads(arr.tostring())
+        b = pickle.loads(arr.tostring())
     chan_map = None
     for k in b.keys():
         if isinstance(b[k], ChannelMap):
@@ -164,7 +163,7 @@ class VisLauncher(HasTraits):
             data=data, chan_map=chan_map, Fs=Fs, units='au', name=''
             )
         mask = interactive_mask(data_bunch, use_db=False)
-        screen_channels = [ channels[i] for i in xrange(len(mask)) if mask[i] ]
+        screen_channels = [ channels[i] for i in range(len(mask)) if mask[i] ]
         screen_map = chan_map.subset(mask)
         return screen_channels, screen_map
 
@@ -179,7 +178,7 @@ class VisLauncher(HasTraits):
                 nc = np.array( map(int, self.skip_chan.split(',')) )
             except:
                 nc = []
-            geo = map(int, self.elec_geometry.split(','))
+            geo = list(map(int, self.elec_geometry.split(',')))
             n_sig_chan = self.n_chan - len(nc)
             chan_map = ChannelMap(np.arange(n_sig_chan), geo)
         elif self.chan_map == 'active':
@@ -206,7 +205,7 @@ class VisLauncher(HasTraits):
         # Check for transposed active data (coming from matlab)
         if isinstance(self.file_data, ActiveArrayFileData) and self.file_data.is_transpose:
             self.file_data.create_transposed()
-            print self.file_data.file
+            print(self.file_data.file)
 
         with h5py.File(self.file_data.file, 'r') as h5:
             #x_scale = h5[self.file_data.fs_field].value ** -1.0
@@ -215,7 +214,7 @@ class VisLauncher(HasTraits):
         num_vectors = len(chan_map) + len(nc)
 
         data_channels = [self.file_data.data_channels[i]
-                         for i in xrange(num_vectors) if i not in nc]
+                         for i in range(num_vectors) if i not in nc]
 
         # permute  channels to stack rows
         chan_idx = zip(*chan_map.to_mat())
