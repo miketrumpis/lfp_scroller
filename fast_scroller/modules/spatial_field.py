@@ -22,16 +22,15 @@ from tqdm import tqdm
 
 from nitime.utils import autocov
 
-from ecoglib.vis.traitsui_bridge import MPLFigureEditor, PingPongStartup
-from ecogdata.util import ChannelMap
-import ecoglib.estimation.spatial_variance as sv
+from ecogdata.channel_map import ChannelMap
 from ecogdata.filt.blocks import BlockedSignal
-from ecogana.anacode.signal_testing import centered_pair_maps
-from ecogana.anacode.spatial_profiles import cxx_to_pairs, matern_semivariogram, matern_spectrum
-from ecoglib.vis.gui_tools import ArrayMap
-import ecogana.anacode.seaborn_lite as sns
-from ecogana.anacode.plot_util import subplots, subplot2grid
-from ecoglib.vis.gui_tools import SavesFigure
+import ecoglib.estimation.spatial_variance as sv
+from ecoglib.signal_testing import spatial_autocovariance
+from ecoglib.estimation import cxx_to_pairs, matern_semivariogram, matern_spectrum
+from ecoglib.vis.traitsui_bridge import MPLFigureEditor, PingPongStartup
+from ecoglib.vis.gui_tools import ArrayMap, SavesFigure
+from ecoglib.vis.plot_util import subplots, subplot2grid
+import seaborn as sns
 
 from .base import PlotsInterval, MultiframeSavesFigure, colormaps
 from ..helpers import PersistentWindow
@@ -314,12 +313,14 @@ class STSemivar(PersistentWindow):
 
     def _get_info_text(self, prm):
         matern_label = make_matern_label(**prm)
-        theta = prm['theta']; nu = prm['nu']
+        theta = prm['theta']
+        nu = prm['nu']
         s0 = matern_spectrum(0, theta=theta, nu=nu)
-        fn = lambda x, t, n: matern_spectrum(x, t, n) - s0/100
+        def fn(x, t, n):
+            return matern_spectrum(x, t, n) - s0 / 100
         kc = so.brentq(fn, 0, 3, args=(theta, nu))
-        bw_label = 'Crit dens: {0:.2f} mm'.format( (2*kc)**-1 )
-        label = '\n'.join( [matern_label, bw_label] )
+        bw_label = 'Crit dens: {0:.2f} mm'.format((2 * kc) ** -1)
+        label = '\n'.join([matern_label, bw_label])
         return label
 
     def _draw_fit(self):
@@ -651,14 +652,9 @@ class SpatialVariance(PlotsInterval):
             Ct /= np.outer(nrm, nrm)
 
         chan_map = self.parent._qtwindow.chan_map
-        chan_combs = chan_map.site_combinations
-
-        idx1 = chan_combs.idx1; idx2 = chan_combs.idx2
-
-        d_idx = np.triu_indices(len(y), k=1)
         stcov = list()
         for Ct_ in tqdm(Ct, desc='Centering S-T kernels'):
-            stcov.append( centered_pair_maps(Ct_[d_idx], idx1, idx2) )
+            stcov.append(spatial_autocovariance(Ct_, chan_map, mean=True))
         stcov = np.array([np.nanmean(s_, axis=0) for s_ in stcov])
         y, x = stcov.shape[-2:]
         midx = int( x/2 ); xx = (np.arange(x) - midx) * chan_map.pitch
@@ -812,7 +808,6 @@ class SpatialVariance(PlotsInterval):
             f_skip += 1
             t_pause = scaled_dt - t_call / float(f_skip)
             print('skipping', f_skip, 'samples and pausing', t_pause, 'sec')
-
         # average together frames at the skip rate?
         N = y.shape[1]
         blks = N // f_skip

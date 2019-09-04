@@ -4,7 +4,7 @@ instead of pyqtgraph and obtain identical behavior but with the extra features
 of pyqtgraph_extensions available.
 """
 from pyqtgraph import *
-from .pyqtgraph_extensions import *
+from ..pyqtgraph_extensions import *
 
 if __name__=="__main__":
     from pyqtgraph import QtGui,QtCore

@@ -1,8 +1,7 @@
-import numpy as np
 import h5py
 from traits.api import Button, Str, File, Bool, HasTraits, List, \
      Instance, on_trait_change
-from traitsui.api import View, Group, UItem, Item, Label, HGroup, \
+from traitsui.api import View, Group, UItem, Label, HGroup, \
      EnumEditor, VGroup, TableEditor
 from traitsui.table_column \
     import ObjectColumn
@@ -67,7 +66,7 @@ class TimeStampSet(HasTraits):
             self.p2_lines = [None for x in range(N)]
 
         # connect a callback that adds only the needed lines
-        # when the scroller's xrange changes
+        # when the scroller's range changes
         p1 = self.parent._qtwindow.p1
         p1.sigRangeChanged.connect(self._draw_lines_in_p1_range)
         p1.sigRangeChanged.emit(None, p1.viewRange())

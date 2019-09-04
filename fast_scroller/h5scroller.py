@@ -2,7 +2,7 @@ import numpy as np
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 pg.setConfigOptions(imageAxisOrder='row-major')
-import .pyqtgraph_extensions as pgx
+from .pyqtgraph_extensions import ImageItem, ColorBarItem, get_colormap_lut
 from ecogdata.channel_map import ChannelMap, CoordinateChannelMap
 
 from .h5data import *
@@ -220,13 +220,11 @@ class FastScroller(object):
         sub_layout = layout.addLayout(colspan=1)
         self.p_img = sub_layout.addViewBox(lockAspect=True)
 
-        self.img = pgx.ImageItem(np.random.randn(*self.chan_map.geometry))
-        self.img.setLookupTable(pgx.get_colormap_lut(name='bipolar'))
+        self.img = ImageItem(np.random.randn(*self.chan_map.geometry))
+        self.img.setLookupTable(get_colormap_lut(name='bipolar'))
         self.p_img.addItem(self.img)
         self.p_img.autoRange()
-        self.cb = pgx.ColorBarItem(
-            image=self.img, label='Voltage ({0})'.format(units)
-            )
+        self.cb = ColorBarItem(image=self.img, label='Voltage ({0})'.format(units))
         self.img.setLevels( (-y_spacing, y_spacing) )
         sub_layout.addItem(self.cb)
         mid_x, top_y = self.chan_map.geometry[1] / 2.0, self.chan_map.geometry[0] + 2.0

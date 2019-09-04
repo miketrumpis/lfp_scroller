@@ -16,7 +16,7 @@ from traits.api import HasTraits, Str, Instance, Bool, Int, Property, \
 from traitsui.api import Item, RangeEditor, UItem, HGroup, FileEditor
 
 from ecoglib.vis.ani import write_anim
-from ecogana.anacode.plot_util import subplots
+from ecoglib.vis.plot_util import subplots
 from ecoglib.vis.gui_tools import SavesFigure
 
 from ..helpers import Error, validate_file_path

@@ -1,7 +1,7 @@
 import numpy as np
 
 from traits.api import Button, Bool, Float, Instance, Property, property_depends_on, Range, Enum
-from traitsui.api import View, HGroup, Group, UItem, Item, Label
+from traitsui.api import View, HGroup, Group, UItem, Item
 
 from nitime.algorithms import dpss_windows
 

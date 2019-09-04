@@ -5,7 +5,7 @@ from mpl_toolkits.axes_grid1 import AxesGrid
 from traits.api import Button, Bool, Enum, Int
 from traitsui.api import View, HGroup, VGroup, Group, Item, UItem, Label
 
-import ecogana.anacode.seaborn_lite as sns
+import seaborn as sns
 
 from .base import PlotsInterval, SimpleFigure, colormaps
 
@@ -105,7 +105,6 @@ class IntervalTraces(PlotsInterval):
             label = '~ '+_hh_mm_ss( 0.5 * (x[0] + x[-1]))
         else:
             t = self.parent._qtwindow.vline.getPos()[0]
-            print(t)
             if (x[0] <= t) and (t <= x[-1]):
                 img = chan_map.embed(y[:, x.searchsorted(t)])
             else:

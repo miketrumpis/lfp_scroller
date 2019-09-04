@@ -1,7 +1,5 @@
-from traits.api import HasTraits, Instance, Float, Enum, \
-     Any, List, on_trait_change, Event, Str
-from traitsui.api import View, UItem, VSplit, CustomEditor, \
-     HSplit, Group, Label, ListEditor
+from traits.api import Instance, Float, Enum, Any, List, on_trait_change, Event, Str
+from traitsui.api import View, UItem, VSplit, CustomEditor, HSplit, Group, Label, ListEditor
 
 from pyqtgraph.Qt import QtGui
 
@@ -80,4 +78,4 @@ class VisWrapper(PersistentWindow):
             title=self.recording
         )
         return v
-    
+

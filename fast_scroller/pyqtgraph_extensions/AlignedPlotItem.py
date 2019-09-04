@@ -1,8 +1,7 @@
 import pyqtgraph as pg
-from pyqtgraph import QtCore,QtGui
+from pyqtgraph import QtCore
 from . import AxisItem
 from .misc import LegendItem,ImageItem
-from pyqtgraph.python2_3 import str
 
 class AlignedPlotItem(QtCore.QObject):
     sigRangeChanged = QtCore.Signal(object, object)    ## Emitted when the ViewBox range has changed

@@ -16,10 +16,11 @@ from traitsui.api import View, Group, VGroup, HGroup, UItem, Item, \
 from pyface.api import MessageDialog
 
 from ecogdata.devices.electrode_pinouts import get_electrode_map, electrode_maps
-from ecogdata.devices.channel_picker import interactive_mask
 from ecogdata.util import Bunch
 from ecogdata.channel_map import ChannelMap
 from ecogdata.expconfig import params
+
+from ecoglib.signal_testing import interactive_mask
 
 from .h5scroller import FastScroller
 from .h5data import h5mean

@@ -4,7 +4,7 @@ from scipy.signal import lfilter, lfilter_zi, hilbert
 from scipy.interpolate import interp1d
 from tqdm import tqdm
 from ecogdata.util import input_as_2d
-from ecogdata.numutil import nextpow2
+from ecogdata.util import nextpow2
 
 
 def h5mean(array, axis, rowmask=(), start=0, stop=None):

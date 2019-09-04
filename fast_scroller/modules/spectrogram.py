@@ -8,8 +8,8 @@ from traitsui.api import View, Group, VGroup, HGroup, Item, UItem, \
      Label, EnumEditor
      
 
-from ecogdata.numutil import nextpow2
-from ecoglib.estimation.jackknife import Jackknife
+from ecogdata.util import nextpow2
+from ecoglib.estimation.resampling import Jackknife
 import ecoglib.estimation.multitaper as msp
 
 from .base import PlotsInterval
