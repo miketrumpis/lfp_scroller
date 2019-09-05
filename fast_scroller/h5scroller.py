@@ -5,8 +5,6 @@ pg.setConfigOptions(imageAxisOrder='row-major')
 from .pyqtgraph_extensions import ImageItem, ColorBarItem, get_colormap_lut
 from ecogdata.channel_map import ChannelMap, CoordinateChannelMap
 
-from .h5data import *
-
 
 def embed_frame(channel_map, vector):
     if isinstance(channel_map, CoordinateChannelMap):
@@ -34,6 +32,7 @@ class HMSAxis(pg.AxisItem):
             strns.append('{0:02d}:{1:02d}:{2:02d}'.format(*self._to_hms(x)))
         return strns
 
+
 class PlainSecAxis(pg.AxisItem):
 
     def tickStrings(self, values, scale, spacing):
@@ -41,7 +40,8 @@ class PlainSecAxis(pg.AxisItem):
             return super(PlainSecAxis, self).tickStrings(values,scale,spacing)
         strns = list(map(lambda x: str(x), values))
         return strns
-        
+
+
 class HDF5Plot(pg.PlotCurveItem):
     def __init__(self, *args, **kwds):
         self.hdf5 = None
@@ -148,6 +148,7 @@ class HDF5Plot(pg.PlotCurveItem):
             pen = pg.mkPen(width=0)
         self.setShadowPen(pen)
 
+
 class FastScroller(object):
 
     # noinspection PyStatementEffect
@@ -157,8 +158,7 @@ class FastScroller(object):
             max_zoom=120.0, units='V'
             ):
         """
-        Scroller GUI loading a minimal amount of timeseries to
-        display.
+        Scroller GUI loading a minimal amount of timeseries to display.
 
         X-units are currently assumed to be seconds.
 
@@ -271,7 +271,7 @@ class FastScroller(object):
             curve.sigClicked.connect(self.highlight_curve)
             self.p1.addItem(curve)
             self.p1.addItem(curve.text)
-            self._curves.append( curve )
+            self._curves.append(curve)
 
         # Add mean trace to bottom plot
         self.nav_trace = pg.PlotCurveItem(x=np.arange(len(nav_trace)) * x_scale, y=nav_trace)
@@ -300,15 +300,14 @@ class FastScroller(object):
         # a callable frame filter may be set on this object to affect frame display
         self.frame_filter = None
 
-
     def current_frame(self):
         return self.region.getRegion()
 
     def current_data(self):
         x_vis = self._curves[0].x_visible
         y_vis = self._curves[0].y_visible
-        x = np.empty( (len(self._curves), len(x_vis)), x_vis.dtype )
-        y = np.empty( (len(self._curves), len(y_vis)), y_vis.dtype )
+        x = np.empty((len(self._curves), len(x_vis)), x_vis.dtype)
+        y = np.empty((len(self._curves), len(y_vis)), y_vis.dtype)
         x[0] = x_vis
         y[0] = y_vis
         for i in range(1, len(self._curves)):
@@ -330,7 +329,7 @@ class FastScroller(object):
         newX = self.p2.vb.mapSceneToView(pos).x()
         minX, maxX = self.region.getRegion()
         rng = 0.5 * (maxX - minX)
-        self.region.setRegion( [ newX - rng, newX + rng ] )
+        self.region.setRegion([newX - rng, newX + rng])
 
     def fine_nav(self, evt):
         if QtGui.QApplication.keyboardModifiers() != QtCore.Qt.ShiftModifier:
@@ -351,7 +350,7 @@ class FastScroller(object):
                 # can't do anything!
                 return
             idx = self._curves[0].x_visible.searchsorted(x)
-            frame_vec = np.empty( len(self.chan_map), 'd' )
+            frame_vec = np.empty(len(self.chan_map), 'd')
             for i in range(len(self.chan_map)):
                 frame_vec[i] = self._curves[i].y_visible[idx]
 
@@ -366,7 +365,7 @@ class FastScroller(object):
     def set_mean_image(self):
         if not hasattr(self._curves[0], 'y_visible'):
             return
-        image = np.empty( len(self.chan_map), 'd' )
+        image = np.empty(len(self.chan_map), 'd')
         for i in range(len(self.chan_map)):
             image[i] = self._curves[i].y_visible.std()
         x_vis = self._curves[0].x_visible
@@ -382,7 +381,6 @@ class FastScroller(object):
         self.p1.setXRange(minX, maxX, padding=0)
         # update image with mean of the current view interval
         self.set_mean_image()
-        
 
     def updateRegion(self, window, viewRange):
         rgn = viewRange[0]

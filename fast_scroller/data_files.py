@@ -17,6 +17,7 @@ from pyface.api import DirectoryDialog, MessageDialog, OK
 
 from ecogdata.devices.load.open_ephys import hdf5_open_ephys_channels
 from ecogdata.devices.load.mux import mux_sampling
+from ecogdata.devices.load.active_electrodes import get_daq_unmix, pitch_lookup
 from ecogdata.filt.time import downsample
 from ecogdata.channel_map import ChannelMap
 
@@ -24,6 +25,7 @@ from .h5data import FilteredReadCache, h5mean, ReadCache, \
      DCOffsetReadCache, CommonReferenceReadCache, interpolate_blanked, H5Chunks
 from .filtering import FilterPipeline, pipeline_factory
 from .helpers import Error, PersistentWindow
+
 
 class FileHandler(Handler):
 
@@ -36,8 +38,12 @@ class FileHandler(Handler):
         self.fields = list(h5.keys())
         h5.close()
 
+
 class FileData(HasTraits):
     """Basic model for an HDF5 file holding an array timeseries."""
+    # The "data field" of the hdf5 file should be a floating point array (which may be violated by the black rock
+    # subclass). Downsampling and filtering do not re-scale the voltage values, so intermediate files have the same
+    # gain/scale as the input files.
     file = File(filter=['*.h5'], exists=True)
     data_field = Str
     fs_field = Str
@@ -62,7 +68,7 @@ class FileData(HasTraits):
         try:
             with h5py.File(self.file, 'r') as f:
                 if self.data_field in f:
-                    return list(range( f[self.data_field].shape[0]))
+                    return list(range(f[self.data_field].shape[0]))
                 else:
                     return []
         except IOError:
@@ -144,7 +150,7 @@ class FileData(HasTraits):
         )
         return view
 
-from ecogdata.devices.load.active_electrodes import get_daq_unmix, pitch_lookup
+
 class ActiveArrayFileData(FileData):
 
     data_field = Property(fget=lambda self: 'data')
@@ -187,7 +193,6 @@ class ActiveArrayFileData(FileData):
             shape = fr['data'].shape
         return shape[1] == nrow * ncol
 
-
     def create_transposed(self, where='.'):
         if not os.path.exists(self.file):
             return
@@ -226,7 +231,6 @@ class ActiveArrayFileData(FileData):
         self.file = f.name
         return f.name
 
-
     def make_channel_map(self):
         unmix = get_daq_unmix(self.daq, self.headstage, self.electrode)
         with h5py.File(self.file, 'r') as f:
@@ -248,7 +252,7 @@ class ActiveArrayFileData(FileData):
             if col in data_cols:
                 arow = data_rows.index(row)
                 acol = data_cols.index(col)
-                chan_map.append( arow * len(data_cols) + acol )
+                chan_map.append(arow * len(data_cols) + acol)
             else:
                 no_con.append(c)
         nr = len(unmix.row)
@@ -266,6 +270,7 @@ class ActiveArrayFileData(FileData):
             )
         vgrp.content.insert(0, new_group)
         return v
+
 
 class BlackrockFileData(FileData):
     data_field = Property(fget=lambda self: 'data')
@@ -374,7 +379,8 @@ class OpenEphysFileData(FileData):
             resizable=True
         )
         return v
-        
+
+
 _sampling = list(mux_sampling.keys()) + ['mux3', 'unknown']
 class Mux7FileData(FileData):
     """
@@ -383,11 +389,11 @@ class Mux7FileData(FileData):
     """
 
     y_scale = Property(fget=lambda self: 1.0 / self.gain)
-    gain = Enum( 12, (3, 4, 10, 12, 20) )
+    gain = Enum(12, (3, 4, 10, 12, 20))
     data_field = Property(fget=lambda self: 'data')
     fs_field = Property(fget=lambda self: 'Fs')
     dc_subtract = Bool(False)
-    sampling_style = Enum( 'mux7_1card', _sampling )
+    sampling_style = Enum('mux7_1card', _sampling)
 
     def _get_data_channels(self):
         if not os.path.exists(self.file):
@@ -441,6 +447,7 @@ class Mux7FileData(FileData):
             )
         return view
 
+
 class FilesHandler(Handler):
 
     def object_file_dir_changed(self, info):
@@ -451,10 +458,11 @@ class FilesHandler(Handler):
         info.object.working_files = []
         if not d:
             return
-        h5_files = sorted( glob( os.path.join(d, '*.h5') ) )
+        h5_files = sorted(glob(os.path.join(d, '*.h5')))
         h5_files = [os.path.split(h)[1] for h in h5_files]
         h5_files = [os.path.splitext(h)[0] for h in h5_files]
         info.object._available_hdf5_files = h5_files
+
 
 def concatenate_hdf5_files(files, new_file, filters=None):
     # files is a list of FileData objects
@@ -467,24 +475,24 @@ def concatenate_hdf5_files(files, new_file, filters=None):
         with h5py.File(fd.file, 'r') as h5:
             # samp_res.append( h5[fd.fs_field][()] )
             samp_res.append(fd.Fs)
-            sizes.append( h5[fd.data_field].shape )
+            sizes.append(h5[fd.data_field].shape)
     samp_res = np.array(samp_res)
     assert (samp_res[0] == samp_res[1:]).all(), 'Inconsistent sampling'
-    assert all( [len(s) == 2 for s in sizes] ), 'Only 2D arrays allowed'
+    assert all([len(s) == 2 for s in sizes]), 'Only 2D arrays allowed'
     n_chan = sizes[0][0]
-    assert all( [s[0] == n_chan for s in sizes] ), 'Inconsistent channels'
+    assert all([s[0] == n_chan for s in sizes]), 'Inconsistent channels'
 
     if filters is not None:
         filters = filters.make_pipeline(samp_res[0])
     else:
         filters = pipeline_factory([], None)
 
-    time_size = np.sum( [s[1] for s in sizes] )
+    time_size = np.sum([s[1] for s in sizes])
     offset = 0
     with h5py.File(new_file, 'w') as fw:
-        cat_array = fw.create_dataset( files[0].data_field,
-                                       shape=(sizes[0][0], time_size),
-                                       dtype='d', chunks=True )
+        cat_array = fw.create_dataset(files[0].data_field,
+                                      shape=(sizes[0][0], time_size),
+                                      dtype='d', chunks=True)
         fw[files[0].fs_field] = samp_res[0]
         for fd in files:
             with h5py.File(fd.file, 'r') as fr:
@@ -589,7 +597,6 @@ class BatchFilesTool(PersistentWindow):
         batch_filter_hdf5_files(file_objs, new_dir.path, self.filters)
         self.filters.save_pipeline(os.path.join(new_dir.path, 'filters.txt'))
 
-
     def _downsample_fired(self):
         if not len(self.working_files):
             return
@@ -606,7 +613,6 @@ class BatchFilesTool(PersistentWindow):
             fd.ds_rate = self.ds_rate
             fd.file = fd.create_downsampled(where=self.file_dir)
             self._file_map[f] = fd
-        self.file_size
 
     @cached_property
     def _get_set_Fs(self):
@@ -627,7 +633,7 @@ class BatchFilesTool(PersistentWindow):
         if fs > 0:
             size = np.log2(fs)
             n = int(size // 10)
-            size = 2 ** ( size - n * 10.0 )
+            size = 2 ** (size - n * 10.0)
         else:
             size = 0
             n = 0
