@@ -251,25 +251,41 @@ filter_table = TableEditor(
 
 
 def pipeline_factory(f_list, filter_modes, output_file=None, data_field='data'):
+    # TODO: if f_list is empty, is it consistent not to create an output file?
     if not len(f_list):
         return lambda x: x
 
+    def get_x_props(x):
+        if isinstance(x, (list, tuple)):
+            time = sum([arr.shape[1] for arr in x])
+            chan = x[0].shape[0]
+            shape = (chan, time)
+            dtype = x[0].dtype
+            # TODO: handle case for concatenating on axis=0
+            return shape, dtype
+        return x.shape, x.dtype
+
     def anonymous_copy_x(x):
         with NamedTemporaryFile(mode='ab', dir='.') as f:
-            f.file.close()
+            # don't think this is necessary -- should close & delete at context exit
+            # f.file.close()
             fw = h5py.File(f.name, 'w')
-            y = fw.create_dataset(data_field, shape=x.shape,
-                                  dtype=x.dtype, chunks=True)
+            shape, dtype = get_x_props(x)
+            y = fw.create_dataset(data_field, shape=shape, dtype=dtype, chunks=True)
         return y
 
     def copy_x(x):
-        fw = h5py.File(output_file, 'a')
-        y = fw.create_dataset(data_field, shape=x.shape, dtype=x.dtype, chunks=True)
+        fw = h5py.File(output_file, 'w')
+        shape, dtype = get_x_props(x)
+        y = fw.create_dataset(data_field, shape=shape, dtype=dtype, chunks=True)
         return y
         
     def run_list(x, axis=1):
         if output_file is not None:
-            y = copy_x(x)
+            if output_file.lower() == 'same':
+                y = 'same'
+            else:
+                y = copy_x(x)
         else:
             y = anonymous_copy_x(x)
         # call first filter to initialize y
@@ -301,6 +317,9 @@ class FilterPipeline(HasTraits):
     b_save_pipeline = Button('Save pipeline')
     b_load_pipeline = Button('Load pipeline')
 
+    def __len__(self):
+        return len(self.filters)
+
     def serialize_pipeline(self):
         d = dict()
         f_seq = []
@@ -309,7 +328,7 @@ class FilterPipeline(HasTraits):
             f_params['filter type'] = f.filt_type
             f_seq.append(f_params)
         d['filters'] = f_seq
-        d['filters_pickle'] = pickle.dumps(self.filters)
+        d['filters_pickle'] = str(pickle.dumps(self.filters))
         return json.dumps(d, sort_keys=True, indent=2, separators=(',', ':'))
 
 
@@ -321,7 +340,8 @@ class FilterPipeline(HasTraits):
     def load_pipeline(self, path):
         with open(path, 'r') as fp:
             pipe_info = json.load(fp)
-        pipeline = pickle.loads(str(pipe_info['filters_pickle']))
+        f_pickle = pipe_info['filters_pickle']
+        pipeline = pickle.loads(f_pickle.encode(encoding='utf-8'))
         self.filters = pipeline
 
 

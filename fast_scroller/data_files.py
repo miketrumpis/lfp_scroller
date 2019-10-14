@@ -1,6 +1,7 @@
 import os
 from glob import glob
 from functools import partial
+from contextlib import ExitStack
 from tempfile import NamedTemporaryFile
 import numpy as np
 from scipy.signal import detrend
@@ -22,7 +23,7 @@ from ecogdata.filt.time import downsample
 from ecogdata.channel_map import ChannelMap
 
 from .h5data import FilteredReadCache, h5mean, ReadCache, \
-     DCOffsetReadCache, CommonReferenceReadCache, interpolate_blanked, H5Chunks
+     DCOffsetReadCache, CommonReferenceReadCache, interpolate_blanked, H5Chunks, passthrough
 from .filtering import FilterPipeline, pipeline_factory
 from .helpers import Error, PersistentWindow
 
@@ -464,11 +465,7 @@ class FilesHandler(Handler):
         info.object._available_hdf5_files = h5_files
 
 
-def concatenate_hdf5_files(files, new_file, filters=None):
-    # files is a list of FileData objects
-    # filters is possibly a filter pipeline
-
-    # first pass -- get total size and check for consistency
+def _check_consistency(files):
     sizes = []
     samp_res = []
     for fd in files:
@@ -482,31 +479,84 @@ def concatenate_hdf5_files(files, new_file, filters=None):
     n_chan = sizes[0][0]
     assert all([s[0] == n_chan for s in sizes]), 'Inconsistent channels'
 
-    if filters is not None:
-        filters = filters.make_pipeline(samp_res[0])
-    else:
-        filters = pipeline_factory([], None)
 
-    time_size = np.sum([s[1] for s in sizes])
-    offset = 0
-    with h5py.File(new_file, 'w') as fw:
-        cat_array = fw.create_dataset(files[0].data_field,
-                                      shape=(sizes[0][0], time_size),
-                                      dtype='d', chunks=True)
-        fw[files[0].fs_field] = samp_res[0]
-        for fd in files:
-            with h5py.File(fd.file, 'r') as fr:
-                array = filters(fr[fd.data_field])
-                n = array.shape[1]
-                cat_array[:, offset:offset+n] = array[:]
-            offset += n
-        # copy anything other singleton values from the last file?
-        with h5py.File(fd.file, 'r') as fr:
+def concatenate_hdf5_files(files, new_file, filters=None):
+    # files is a list of FileData objects
+    # filters is possibly a filter pipeline
+
+    # first pass -- get total size and check for consistency
+    _check_consistency(files)
+
+    # Here, the filtering pipeline will create the output file with the correct size
+    samp_res = files[0].Fs
+    data_field = files[0].data_field
+    if filters is not None and len(filters):
+        print('Concatenating with given filters')
+        filters = filters.make_pipeline(samp_res, output_file=new_file)
+    else:
+        # in thise case, just create a new file using passthrough
+        print('Concatenating with passthrough')
+        filters = pipeline_factory([passthrough], [None], output_file=new_file, data_field=data_field)
+
+    with ExitStack() as stack:
+        hdf_files = [stack.enter_context(h5py.File(fd.file, 'r')) for fd in files]
+        arrays = [hdf[data_field] for hdf in hdf_files]
+        filters(arrays)
+
+    fd = files[0]
+    with h5py.File(fd.file, 'r') as fr, h5py.File(new_file, 'r+') as fw:
+        fw[files[0].fs_field] = samp_res
+        for k in set(fr.keys()) - {fd.fs_field, fd.data_field}:
+            if hasattr(fr[k], 'shape') and not len(fr[k].shape):
+                print('picked up key', k)
+                fw[k] = fr[k][()]
+    return new_file
+
+
+def handoff_filter_hdf5_files(files, save_path, filters):
+    """
+    Filter several array files in hand-off mode (to match levels between recordings).
+
+    Parameters
+    ----------
+    files: Sequence[FileData]
+        The input HDF5 file data objects
+    save_path: str
+        Path to save output. Filtered files will have the same names as the input files.
+    filters: FilterPipeline
+        The FilterPipeline to apply. If None or empty, then return.
+
+    """
+
+    # first pass -- get total size and check for consistency
+    _check_consistency(files)
+
+    # TODO: Currently need to COPY the input data prior to filtering because HandOffIter output mode supports 'same'
+    #  but does not yet support a matching set of array outputs.
+    output_files = []
+    for fd in files:
+        save_file = os.path.join(save_path, os.path.split(fd.file)[1])
+        with h5py.File(fd.file, 'r') as fr, h5py.File(save_file, 'w') as fw:
+            # Copy basic fields for filtering
+            fr.copy(fd.data_field, fw)
+            fw[fd.fs_field] = fd.Fs
+        output_files.append(save_file)
+
+    if filters is not None and len(filters):
+        filters = filters.make_pipeline(files[0].Fs, output_file='same')
+
+    with ExitStack() as stack:
+        # Now opening HDF5 files in r+ mode to support write-back
+        hdf_files = [stack.enter_context(h5py.File(file, 'r+')) for file in output_files]
+        arrays = [hdf[fd.data_field] for fd, hdf in zip(files, hdf_files)]
+        filters(arrays)
+
+    for fd, outfile in zip(files, output_files):
+        with h5py.File(fd.file, 'r') as fr, h5py.File(outfile, 'r+') as fw:
             for k in set(fr.keys()) - {fd.fs_field, fd.data_field}:
                 if hasattr(fr[k], 'shape') and not len(fr[k].shape):
                     print('picked up key', k)
                     fw[k] = fr[k][()]
-    return new_file
 
 
 def batch_filter_hdf5_files(files, save_path, filters):
@@ -539,6 +589,7 @@ class BatchFilesTool(PersistentWindow):
     join = Button('Join files')
     batch_proc = Button('Batch filter')
     downsample = Button('Downsample')
+    batch_with_handoff = Bool(True)
     ds_rate = Int(10)
     filters = Instance(FilterPipeline, ())
     headstage_flavor = Enum(Mux7FileData, (Mux7FileData, OpenEphysFileData))
@@ -579,6 +630,7 @@ class BatchFilesTool(PersistentWindow):
         if self.file_suffix:
             new_file_name = new_file_name + '_' + self.file_suffix
         full_file = os.path.join(self.file_dir, new_file_name + '.h5')
+        print('Concatenating {} to {}'.format([fd.file for fd in file_objs], full_file))
         concatenate_hdf5_files(file_objs, full_file, filters=self.filters)
 
     def _batch_proc_fired(self):
@@ -594,7 +646,10 @@ class BatchFilesTool(PersistentWindow):
         file_names = self.working_files
         file_objs = [self._file_map[f] for f in file_names]
         print('Batch path:', new_dir.path)
-        batch_filter_hdf5_files(file_objs, new_dir.path, self.filters)
+        if self.batch_with_handoff:
+            handoff_filter_hdf5_files(file_objs, new_dir.path, self.filters)
+        else:
+            batch_filter_hdf5_files(file_objs, new_dir.path, self.filters)
         self.filters.save_pipeline(os.path.join(new_dir.path, 'filters.txt'))
 
     def _downsample_fired(self):
@@ -657,25 +712,32 @@ class BatchFilesTool(PersistentWindow):
                         UItem('filters', style='custom')
                     ),
                     HGroup(
-                        UItem('batch_proc'),
-                        UItem('join'),
+                        VGroup(
+                            HGroup(
+                                UItem('batch_proc'),
+                                UItem('join')
+                            ),
+                            HGroup(
+                                UItem('batch_with_handoff'),
+                                Label('Filter with level matching')
+                            ),
+                        ),
                         spring,
                         Item('file_suffix', label='File suffix'),
                         spring,
                         Item('file_size', label='Estimated file size',
                              style='readonly')
-                        ),
+                    ),
                     HGroup(
                         UItem('downsample'),
                         Item('ds_rate', label='Downsample factor'),
                         Item('set_Fs', label='Fs for set',
                              style='readonly')
-
-                        )
                     ),
+                ),
                 handler=FilesHandler,
                 title='Batch processing tool',
                 resizable=True
-                )
+        )
         return v
 
