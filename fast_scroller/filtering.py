@@ -3,6 +3,7 @@ from functools import partial
 import h5py
 import pickle
 import json
+import base64
 
 from traits.api import Instance, Button, HasTraits, Float, \
      List, Enum, Int, Bool
@@ -328,7 +329,10 @@ class FilterPipeline(HasTraits):
             f_params['filter type'] = f.filt_type
             f_seq.append(f_params)
         d['filters'] = f_seq
-        d['filters_pickle'] = str(pickle.dumps(self.filters))
+        # write the pickle bytes after some encode filtering (not at all understood)
+        # from here:
+        # https://www.pythonforthelab.com/blog/storing-binary-data-and-serializing/#combining-json-and-pickle
+        d['filters_pickle'] = base64.b64encode(pickle.dumps(self.filters)).decode('ascii')
         return json.dumps(d, sort_keys=True, indent=2, separators=(',', ':'))
 
 
@@ -341,7 +345,9 @@ class FilterPipeline(HasTraits):
         with open(path, 'r') as fp:
             pipe_info = json.load(fp)
         f_pickle = pipe_info['filters_pickle']
-        pipeline = pickle.loads(f_pickle.encode(encoding='utf-8'))
+        # From https://www.pythonforthelab.com/blog/storing-binary-data-and-serializing/#combining-json-and-pickle
+        # reverse the ascii encoding back to bytes from pickle
+        pipeline = pickle.loads(base64.b64decode(f_pickle))
         self.filters = pipeline
 
 
