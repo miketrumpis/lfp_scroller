@@ -408,6 +408,7 @@ class Mux7FileData(FileData):
                 chans = list()
                 for i in dig_order:
                     chans.extend(range(i*n_row, (i+1)*n_row))
+            return chans
         except IOError:
             return []
     
