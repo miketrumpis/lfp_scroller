@@ -21,7 +21,7 @@ color_cycle = {'r', 'c', 'm', 'y', 'g', 'b'}
 
 class TimeStampSet(HasTraits):
     parent = Instance('fast_scroller.new_scroller.VisWrapper')
-    file = File
+    file = File(exists=True)
     name = Str
     color = Str('r')
     timing_array = Str
@@ -134,7 +134,7 @@ tab_editor = TableEditor(
 
 class Timestamps(VisModule):
     name = Str('Time Stamps')
-    file = File
+    file = File(exists=True)
     timing_array = Str
     timing_channels = Str('0')
     time_set = List(TimeStampSet)
