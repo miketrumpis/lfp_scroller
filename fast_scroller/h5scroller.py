@@ -141,7 +141,6 @@ class HDF5Plot(pg.PlotCurveItem):
         vis = self.text.isVisible()
         self.text.setVisible(not vis)
         self.set_text_position()
-        print('Is visible:', not vis)
         if not vis:
             pen = pg.mkPen(color='c', width=4)
         else:

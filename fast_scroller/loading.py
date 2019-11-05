@@ -219,7 +219,7 @@ class VisLauncher(HasTraits):
 
         # permute  channels to stack rows
         chan_idx = list(zip(*chan_map.to_mat()))
-        chan_order = chan_map.lookup(*list(zip( *sorted(chan_idx)[::-1] )))
+        chan_order = chan_map.lookup(*list(zip( *sorted(chan_idx)[::-1])))
         data_channels = [data_channels[i] for i in chan_order]
         cls = type(chan_map)
         chan_map = cls([chan_map[i] for i in chan_order], chan_map.geometry, pitch=chan_map.pitch,
