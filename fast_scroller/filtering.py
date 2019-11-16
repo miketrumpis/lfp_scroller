@@ -268,8 +268,8 @@ def pipeline_factory(f_list, filter_modes, output_file=None, data_field='data'):
 
     def anonymous_copy_x(x):
         with NamedTemporaryFile(mode='ab', dir='.') as f:
-            # don't think this is necessary -- should close & delete at context exit
-            # f.file.close()
+            # This redundant f.file.close is needed by Windows before re-opening the file
+            f.file.close()
             fw = h5py.File(f.name, 'w')
             shape, dtype = get_x_props(x)
             y = fw.create_dataset(data_field, shape=shape, dtype=dtype, chunks=True)
