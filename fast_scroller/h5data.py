@@ -294,12 +294,20 @@ class HandOffIter:
         rec_lengths = [array.shape[1] for array in arrays]
         chunk_sizes = []
         num_blocks = 0
+        if min_chunk is None:
+            # todo: fix dumb 2000 pts hard coding
+            min_chunk = blank_points + 2000
+        else:
+            min_chunk = max(blank_points + 2000, min_chunk)
         for array in arrays:
             size = array.chunks[1]
             if min_chunk is not None:
                 while size < min_chunk:
                     size += array.chunks[1]
+            if size > array.shape[1]:
+                raise ValueError('Minimum chunk size {} is greater than the length of >=1 arrays'.format(min_chunk))
             chunk_sizes.append(size)
+            # todo: is this +1 count correct?
             num_blocks += array.shape[1] // size + 1
         n_chan = arrays[0].shape[0]
         self.n_blocks = num_blocks
@@ -319,16 +327,19 @@ class HandOffIter:
         if isinstance(out, str):
             self._output_file = out
             if self._output_file.lower() != 'same':
-                with h5py.File(self._output_file, 'w') as hdf:
-                    array_name = arrays[0].name.strip('/')
-                    out = hdf.create_dataset(array_name, shape=(n_chan, self.total_length), dtype='f', chunks=True)
-                    hdf.create_dataset('break_points', data=np.cumsum(rec_lengths[:-1], dtype='i'))
+                hdf = h5py.File(self._output_file, 'w')
+                array_name = arrays[0].name.strip('/')
+                out = hdf.create_dataset(array_name, shape=(n_chan, self.total_length), dtype='f', chunks=True)
+                hdf.create_dataset('break_points', data=np.cumsum(rec_lengths[:-1], dtype='i'))
                 self._output_source = out
+                self._closing_output = True
         elif out is not None:
             self._output_source = out
             self._output_file = out.file.filename
+            self._closing_output = False
         else:
             self._output_file = None
+            self._closing_output = False
         self.chans = chans
         self._current_source = 0
         self._current_offset = None
@@ -338,7 +349,7 @@ class HandOffIter:
     def __iter__(self):
         # set up initial offset as the mean(s) in the first file
         self._current_source = self.arrays[0]
-        means = self._slice_source(np.s_[self._blank_points:200], offset=False).mean(axis=1)
+        means = self._slice_source(np.s_[self._blank_points:self._blank_points + 2000], offset=False).mean(axis=1)
         if self._output_file == 'same':
             self._output_source = self.arrays[0]
         self._current_source_num = 0
@@ -381,7 +392,7 @@ class HandOffIter:
             self._blanking_slice = True
             self._break_point = self._output_point + (end_point - start)
             # get the mean of the first few points in the new source
-            new_mean = self._slice_source(np.s_[self._blank_points:200], offset=False).mean(1)
+            new_mean = self._slice_source(np.s_[self._blank_points:self._blank_points + 2000], offset=False).mean(1)
             # new_mean = np.array([self._current_source[c, self._blank_points:200].mean() for c in self.chans])
             # this is the offset to move the new mean to the old mean
             self._current_offset = new_mean[:, None] - old_mean
@@ -418,11 +429,13 @@ class HandOffIter:
 
     def __next__(self):
         if self._end_of_iter:
+            if self._closing_output:
+                self._output_source.file.close()
             raise StopIteration
         start = self._input_point
         stop = start + self._current_step
         if stop > self._current_source.shape[1]:
-            print('hand off slice: {}-{}, file length {}'.format(start, stop, self._current_source.shape[1]))
+            # print('hand off slice: {}-{}, file length {}'.format(start, stop, self._current_source.shape[1]))
             remainder = self._hand_off(start)
             # if the hand-off logic has found end-of-files then simply return the last bit and raise StopIteration
             # next time around
@@ -435,11 +448,11 @@ class HandOffIter:
             r_weight = np.linspace(0, 1, self._blank_points)
             left_point = remainder[:, -1][:, None]
             right_point = next_strip[:, self._blank_points][:, None]
-            next_strip[:, :self._blank_points] = r_weight * right_point * (1 - r_weight) * left_point
+            next_strip[:, :self._blank_points] = r_weight * right_point + (1 - r_weight) * left_point
             arr_slice = np.c_[remainder, next_strip]
             # next input is 1X the current step
             self._input_point = self._current_step
-            print('new input point: {}, file length {}'.format(self._input_point, self._current_source.shape[1]))
+            # print('new input point: {}, file length {}'.format(self._input_point, self._current_source.shape[1]))
             return arr_slice
         else:
             # easy case!
