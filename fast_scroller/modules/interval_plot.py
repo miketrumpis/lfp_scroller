@@ -5,6 +5,8 @@ from mpl_toolkits.axes_grid1 import AxesGrid
 from traits.api import Button, Bool, Enum, Int
 from traitsui.api import View, HGroup, VGroup, Group, Item, UItem, Label
 
+from ecogdata.devices.units import convert_scale, nice_unit_text
+
 import seaborn as sns
 
 from .base import PlotsInterval, SimpleFigure, colormaps
@@ -38,10 +40,16 @@ class IntervalTraces(PlotsInterval):
         f, ax = self._get_fig()
         clr = self._colors[self._axplots[ax]]
         y_levels = np.arange(len(y)) * dy
+        units = 'uV'
+        if np.log10(y_levels[-1]) > 4:
+            convert_scale(y, 'uv', 'mv')
+            convert_scale(y_levels, 'uv', 'mv')
+            units = 'mv'
         ax.plot(x, y.T + y_levels, lw=0.5, color=clr)
         sns.despine(ax=ax)
         if not self.label_channels:
-            ax.set_ylabel('Amplitude (mV)')
+            label = r'Amplitude {}'.format(nice_unit_text(units))
+            ax.set_ylabel(label)
         else:
             ax.set_yticks( y_levels )
             ii, jj = self.parent._qtwindow.chan_map.to_mat()
