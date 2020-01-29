@@ -88,6 +88,7 @@ class FileData(HasTraits):
         return array
 
     def create_downsampled(self, where='.'):
+        # This does not convert units! units out == units in
         if not os.path.exists(self.file):
             return
         fname = os.path.split(self.file)[1]
