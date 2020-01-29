@@ -10,13 +10,21 @@ from traitsui.api import View, VGroup, spring, HGroup, Item
 # Note: implementing as a direct subclass (rather than mixin) to avoid
 # weird multiple inheritance metaclass conflicts.
 # To do correctly: http://mcjeff.blogspot.com/2009/05/odd-python-errors.html
+
+class _window_holder:
+
+    def __init__(self, window):
+        self._hold_ui = window
+
+    def __call__(self):
+        delattr(self, '_hold_ui')
+
+
 class PersistentWindow(HasTraits):
 
     def edit_traits(self, **args):
         ui = super(PersistentWindow, self).edit_traits(**args)
-        self._hold_ui = ui
-        def del_ui():
-            delattr(self, '_hold_ui')
+        del_ui = _window_holder(ui)
         ui.control.destroyed.connect(del_ui)
         return ui
 
