@@ -139,7 +139,8 @@ class VisLauncher(HasTraits):
             mx = int(MEM_CAP / bytes_per_sec)
             array_len = int(array_size[1] / Fs) + 1
             return min(array_len, mx)
-        except (IOError, ValueError) as e:
+        except (IOError, ValueError, TypeError, KeyError) as e:
+            # these exceptions cover what may happen with a weird h5 file or incomplete setup
             return 100
     
     def _concat_tool_launch_fired(self):
