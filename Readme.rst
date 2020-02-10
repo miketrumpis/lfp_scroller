@@ -9,4 +9,4 @@ Entry point:
 
     $ launch_scroller.py
 
-![LFP Scroller screenshot](demo.png)
+.. image:: docs/images/demo.png?raw=true
