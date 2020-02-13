@@ -106,7 +106,7 @@ class HDF5Plot(pg.PlotCurveItem):
             # array suitable for visualizing.
 
             N = len(self.y_visible)
-            Nsub = N // ds
+            Nsub = max(5, N // ds)
             y = self.y_visible[:Nsub * ds].reshape(Nsub, ds)
             visible = np.empty(Nsub*2, dtype='d') #dtype=self.hdf5.dtype)
             visible[0::2] = y.min(axis=1)
