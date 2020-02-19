@@ -53,9 +53,15 @@ class VisWrapper(PersistentWindow):
         else:
             return float(self._y_spacing_enum)
 
-    @on_trait_change('_y_spacing_enum, _y_spacing_entry')
+    @on_trait_change('_y_spacing_enum')
     def _change_spacing(self):
         self._qtwindow.update_y_spacing(self.y_spacing * 1e-6)
+
+    @on_trait_change('_y_spacing_entry')
+    def _change_spacing_from_entry(self):
+        # only change data if we're in entry mode
+        if self.y_spacing == self._y_spacing_entry:
+            self._change_spacing()
 
     def default_traits_view(self):
         ht = 1000
