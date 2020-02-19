@@ -11,6 +11,7 @@ from ..filtering import AutoPanel
 
 __all__ = ['NavigatorManager']
 
+
 class NavigatorBuilder(AutoPanel):
     orientation = 'horizontal'
     visible = Bool(False, info_text='Visible')
@@ -25,17 +26,14 @@ class NavigatorBuilder(AutoPanel):
         self._rowmask = rowmask
         self._curves = ()
 
-
     @on_trait_change('color, width')
     def _change_pen(self):
         for curve in self._curves:
             curve.setPen(pg.mkPen(color=self.color, width=self.width))
 
-
     @on_trait_change('visible')
     def _change_visibility(self):
         self.toggle_visible(status=self.visible)
-
 
     def toggle_visible(self, status=None):
         if not self._curves:
@@ -53,7 +51,6 @@ class MeanTrace(NavigatorBuilder):
 
     def set_curve(self, curve):
         self._curves = (curve,)
-
 
     def compute(self):
         return self._curves
@@ -86,7 +83,7 @@ class PercentileTrace(NavigatorBuilder):
         pcts = map(float, self.percentiles.split(','))
         curves = []
         for p in pcts:
-            p_fun = lambda x: np.percentile(x, p, axis=0)
+            def p_fun(x): return np.percentile(x, p, axis=0)
             v = h5stat(self._array, p_fun, rowmask=self._rowmask)
             t = np.arange(len(v)) * self._x_scale
             c = pg.PlotCurveItem(x=t, y=v * self._y_scale)
@@ -108,6 +105,7 @@ class NavigatorHandler(Handler):
 
 navigator_types = ('Stdev', 'Percentiles')
 
+
 class NavigatorTrace(HasTraits):
     name = Str
     nav_menu = Instance(NavigatorBuilder)
@@ -115,7 +113,6 @@ class NavigatorTrace(HasTraits):
     def __init__(self, array, x_scale, y_scale, rowmask, **traits):
         self._nav_args = (array, x_scale, y_scale, rowmask)
         super(NavigatorTrace, self).__init__(**traits)
-
 
     view = View(
         HGroup(
@@ -142,7 +139,6 @@ class NavigatorManager(VisModule):
     add_navigator = Button('Add navigator')
     draw_navigator = Button('Draw navigator')
 
-
     def __init__(self, **traits):
         super(NavigatorManager, self).__init__(**traits)
         self._data_array = self.parent._qtwindow.array.file_array
@@ -155,7 +151,6 @@ class NavigatorManager(VisModule):
         mean_nav.nav_menu.set_curve(self.parent._qtwindow.nav_trace)
         mean_nav.nav_menu.visible = True
         self.selected = mean_nav
-
 
     def add_navigator_by_type(self, nav_type):
         nav = NavigatorTrace(
@@ -170,10 +165,8 @@ class NavigatorManager(VisModule):
         if len(self.navigators) == 1:
             self.selected = nav
 
-
     def _add_navigator_fired(self):
         self.add_navigator_by_type(self.nav_type)
-
 
     def _draw_navigator_fired(self):
         nav_builder = self.selected.nav_menu
@@ -182,7 +175,6 @@ class NavigatorManager(VisModule):
             if c not in self.parent._qtwindow.p2.items:
                 self.parent._qtwindow.p2.addItem(c)
         nav_builder.visible = True
-
 
     def default_traits_view(self):
         v = View(
@@ -201,6 +193,3 @@ class NavigatorManager(VisModule):
             title=self.name
         )
         return v
-
-
-

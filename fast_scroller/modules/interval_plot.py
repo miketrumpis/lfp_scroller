@@ -11,12 +11,14 @@ import seaborn as sns
 
 from .base import PlotsInterval, SimpleFigure, colormaps
 
+
 def _hh_mm_ss(t):
     h = int(t // 3600)
     t -= h * 3600
     m = int(t // 60)
     t -= m * 60
     return '{h:02d}:{m:02d}:{s:02d}'.format(h=h, m=m, s=int(t))
+
 
 class IntervalTraces(PlotsInterval):
     name = 'Plot Window'
@@ -51,7 +53,7 @@ class IntervalTraces(PlotsInterval):
             label = r'Amplitude {}'.format(nice_unit_text(units))
             ax.set_ylabel(label)
         else:
-            ax.set_yticks( y_levels )
+            ax.set_yticks(y_levels)
             ii, jj = self.parent._qtwindow.chan_map.to_mat()
             labels = map(str, zip(ii, jj))
             ax.set_yticklabels(labels, fontsize=8)
@@ -77,13 +79,13 @@ class IntervalTraces(PlotsInterval):
         fig = figwin.figure
 
         text_size_inch = 11 / fig.dpi
-        
+
         grid = AxesGrid(
             fig, 111, nrows_ncols=(self.map_row, self.map_col),
             axes_pad=1.5 * text_size_inch,
             cbar_mode='single', cbar_location='right',
             cbar_pad='2%', cbar_size='4%'
-            )
+        )
 
         for ax in grid:
             ax.axis('off')
@@ -93,7 +95,7 @@ class IntervalTraces(PlotsInterval):
         # hold onto this or it disappears
         figwin.show()
         self._figwin = figwin
-            
+
     def _insert_map_fired(self):
         self.map_current_frame()
 
@@ -110,7 +112,7 @@ class IntervalTraces(PlotsInterval):
         x = x[0]
         if self.map_rms:
             img = chan_map.embed(y.std(1))
-            label = '~ '+_hh_mm_ss( 0.5 * (x[0] + x[-1]))
+            label = '~ '+_hh_mm_ss(0.5 * (x[0] + x[-1]))
         else:
             t = self.parent._qtwindow.vline.getPos()[0]
             if (x[0] <= t) and (t <= x[-1]):
@@ -136,25 +138,25 @@ class IntervalTraces(PlotsInterval):
                     Label('Label Channels'),
                     UItem('label_channels'),
                     label='Plot current window'
-                    ),
+                ),
                 Group(
                     HGroup(
                         VGroup(
                             UItem('new_maps'),
                             UItem('insert_map'),
                             Item('map_rms', label='Map RMS?'),
-                            ),
+                        ),
                         VGroup(
                             Label('Rows/Columns'),
                             HGroup(UItem('map_row'), UItem('map_col'))
-                            ),
+                        ),
                         VGroup(
                             Label('Colormap'),
                             UItem('cmaps')
-                            )
-                        ),
+                        )
+                    ),
                     label='Voltage heatmaps'
-                    )
                 )
             )
+        )
         return v

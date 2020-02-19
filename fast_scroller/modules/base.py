@@ -5,14 +5,11 @@ from pyqtgraph.Qt import QtGui
 
 import matplotlib as mpl
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_qt4agg import \
-     FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt4agg import \
-     NavigationToolbar2QT as NavigationToolbar
+from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as NavigationToolbar
 from mpl_toolkits.axes_grid1 import AxesGrid
 
-from traits.api import HasTraits, Str, Instance, Bool, Int, Property, \
-     Float, on_trait_change, File, Button
+from traits.api import HasTraits, Str, Instance, Bool, Int, Property, Float, on_trait_change, File, Button
 from traitsui.api import Item, RangeEditor, UItem, HGroup, FileEditor
 
 from ecoglib.vis.ani import write_anim
@@ -24,11 +21,13 @@ from ..helpers import Error, validate_file_path
 # useful colormaps
 colormaps = ['gray', 'jet', 'bwr', 'viridis', 'Blues', 'winter',
              'inferno', 'coolwarm', 'BrBG']
-colormaps.extend( [c + '_r' for c in colormaps] )
+colormaps.extend([c + '_r' for c in colormaps])
 colormaps = sorted(colormaps)
 
 # A no-frills QT window for MPL Figure (modified from SO:
 # https://stackoverflow.com/questions/12459811/how-to-embed-matplotlib-in-pyqt-for-dummies
+
+
 class SimpleFigure(QtGui.QDialog):
     def __init__(self, parent=None, **fig_kwargs):
         super(SimpleFigure, self).__init__(parent)
@@ -50,15 +49,16 @@ class SimpleFigure(QtGui.QDialog):
         layout.addWidget(self.toolbar)
         self.setLayout(layout)
 
+
 class MultiframeSavesFigure(SavesFigure):
     """
     Specialization of SavesFigure that has a plotting element
     with multiple frames that can be scanned-through.
     """
-    
+
     _mx = Int(10)
     _mn = Int(0)
-    mode = Int(0) #Range(low='_mn', high='_mx')
+    mode = Int(0)  # Range(low='_mn', high='_mx')
     mode_name = 'Mode'
     mode_value = Property(Float, depends_on='mode')
     _has_ffmpeg = Bool
@@ -78,7 +78,7 @@ class MultiframeSavesFigure(SavesFigure):
 
     def _get_mode_value(self):
         return np.round(self.frame_index[self.mode], decimals=2)
-        
+
     @on_trait_change('mode')
     def change_frame(self):
         # has to assume fig.axes[0].images[0] has an image!
@@ -90,19 +90,20 @@ class MultiframeSavesFigure(SavesFigure):
         if not validate_file_path(self.video_file):
             ev = Error(
                 error_msg='Invalid video file:\n{0}'.format(self.video_file)
-                )
+            )
             ev.edit_traits()
             return
         mode = self.mode
+
         def step_fn(n):
             self.mode = n
             return (self.fig.axes[0].images[0],)
         write_anim(
             self.video_file, self.fig, step_fn, self._mx,
             quicktime=True
-            )
+        )
         self.mode = mode
-    
+
     def default_traits_view(self):
         v = super(MultiframeSavesFigure, self).default_traits_view()
         vsplit = v.content.content[0]
@@ -113,18 +114,18 @@ class MultiframeSavesFigure(SavesFigure):
                 Item('video_fps', label='FPS',
                      editor=RangeEditor(low=1, high=100, mode='spinner')),
                 UItem('make_video')
-                )
+            )
             vsplit.content.insert(1, vpanel)
         panel = HGroup(
             Item('mode', label='Scroll frames',
                  editor=RangeEditor(low=self._mn, high=self._mx)),
             UItem('mode', visible_when='_mx > 101',
-                 editor=RangeEditor(
-                     low=self._mn, high=self._mx, mode='slider'
-                     )),
+                  editor=RangeEditor(
+                      low=self._mn, high=self._mx, mode='slider'
+                  )),
             Item('mode_value', style='readonly',
                  label='Current frame: {0}'.format(self.mode_name))
-            )
+        )
         vsplit.content.insert(1, panel)
         return v
 
@@ -132,16 +133,17 @@ class MultiframeSavesFigure(SavesFigure):
     def named_toggle(name):
         return MultiframeSavesFigure(mode_name=name)
 
+
 class FigureStack(OrderedDict):
 
     def _create_figure(self, **kwargs):
         fig, axes = subplots(**kwargs)
         return fig, axes
-    
+
     def new_figure(self, **kwargs):
         fig, axes = self._create_figure(**kwargs)
         splot = SavesFigure.live_fig(fig)
-        
+
         def remove_fig():
             try:
                 self.pop(splot)
@@ -158,6 +160,7 @@ class FigureStack(OrderedDict):
         k = list(self.keys())[-1]
         return self[k]
 
+
 class AxesGridStack(FigureStack):
 
     def _create_figure(self, **kwargs):
@@ -168,7 +171,7 @@ class AxesGridStack(FigureStack):
         fig = Figure(figsize=figsize)
         grid = AxesGrid(fig, 111, **kwargs)
         self.grid = grid
-        self.next_grid = { grid : 0 }
+        self.next_grid = {grid: 0}
         return fig, grid
 
     def current_frame(self):
@@ -180,6 +183,7 @@ class AxesGridStack(FigureStack):
         self.next_grid[grid] = g_idx
         return frame
 
+
 class PlotCounter(dict):
 
     def __getitem__(self, a):
@@ -189,7 +193,8 @@ class PlotCounter(dict):
             return n
         self[a] = 0
         return self[a]
-    
+
+
 class VisModule(HasTraits):
     name = Str('__dummy___')
     parent = Instance('fast_scroller.new_scroller.VisWrapper')
@@ -200,7 +205,7 @@ class VisModule(HasTraits):
         ii, jj = self.parent.chan_map.to_mat()
         clist = ['All']
         for i, j in zip(ii, jj):
-            clist.append( '{0}, {1}'.format(i,j) )
+            clist.append('{0}, {1}'.format(i, j))
         return sorted(clist)
 
 
@@ -215,4 +220,3 @@ class PlotsInterval(VisModule):
             return fig, axes
         self._colors = mpl.rcParams["axes.prop_cycle"].by_key()["color"]
         return self._figstack.new_figure(**kwargs)
-

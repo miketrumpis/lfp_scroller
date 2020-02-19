@@ -6,7 +6,7 @@ from pyqtgraph.Qt import QtCore
 
 from traits.api import Button, Enum, Bool, Int, File
 from traitsui.api import View, VGroup, HGroup, UItem, \
-     Item, FileEditor, RangeEditor
+    Item, FileEditor, RangeEditor
 from pyface.timer.api import Timer
 
 import ecoglib.vis.ani as ani
@@ -17,6 +17,7 @@ from .. import pyf_new_api
 
 __all__ = ['AnimateInterval']
 
+
 class AnimateInterval(VisModule):
     name = 'Animate window'
     anim_frame = Button('Animate')
@@ -26,7 +27,7 @@ class AnimateInterval(VisModule):
     drop_video_frames = Int(1)
     video_file = File(
         os.path.join(os.path.abspath(os.curdir), 'vid.mp4')
-        )
+    )
     cmap = Enum('gray', colormaps)
     clim = Enum('display', ('display', '[2-98]%', '[1-99]%', 'full'))
 
@@ -48,7 +49,7 @@ class AnimateInterval(VisModule):
         t0 = time.time()
         scaled_dt = self.anim_time_scale * (x[1] - x[0])
         try:
-            self.parent._qtwindow.set_image_frame(x=x[n], frame_vec=y[:,n])
+            self.parent._qtwindow.set_image_frame(x=x[n], frame_vec=y[:, n])
         except IndexError:
             if pyf_new_api:
                 self._atimer.stop()
@@ -83,15 +84,15 @@ class AnimateInterval(VisModule):
             elif not pyf_new_api and self._atimer.IsRunning():
                 self._atimer.Stop()
                 return
-        
+
         x, self.__y = self.parent._qtwindow.current_data()
         self.__f_skip = 1
         self.__x = x[0]
         dt = self.__x[1] - self.__x[0]
         self.__n_frames = self.__y.shape[1]
         self.__n = 0
-        self._atimer = Timer( self.anim_time_scale * dt * 1000,
-                              self.__step_frame )
+        self._atimer = Timer(self.anim_time_scale * dt * 1000,
+                             self.__step_frame)
 
     def _get_clim(self, array):
         if self.clim == 'full':
@@ -109,7 +110,7 @@ class AnimateInterval(VisModule):
         if not validate_file_path(self.video_file):
             ev = Error(
                 error_msg='Invalid video file:\n{0}'.format(self.video_file)
-                )
+            )
             ev.edit_traits()
             return
 
@@ -140,13 +141,13 @@ class AnimateInterval(VisModule):
                     Item('anim_time_scale', label='Divide real time'),
                     Item('anim_frame'),
                     label='Animate Frames'
-                    ),
+                ),
                 HGroup(
                     VGroup(
                         Item('video_file', label='MP4 File',
-                            editor=FileEditor(dialog_style='save')),
+                             editor=FileEditor(dialog_style='save')),
                         UItem('write_frames')
-                        ),
+                    ),
                     VGroup(
                         Item('cmap', label='Colormap'),
                         Item('clim', label='Color limit mode'),
@@ -154,9 +155,9 @@ class AnimateInterval(VisModule):
                              label='Frame drop rate',
                              editor=RangeEditor(low=1, high=100,
                                                 mode='spinner')),
-                        ),
+                    ),
                     visible_when='_has_ffmpeg'
-                    )
                 )
             )
+        )
         return v

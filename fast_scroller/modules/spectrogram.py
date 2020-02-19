@@ -2,11 +2,9 @@ import numpy as np
 import matplotlib.ticker as ticker
 from scipy.ndimage import gaussian_filter1d
 
-from traits.api import Button, Bool, Enum, Property, Float, \
-     Range, HasTraits, cached_property
-from traitsui.api import View, Group, VGroup, HGroup, Item, UItem, \
-     Label, EnumEditor
-     
+from traits.api import Button, Bool, Enum, Property, Float, Range, HasTraits, cached_property
+from traitsui.api import View, Group, VGroup, HGroup, Item, UItem, Label, EnumEditor
+
 
 from ecogdata.util import nextpow2
 from ecoglib.estimation.resampling import Jackknife
@@ -16,42 +14,43 @@ from .base import PlotsInterval
 
 __all__ = ['IntervalSpectrogram']
 
+
 class IntervalSpectrogram(PlotsInterval):
     name = 'Spectrogram'
 
     ## channel = Str('all')
     ## _chan_list = Property(depends_on='parent.chan_map')
     # estimations details
-    NW = Enum( 2.5, np.arange(2, 11, 0.5).tolist() )
-    lag = Float(25) # ms
-    strip = Float(100) # ms
+    NW = Enum(2.5, np.arange(2, 11, 0.5).tolist())
+    lag = Float(25)  # ms
+    strip = Float(100)  # ms
     detrend = Bool(True)
     adaptive = Bool(True)
-    over_samp = Range(0, 16, mode = 'spinner', value=4)
+    over_samp = Range(0, 16, mode='spinner', value=4)
     high_res = Bool(True)
-    _bandwidth = Property( Float, depends_on='NW, strip' )
+    _bandwidth = Property(Float, depends_on='NW, strip')
 
-    baseline = Float(1.0) # sec
+    baseline = Float(1.0)  # sec
     normalize = Enum('Z score', ('None', 'Z score', 'divide', 'subtract'))
     plot = Button('Plot')
     freq_hi = Float
     freq_lo = Float(0)
     new_figure = Bool(True)
 
-    colormap='Spectral_r'
+    colormap = 'Spectral_r'
 
     def __init__(self, **traits):
         HasTraits.__init__(self, **traits)
-        self.freq_hi = round( (self.parent.x_scale ** -1.0) / 2.0 )
-    
-    #@property_depends_on('NW')
+        self.freq_hi = round((self.parent.x_scale ** -1.0) / 2.0)
+
+    # @property_depends_on('NW')
     @cached_property
     def _get__bandwidth(self):
         #t1, t2 = self.parent._qtwindow.current_frame()
         T = self.strip * 1e-3
         # TW = NW --> W = NW / T
-        return 2.0 * self.NW / T 
-    
+        return 2.0 * self.NW / T
+
     def __default_mtm_kwargs(self, strip):
         kw = dict()
         kw['NW'] = self.NW
@@ -60,9 +59,9 @@ class IntervalSpectrogram(PlotsInterval):
         kw['Fs'] = Fs
         kw['jackknife'] = False
         kw['detrend'] = 'linear' if self.detrend else ''
-        lag = int( Fs * self.lag / 1000. )
+        lag = int(Fs * self.lag / 1000.)
         if strip is None:
-            strip = int( Fs * self.strip / 1000. )
+            strip = int(Fs * self.strip / 1000.)
         kw['NFFT'] = nextpow2(strip)
         kw['pl'] = 1.0 - float(lag) / strip
         if self.high_res:
@@ -82,7 +81,7 @@ class IntervalSpectrogram(PlotsInterval):
             print('Baseline too short: using 2 bins')
             m[:2] = True
         if ptf.ndim < 3:
-            ptf = ptf.reshape( (1,) + ptf.shape )
+            ptf = ptf.reshape((1,) + ptf.shape)
         nf = ptf.shape[1]
         p_bl = ptf[..., m].transpose(0, 2, 1).copy().reshape(-1, nf)
 
@@ -95,11 +94,11 @@ class IntervalSpectrogram(PlotsInterval):
         if mode.lower() == 'divide':
             ptf = ptf.mean(0) / mn[:, None]
         elif mode.lower() == 'subtract':
-            ptf = np.exp(ptf.mean(0)) - np.exp(mn[:,None])
+            ptf = np.exp(ptf.mean(0)) - np.exp(mn[:, None])
         elif mode.lower() == 'z score':
             stdev = jn.estimate(np.std)
             stdev = gaussian_filter1d(stdev, 0.05 * len(mn), mode='reflect')
-            ptf = (ptf.mean(0) - mn[:,None]) / stdev[:,None]
+            ptf = (ptf.mean(0) - mn[:, None]) / stdev[:, None]
         return ptf
 
     def highres_spectrogram(self, array, strip=None, **mtm_kw):
@@ -130,7 +129,6 @@ class IntervalSpectrogram(PlotsInterval):
         else:
             tx, fx, ptf = self.spectrogram(y)
 
-            
         if self.normalize.lower() != 'none':
             ptf = self._normalize(tx, ptf, self.normalize, self.baseline)
         else:
@@ -146,9 +144,10 @@ class IntervalSpectrogram(PlotsInterval):
         im = ax.imshow(
             ptf, extent=[tx[0], tx[-1], fx[0], fx[-1]],
             cmap=self.colormap, origin='lower'
-            )
+        )
         ax.axis('auto')
-        ax.set_xlabel('Time (s)'); ax.set_ylabel('Frequency (Hz)')
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Frequency (Hz)')
         cbar = fig.colorbar(im, ax=ax, shrink=0.5)
         cbar.locator = ticker.MaxNLocator(nbins=3)
         if self.normalize.lower() == 'divide':
@@ -165,7 +164,7 @@ class IntervalSpectrogram(PlotsInterval):
             fig.canvas.draw_idle()
         except:
             pass
-        
+
     def default_traits_view(self):
         v = View(
             HGroup(
@@ -178,14 +177,14 @@ class IntervalSpectrogram(PlotsInterval):
                     HGroup(
                         Item('freq_lo', label='low', width=3),
                         Item('freq_hi', label='high', width=3),
-                        )
-                    ),
+                    )
+                ),
                 VGroup(
                     Item('high_res', label='High-res SG'),
                     Item('normalize', label='Normalize'),
                     Item('baseline', label='Baseline length (sec)'),
                     label='Spectrogram setup'
-                    ),
+                ),
                 VGroup(
                     Item('NW'),
                     Item('_bandwidth', label='BW (Hz)',
@@ -195,12 +194,11 @@ class IntervalSpectrogram(PlotsInterval):
                     Item('detrend', label='Detrend window'),
                     Item('adaptive', label='Adaptive MTM'),
                     label='Estimation details', columns=2
-                    ),
+                ),
                 VGroup(
                     Item('over_samp', label='Oversamp high-res SG'),
                     enabled_when='high_res'
-                    )
                 )
             )
+        )
         return v
-    

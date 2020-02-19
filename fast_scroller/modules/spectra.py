@@ -1,6 +1,5 @@
 import numpy as np
-from traits.api import Button, Bool, Enum, Property, Float, \
-     cached_property, Str
+from traits.api import Button, Bool, Enum, Property, Float, cached_property, Str
 from traitsui.api import View, VGroup, HGroup, Item, UItem
 
 from ecogdata.util import nextpow2
@@ -13,10 +12,11 @@ from .base import PlotsInterval
 
 __all__ = ['IntervalSpectrum']
 
+
 class IntervalSpectrum(PlotsInterval):
     name = 'Power Spectrum'
-    NW = Enum( 2.5, np.arange(2, 11, 0.5).tolist() )
-    _bandwidth = Property( Float, depends_on='NW, parent.region' )
+    NW = Enum(2.5, np.arange(2, 11, 0.5).tolist())
+    _bandwidth = Property(Float, depends_on='NW, parent.region')
     pow2 = Bool(True)
     avg_spec = Bool(True)
     sem = Bool(True)
@@ -38,8 +38,8 @@ class IntervalSpectrum(PlotsInterval):
         t1, t2 = self.parent._qtwindow.current_frame()
         T = t2 - t1
         # TW = NW --> W = NW / T
-        return 2.0 * self.NW / T 
-    
+        return 2.0 * self.NW / T
+
     def spectrum(self, array, **mtm_kw):
         kw = self.__default_mtm_kwargs(array.shape[-1])
         kw.update(mtm_kw)
@@ -63,16 +63,16 @@ class IntervalSpectrum(PlotsInterval):
             ## l_pxx = np.log(pxx)
             ## mn = l_pxx.mean(0)
             ## se = l_pxx.std(0) / np.sqrt(len(l_pxx))
-            se = np.exp( mn - se ), np.exp( mn + se )
+            se = np.exp(mn - se), np.exp(mn + se)
             filled_interval(
                 ax.semilogy, fx, np.exp(mn), se,
                 color=self._colors[plot_count], label=label, ax=ax
-                )
+            )
             ax.legend()
         else:
             lns = ax.semilogy(
                 fx, pxx.T, lw=.25, color=self._colors[plot_count]
-                )
+            )
             ax.legend(lns[:1], (label,))
         ax.set_ylabel('Power Spectral Density (uV^2 / Hz)')
         ax.set_xlabel('Frequency (Hz)')
@@ -91,21 +91,19 @@ class IntervalSpectrum(PlotsInterval):
                     Item('NW', label='NW'),
                     Item('pow2', label='Use radix-2 FFT'),
                     Item('adaptive', label='Adaptive MTM'),
-                    ),
+                ),
                 HGroup(
                     Item('avg_spec', label='Plot avg'),
                     Item('sem', label='Use S.E.M.'),
                     Item('new_figure', label='Plot in new figure')
-                    ),
+                ),
                 HGroup(
                     UItem('plot'),
                     Item('label', label='Plot label', width=15),
                     Item('_bandwidth', label='BW (Hz)',
                          style='readonly', width=4),
-                    ),
+                ),
                 label='Spectrum plotting'
-                )
             )
+        )
         return v
-
-    

@@ -7,6 +7,7 @@ from ..filtering import AutoPanel
 
 __all__ = ['FrameFilters']
 
+
 class FilterBuilder(AutoPanel):
     orientation = 'horizontal'
 
@@ -14,9 +15,9 @@ class FilterBuilder(AutoPanel):
 class GaussianFilter(FilterBuilder):
     sigma = Float(1.0)
 
-
     def make_filter(self):
-        fn = lambda x: gaussian_filter(x, self.sigma)
+        def fn(x):
+            return gaussian_filter(x, self.sigma)
         return fn
 
 
@@ -51,6 +52,7 @@ filter_tabs = ListEditor(
 
 filter_types = ('Gaussian',)
 
+
 class FrameFilters(VisModule):
     name = 'Frame Filters'
     filters = List(SpatialFilter)
@@ -60,26 +62,21 @@ class FrameFilters(VisModule):
     set_filter = Button('Set filter')
     unset_filter = Button('Unset filter')
 
-
     def add_filter_by_type(self, filter_type):
         filt = SpatialFilter(name=filter_type)
         self.filters.append(filt)
         if len(self.filters) == 1:
             self.selected = filt
 
-
     def _add_filter_fired(self):
         self.add_filter_by_type(self.filter_type)
-
 
     def _set_filter_fired(self):
         fn = self.selected.menu.make_filter()
         self.parent._qtwindow.frame_filter = fn
 
-
     def _unset_filter_fired(self):
         self.parent._qtwindow.frame_filter = None
-
 
     def default_traits_view(self):
         v = View(
