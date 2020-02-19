@@ -1,9 +1,11 @@
+from contextlib import contextmanager
 import numpy as np
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 pg.setConfigOptions(imageAxisOrder='row-major')
 from .pyqtgraph_extensions import ImageItem, ColorBarItem, get_colormap_lut
 from ecogdata.channel_map import ChannelMap, CoordinateChannelMap
+from ecogdata.parallel.array_split import timestamp
 
 
 def embed_frame(channel_map, vector):
@@ -13,6 +15,30 @@ def embed_frame(channel_map, vector):
     else:
         frame = channel_map.embed(vector, fill=0)[::-1].copy()
     return frame
+
+
+@contextmanager
+def block_signals(qtobj, forced_state=None):
+    """
+    Context that blocks/unblocks signal emission. By default the signal emission state is toggled, but it can be
+    forced to a state using "forced_state". Emission status is always returned to the original status, regardless of
+    forcing.
+
+    Parameters
+    ----------
+    qtobj: QtCore.QObject
+    forced_state: bool or None
+
+    """
+    if forced_state is not None:
+        state = not forced_state
+    else:
+        state = qtobj.signalsBlocked()
+    try:
+        orig_state = qtobj.blockSignals(not state)
+        yield
+    finally:
+        qtobj.blockSignals(orig_state)
 
 
 class HMSAxis(pg.AxisItem):
@@ -42,6 +68,61 @@ class PlainSecAxis(pg.AxisItem):
         return strns
 
 
+class CurveCollection(QtCore.QObject):
+    data_changed = QtCore.pyqtSignal(QtCore.QObject)
+
+    def __init__(self, curves, *args, **kwargs):
+        super(CurveCollection, self).__init__(*args, **kwargs)
+        self.curves = curves
+        self._current_set = set()
+        self._connections = list()
+        for c in curves:
+            self._connections.append(c.sigPlotChanged.connect(self.count_curves))
+
+    def count_curves(self, curve):
+        self._current_set.add(curve)
+        if len(self._current_set) == len(self.curves):
+            self.data_changed.emit(self)
+            print('reached count so emitting and resetting current set')
+            self._current_set = set()
+
+    def current_data(self):
+        x_vis = self.curves[0].x_visible
+        y_vis = self.curves[0].y_visible
+        x = np.empty((len(self.curves), len(x_vis)), x_vis.dtype)
+        y = np.empty((len(self.curves), len(y_vis)), y_vis.dtype)
+        x[0] = x_vis
+        y[0] = y_vis
+        for i in range(1, len(self.curves)):
+            x[i] = self.curves[i].x_visible
+            y[i] = self.curves[i].y_visible
+        return x, y
+
+    @contextmanager
+    def disable_listener(self, blocking=True):
+        if blocking:
+            for cnx, curve in zip(self._connections, self.curves):
+                curve.sigPlotChanged.disconnect(cnx)
+            self._connections = list()
+        try:
+            yield
+        finally:
+            if blocking:
+                for c in self.curves:
+                    self._connections.append(c.sigPlotChanged.connect(self.count_curves))
+
+    def set_data_on_collection(self, array, ignore_signals=True):
+        for data, line in zip(array, self.curves):
+            with self.disable_listener(blocking=ignore_signals):
+                line.set_external_data(data)
+
+    def redraw_data(self, ignore_signals=False):
+        # this would be used e.g. when the y-offsets have changed but the view limits have not
+        for line in self.curves:
+            with self.disable_listener(blocking=ignore_signals):
+                line.updateHDF5Plot()
+
+
 class HDF5Plot(pg.PlotCurveItem):
     def __init__(self, *args, **kwds):
         self.hdf5 = None
@@ -52,6 +133,10 @@ class HDF5Plot(pg.PlotCurveItem):
         self.text = pg.TextItem('empty', anchor=(0.5, 1.0), color=(255, 98, 65), fill=(65, 222, 255, 180))
         #self.text.setParent(self.curve_point)
         self.text.setVisible(False)
+        self.series_filter = None
+        # track current values of (x1, x2) to protect against reloads triggered by spurious view changes
+        self._cx1 = 0
+        self._cx2 = 0
         
     def setHDF5(self, data, index, offset, dx=1.0, scale=1):
         self.hdf5 = data
@@ -60,16 +145,28 @@ class HDF5Plot(pg.PlotCurveItem):
         self._xscale = dx
         self.offset = offset
         self.updateHDF5Plot()
-        
+
+    def _view_really_changed(self):
+        r = self._view_range()
+        if r is None:
+            return False
+        return (r[0] != self._cx1) or (r[1] != self._cx2)
+
     def viewRangeChanged(self):
-        self.updateHDF5Plot()
+        if self.offset == 0:
+            print('range-change-triggered', timestamp())
+        # only look for x-range changes that actually require loading different data
+        if self._view_really_changed():
+            if self.offset == 0:
+                print('ranged actually changed:', self._view_range(), timestamp())
+            self.updateHDF5Plot()
 
     def _view_range(self):
         vb = self.parentWidget()
         if vb is None:
             return  # no ViewBox yet
         # Determine what data range must be read from HDF5
-        xrange = self.parentWidget().viewRange()[0]
+        xrange = vb.viewRange()[0]
         srange = list(map(lambda x: int(x / self._xscale), xrange))
         start = max(0,int(srange[0])-1)
         stop = min(self.hdf5.shape[-1], int(srange[1]+2))
@@ -82,25 +179,32 @@ class HDF5Plot(pg.PlotCurveItem):
         start, stop = r
         self.x_visible = np.arange(start, stop) * self._xscale
         self.y_visible = self.hdf5[self.index, start:stop] * self._yscale
+
+    def set_external_data(self, y):
+        if len(y) != len(self.x_visible):
+            raise ValueError('Shape of external series does not match the current window.')
+        self.y_visible = y
+        self.updateHDF5Plot(data_ready=True)
         
-    def updateHDF5Plot(self):
+    def updateHDF5Plot(self, data_ready=False):
+        if self.offset == 0:
+            print('update hdf5 lines called: DR', data_ready, timestamp())
         if self.hdf5 is None:
             self.setData([])
             return
-        
-        self._set_data()
+
+        if not data_ready:
+            self._set_data()
         r = self._view_range()
         if not r:
             return
         start, stop = r
         # Decide by how much we should downsample 
         ds = int((stop-start) / self.limit) + 1
-        #ds = 1
         if ds == 1:
             # Small enough to display with no intervention.
             visible = self.y_visible
             x_visible = self.x_visible
-            ## visible += self.offset
         else:
             # Here convert data into a down-sampled
             # array suitable for visualizing.
@@ -116,13 +220,15 @@ class HDF5Plot(pg.PlotCurveItem):
             if x_samp[-1] >= len(self.x_visible):
                 x_samp[-1] = N-1
             x_visible = np.take(self.x_visible, x_samp)
-             
-        #visible = detrend(visible, type='constant') + self.offset
+
         visible = visible + self.offset
-        self.setData(x=x_visible, y=visible) # update the plot
+        self.setData(x=x_visible, y=visible) # update_zoom_callback the plot
         #self.setPos(start*self._xscale, 0) # shift to match starting index
         self.resetTransform()
         self.set_text_position()
+        # mark these start, stop positions to match against future view-change signals
+        self._cx1 = start
+        self._cx2 = stop
 
     def set_text_position(self):
         if self.text.isVisible():
@@ -271,6 +377,8 @@ class FastScroller(object):
             self.p1.addItem(curve)
             self.p1.addItem(curve.text)
             self._curves.append(curve)
+        # this is an object to monitor (and manipulate?) the set of curves
+        self.curve_collection = CurveCollection(self._curves)
 
         # Add mean trace to bottom plot
         self.nav_trace = pg.PlotCurveItem(x=np.arange(len(nav_trace)) * x_scale, y=nav_trace)
@@ -279,8 +387,8 @@ class FastScroller(object):
         self.p2.setYRange(*np.percentile(nav_trace, [1, 99]))
         
         # Set bidirectional plot interaction
-        self.region.sigRegionChanged.connect(self.update)
-        self.p1.sigRangeChanged.connect(self.updateRegion)
+        self.region.sigRegionChanged.connect(self.update_zoom_callback)
+        self.p1.sigXRangeChanged.connect(self.update_region_callback)
 
         # Do navigation jumps (if shift key is down)
         self.p2.scene().sigMouseClicked.connect(self.jump_nav)
@@ -303,16 +411,7 @@ class FastScroller(object):
         return self.region.getRegion()
 
     def current_data(self):
-        x_vis = self._curves[0].x_visible
-        y_vis = self._curves[0].y_visible
-        x = np.empty((len(self._curves), len(x_vis)), x_vis.dtype)
-        y = np.empty((len(self._curves), len(y_vis)), y_vis.dtype)
-        x[0] = x_vis
-        y[0] = y_vis
-        for i in range(1, len(self._curves)):
-            x[i] = self._curves[i].x_visible
-            y[i] = self._curves[i].y_visible
-        return x, y
+        return self.curve_collection.current_data()
 
     def highlight_curve(self, curve):
         n = self._curves.index(curve)
@@ -328,7 +427,7 @@ class FastScroller(object):
         newX = self.p2.vb.mapSceneToView(pos).x()
         minX, maxX = self.region.getRegion()
         rng = 0.5 * (maxX - minX)
-        self.region.setRegion([newX - rng, newX + rng])
+        self.update_region([newX - rng, newX + rng])
 
     def fine_nav(self, evt):
         if QtGui.QApplication.keyboardModifiers() != QtCore.Qt.ShiftModifier:
@@ -372,21 +471,52 @@ class FastScroller(object):
         frame = embed_frame(self.chan_map, image)
         self.img.setImage(frame, autoLevels=False)
         self.frame_text.setText('Time ~ {:.3f}s'.format(x_avg))
-        
-    def update(self):
-        self.region.setZValue(10)
+
+    def update_zoom_from_region(self):
+        # self.region.setZValue(10)
         minX, maxX = self.region.getRegion()
-        # update zoom plot
         self.p1.setXRange(minX, maxX, padding=0)
         # update image with mean of the current view interval
         self.set_mean_image()
 
-    def updateRegion(self, window, viewRange):
-        rgn = viewRange[0]
-        self.region.setRegion(rgn)
+    def update_zoom_callback(self):
+        # in callback mode, disable the signal from the zoom plot
+        with block_signals(self.p1):
+            print('zoom callback called with block:', self.p1.signalsBlocked(), timestamp())
+            self.update_zoom_from_region()
+
+    def update_region(self, view_range):
+        # region.setRegion appears to signal twice (once per side?),
+        # so do this in two stages to prevent double signaling.
+        orig_range = self.region.getRegion()
+        # possibilities for region morphing:
+        # 1) sliding / expanding right: right side increases, left side may or may not increase
+        # 2) sliding / expanding left: left side decreases, right side may or may not decrease
+        # 3) expanding in place: left side decreases and right side increases
+        # 4) shrinking in place: left side increases and right side decreases
+        #
+        # (1), (3) and (4) move right side first
+        # (2) move left side first: condition is that new_left < old_left and new_right <= old_right
+        if view_range[0] < orig_range[0] and view_range[1] <= orig_range[1]:
+            first_region = [view_range[0], orig_range[1]]
+        else:
+            first_region = [orig_range[0], view_range[1]]
+        # do right-side while blocked (force block in case we're already in a blocking context)
+        with block_signals(self.region, forced_state=True):
+            print('setting range with block:', self.region.signalsBlocked(), timestamp())
+            self.region.setRegion(first_region)
+        # do both sides while emitting (or not)
+        print('setting both sides with block:', self.region.signalsBlocked(), timestamp())
+        self.region.setRegion(view_range)
+
+    def update_region_callback(self, window, view_range):
+        with block_signals(self.region):
+            print('region callback called with block:', self.region.signalsBlocked(), timestamp())
+            self.update_region(view_range)
 
     def update_y_spacing(self, offset):
         for i in range(len(self._curves)):
             self._curves[i].offset = i * offset
         x1, x2 = self.current_frame()
-        self.region.setRegion([x1, x2+.001])
+        # need to trigger a redraw with the new spacings--this should emit a data changed signal
+        self.curve_collection.redraw_data(ignore_signals=False)
