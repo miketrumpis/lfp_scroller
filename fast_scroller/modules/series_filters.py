@@ -8,6 +8,7 @@ from pyface.timer.api import do_after
 from ecoglib.estimation.multitaper import bw2nw
 from ecogdata.util import nextpow2
 from ecogdata.parallel.array_split import timestamp
+from ecogdata.parallel.mproc import get_logger
 from ecogdata.filt.time import moving_projection, slepian_projection
 
 from .base import VisModule
@@ -159,7 +160,8 @@ class FilterSignalDebouncer:
         # if the signal time stack is only one deep, then that signal was already dispatched
         if len(self._signal_times) == 1:
             return
-        print('applying filter', timestamp())
+        info = get_logger().info
+        info('applying series filter {}'.format(timestamp()))
         y = curve_collection.current_data()[1]
         y = self.filter(y)
         # set data while temporarily disabling the collection listening while data changes

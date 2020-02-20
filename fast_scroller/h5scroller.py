@@ -6,7 +6,7 @@ pg.setConfigOptions(imageAxisOrder='row-major')
 from .pyqtgraph_extensions import ImageItem, ColorBarItem, get_colormap_lut
 from ecogdata.channel_map import ChannelMap, CoordinateChannelMap
 from ecogdata.parallel.array_split import timestamp
-
+from ecogdata.parallel.mproc import get_logger
 
 def embed_frame(channel_map, vector):
     if isinstance(channel_map, CoordinateChannelMap):
@@ -83,7 +83,8 @@ class CurveCollection(QtCore.QObject):
         self._current_set.add(curve)
         if len(self._current_set) == len(self.curves):
             self.data_changed.emit(self)
-            print('reached count so emitting and resetting current set')
+            info = get_logger().info
+            info('CurveCollection emitting and resetting current set')
             self._current_set = set()
 
     def current_data(self):
@@ -153,12 +154,11 @@ class HDF5Plot(pg.PlotCurveItem):
         return (r[0] != self._cx1) or (r[1] != self._cx2)
 
     def viewRangeChanged(self):
-        if self.offset == 0:
-            print('range-change-triggered', timestamp())
         # only look for x-range changes that actually require loading different data
         if self._view_really_changed():
             if self.offset == 0:
-                print('ranged actually changed:', self._view_range(), timestamp())
+                info = get_logger().info
+                info('ranged actually changed: {} {}'.format(self._view_range(), timestamp()))
             self.updateHDF5Plot()
 
     def _view_range(self):
@@ -188,7 +188,8 @@ class HDF5Plot(pg.PlotCurveItem):
         
     def updateHDF5Plot(self, data_ready=False):
         if self.offset == 0:
-            print('update hdf5 lines called: DR', data_ready, timestamp())
+            info = get_logger().info
+            info('Update hdf5 lines called: external data {} {}'.format(data_ready, timestamp()))
         if self.hdf5 is None:
             self.setData([])
             return
@@ -482,7 +483,8 @@ class FastScroller(object):
     def update_zoom_callback(self):
         # in callback mode, disable the signal from the zoom plot
         with block_signals(self.p1):
-            print('zoom callback called with block:', self.p1.signalsBlocked(), timestamp())
+            info = get_logger().info
+            info('zoom callback called with block: {} {}'.format(self.p1.signalsBlocked(), timestamp()))
             self.update_zoom_from_region()
 
     def update_region(self, view_range):
@@ -502,16 +504,18 @@ class FastScroller(object):
         else:
             first_region = [orig_range[0], view_range[1]]
         # do right-side while blocked (force block in case we're already in a blocking context)
+        info = get_logger().info
         with block_signals(self.region, forced_state=True):
-            print('setting range with block:', self.region.signalsBlocked(), timestamp())
+            info('setting first range with block: {} {}'.format(self.region.signalsBlocked(), timestamp()))
             self.region.setRegion(first_region)
         # do both sides while emitting (or not)
-        print('setting both sides with block:', self.region.signalsBlocked(), timestamp())
+        info('setting both sides with block: {} {}'.format(self.region.signalsBlocked(), timestamp()))
         self.region.setRegion(view_range)
 
     def update_region_callback(self, window, view_range):
+        info = get_logger().info
         with block_signals(self.region):
-            print('region callback called with block:', self.region.signalsBlocked(), timestamp())
+            info('region callback called with block: {} {}'.format(self.region.signalsBlocked(), timestamp()))
             self.update_region(view_range)
 
     def update_y_spacing(self, offset):
