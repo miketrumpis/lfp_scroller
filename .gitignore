@@ -1,5 +1,5 @@
 *.pyc
-
+test_scripts
 lfp_scroller.egg-info
 .idea
 *~
