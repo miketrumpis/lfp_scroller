@@ -26,7 +26,7 @@ from .h5scroller import FastScroller
 from .h5data import h5mean
 
 from .data_files import Mux7FileData, OpenEphysFileData, BlackrockFileData, \
-     FileData, BatchFilesTool, ActiveArrayFileData
+     FileData, BatchFilesTool, ActiveArrayFileData, RHDFileData
 from .filtering import FilterPipeline
 from .new_scroller import VisWrapper
 from .modules import ana_modules, default_modules
@@ -69,8 +69,10 @@ class HeadstageHandler(Handler):
             fd = Mux7FileData(gain=3)
         elif hs.lower() == 'stim v4':
             fd = Mux7FileData(gain=4)
-        elif hs.lower() == 'intan':
+        elif hs.lower() == 'intan (oephys)':
             fd = OpenEphysFileData()
+        elif hs.lower() == 'intan (rhd)':
+            fd = RHDFileData()
         elif hs.lower() == 'blackrock':
             fd = BlackrockFileData()
         elif hs.lower() == 'active':
@@ -108,7 +110,8 @@ class VisLauncher(HasTraits):
     max_window_width = Range(low='_min_win', high='_max_win', value=60)
     headstage = Enum('mux7',
                      ('mux3', 'mux5', 'mux6', 'mux7',
-                      'stim v4', 'intan', 'blackrock', 'active', 'unknown'))
+                      'stim v4', 'intan (oephys)', 'intan (rhd)',
+                      'blackrock', 'active', 'unknown'))
     chan_map = Enum(available_chan_maps[0], available_chan_maps)
 
     n_chan = Int

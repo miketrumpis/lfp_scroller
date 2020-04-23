@@ -7,6 +7,7 @@ import numpy as np
 from scipy.signal import detrend
 import h5py
 from tqdm import tqdm
+import json
 
 from traits.api import Instance, Button, HasTraits, File, Float, \
      Str, Property, List, Enum, Int, Bool, on_trait_change, Directory, \
@@ -151,6 +152,27 @@ class FileData(HasTraits):
             resizable=True
         )
         return view
+
+
+class RHDFileData(FileData):
+    y_scale = Property
+    fs_field = Property
+
+    def _get_y_scale(self):
+        return 0.195 * 1e-6
+
+    def _get_fs_field(self):
+        return 'n/a'
+
+    def _get_Fs(self):
+        if not self.file:
+            return
+        try:
+            with h5py.File(self.file, 'r') as f:
+                header = json.loads(f.attrs['JSON_header'])
+            return header['sample_rate']
+        except:
+            return
 
 
 class ActiveArrayFileData(FileData):
