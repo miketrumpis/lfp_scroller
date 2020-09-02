@@ -9,13 +9,13 @@ import numpy as np
 import h5py
 import pickle
 
-from traits.api import Instance, Button, HasTraits, Float, \
+from traits.api import Instance, Button, HasTraits, Float, on_trait_change, \
      Str, List, Enum, Int, Bool, cached_property, Range, Property
 from traitsui.api import View, Group, VGroup, HGroup, UItem, Item, \
      Label, Handler, Tabbed, SetEditor
 from pyface.api import MessageDialog
 
-from ecogdata.devices.electrode_pinouts import get_electrode_map, electrode_maps
+from ecogdata.devices.electrode_pinouts import get_electrode_map, electrode_maps, multi_arm_electrodes
 from ecogdata.util import Bunch
 from ecogdata.channel_map import ChannelMap
 from ecogdata.expconfig import params
@@ -83,13 +83,14 @@ class HeadstageHandler(Handler):
         info.object.file_data = fd
 
 
-_subset_chan_maps = ('psv_244_mux1', 'psv_244_mux3')
+_subset_chan_maps = ('psv_244_mux1', 'psv_244_mux3') + tuple(multi_arm_electrodes.keys())
 # append some non-standard channel maps for
 # 1) active electrodes (these are constructed on the fly based on geometry)
 # 2) unknown (can be built in the GUI)
 # 3) a value that is set programmatically via the .set_chan_map attribute
 available_chan_maps = sorted(electrode_maps.keys()) + \
-  ['active', 'pickled', 'unknown', 'settable']
+                      sorted(multi_arm_electrodes.keys()) + \
+                      ['active', 'pickled', 'unknown', 'settable']
 
 
 class VisLauncher(HasTraits):
@@ -104,7 +105,7 @@ class VisLauncher(HasTraits):
     all_modules = List(list(ana_modules.keys()))
     b = Button('Launch Visualization')
     offset = Enum(200, [0, 100, 200, 500, 1000, 2000, 5000])
-    #max_window_width = Float(1200.0)
+    # max_window_width = Float(1200.0)
     _max_win = Property(Float, depends_on='file_data.file')
     _min_win = Int(30)
     max_window_width = Range(low='_min_win', high='_max_win', value=60)
@@ -145,7 +146,19 @@ class VisLauncher(HasTraits):
         except (IOError, ValueError, TypeError, KeyError) as e:
             # these exceptions cover what may happen with a weird h5 file or incomplete setup
             return 100
-    
+
+    @on_trait_change('chan_map')
+    def _set_default_connectors(self):
+        # Only set a default if
+        # 1) connections weren't already set (even for another map), and
+        # 2) there are default connectors in the spec table
+        if len(self.chan_map_connectors):
+            return
+        spec = multi_arm_electrodes.get(self.chan_map, None)
+        if not spec:
+            return
+        self.chan_map_connectors = ', '.join(spec['default_daqs'])
+
     def _concat_tool_launch_fired(self):
         bft = BatchFilesTool()
         bft.edit_traits()
@@ -288,9 +301,9 @@ class VisLauncher(HasTraits):
                             ),
                         visible_when='chan_map=="unknown"'
                         ),
-                    Group(
-                        Item('chan_map_connectors',
-                             label='Connectors (comma-sep)'),
+                    VGroup(
+                        Label('Connectors (comma-sep)'),
+                        UItem('chan_map_connectors'),
                         visible_when='_is_subset_map'
                         )
                     ),
