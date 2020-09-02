@@ -155,11 +155,9 @@ class FileData(HasTraits):
 
 
 class RHDFileData(FileData):
-    y_scale = Property
+    y_scale = Float(0.195 * 1e-6)  # Default Intan gain
+    data_field = Str('amplifier_data')
     fs_field = Property
-
-    def _get_y_scale(self):
-        return 0.195 * 1e-6
 
     def _get_fs_field(self):
         return 'n/a'
