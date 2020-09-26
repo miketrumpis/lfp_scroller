@@ -21,8 +21,8 @@ for v in ('SolidLine','DashLine','DashDotLine','DashDotDotLine','DotLine'):
     vars()[v]=getattr(QtCore.Qt,v)
 
 # Switch to using white background and black foreground
-#pg.setConfigOption('background', 'w')
-#pg.setConfigOption('foreground', 'k')
+# pg.setConfigOption('background', 'w')
+# pg.setConfigOption('foreground', 'k')
 
 def set_font(name='Sans Serif',size=6):
     """Set the default Qt application font <<after>> the QApplication is created.
