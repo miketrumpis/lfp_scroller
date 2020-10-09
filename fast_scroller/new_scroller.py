@@ -45,7 +45,8 @@ class VisWrapper(PersistentWindow):
         mods = self.modules[:]
         self.modules = []
         for m in mods:
-            self.modules.append( m(parent=self) )
+            module = m(parent=self, chan_map=self.chan_map, curve_collection=self._qtwindow.curve_collection)
+            self.modules.append(module)
 
     def _get_y_spacing(self):
         if self._y_spacing_enum == 'entry':

@@ -47,7 +47,7 @@ class IntervalSpectrum(PlotsInterval):
         return fx, pxx
 
     def _plot_fired(self):
-        x, y = self.parent._qtwindow.current_data()
+        x, y = self.curve_collection.current_data()
         y *= 1e6
         fx, pxx = self.spectrum(y)
 

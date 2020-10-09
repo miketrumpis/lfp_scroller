@@ -198,11 +198,13 @@ class PlotCounter(dict):
 class VisModule(HasTraits):
     name = Str('__dummy___')
     parent = Instance('fast_scroller.new_scroller.VisWrapper')
+    chan_map = Instance('ecogdata.channel_map.ChannelMap')
+    curve_collection = Instance('fast_scroller.h5scroller.CurveCollection')
     channel = Str('all')
     _chan_list = Property(depends_on='parent.chan_map')
 
     def _get__chan_list(self):
-        ii, jj = self.parent.chan_map.to_mat()
+        ii, jj = self.chan_map.to_mat()
         clist = ['All']
         for i, j in zip(ii, jj):
             clist.append('{0}, {1}'.format(i, j))

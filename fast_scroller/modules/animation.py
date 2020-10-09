@@ -85,7 +85,7 @@ class AnimateInterval(VisModule):
                 self._atimer.Stop()
                 return
 
-        x, self.__y = self.parent._qtwindow.current_data()
+        x, self.__y = self.curve_collection.current_data()
         self.__f_skip = 1
         self.__x = x[0]
         dt = self.__x[1] - self.__x[0]
@@ -114,13 +114,13 @@ class AnimateInterval(VisModule):
             ev.edit_traits()
             return
 
-        x, y = self.parent._qtwindow.current_data()
+        x, y = self.curve_collection.current_data()
         y *= 1e6
         x = x[0]
         dt = x[1] - x[0]
         # fps is sampling frequency divided by time scale dilation
         fps = (dt * self.anim_time_scale) ** -1.0
-        chan_map = self.parent._qtwindow.chan_map
+        chan_map = self.chan_map
         if self.drop_video_frames > 1:
             x = x[::self.drop_video_frames]
             y = y[..., ::self.drop_video_frames]

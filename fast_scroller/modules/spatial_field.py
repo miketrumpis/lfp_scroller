@@ -493,13 +493,13 @@ class SpatialVariance(PlotsInterval):
     st_lag = Int(10)
 
     def _vis_tool_fired(self):
-        _, y = self.parent._qtwindow.current_data()
+        _, y = self.curve_collection.current_data()
         y *= 1e6
         if self.normalize:
             cov = np.corrcoef(y)
         else:
             cov = np.cov(y)
-        chan_map = self.parent._qtwindow.chan_map
+        chan_map = self.chan_map
         tool = ArrayVarianceTool(cov, chan_map)
         view = tool.default_traits_view()
         view.kind = 'live'
@@ -507,9 +507,9 @@ class SpatialVariance(PlotsInterval):
         return tool
 
     def _stsemivar_tool_fired(self):
-        _, y = self.parent._qtwindow.current_data()
+        _, y = self.curve_collection.current_data()
         y *= 1e6
-        chan_map = self.parent._qtwindow.chan_map
+        chan_map = self.chan_map
         bin_size = None if (self.dist_bin < 0) else self.dist_bin
         tool = STSemivar.from_array_and_lag(
             y, self.st_len, self.st_lag, chan_map,
@@ -522,7 +522,7 @@ class SpatialVariance(PlotsInterval):
         return tool
 
     def _plot_acov_fired(self):
-        t, y = self.parent._qtwindow.current_data()
+        t, y = self.curve_collection.current_data()
         y *= 1e6
         t_stamp = t[0].mean()
         t = (t[0] - t[0, 0]) * 1e3
@@ -531,7 +531,7 @@ class SpatialVariance(PlotsInterval):
         Ct = autocov(y, all_lags=False)[:, :min(len(t), N)]
         if self.norm_kernel:
             Ct /= Ct[:, 0][:, None]
-        chan_map = self.parent._qtwindow.chan_map
+        chan_map = self.chan_map
         frames = chan_map.embed(Ct.T, axis=1)
         fig = Figure(figsize=(6, 10))
         ax1 = subplot2grid(fig, (2, 1), (0, 0))
@@ -565,7 +565,7 @@ class SpatialVariance(PlotsInterval):
             self._kernel_plots.append(splot)
 
     def _plot_iso_stcov_fired(self):
-        t, y = self.parent._qtwindow.current_data()
+        t, y = self.curve_collection.current_data()
         y *= 1e6
         t = (t[0] - t[0, 0]) * 1e3
         dt = t[1] - t[0]
@@ -584,7 +584,7 @@ class SpatialVariance(PlotsInterval):
             Ct_ = np.einsum('ik,jk->ij', y[:, :T - n], y[:, n:])
             Ct[n // skip] = Ct_ / (T - n)
 
-        chan_map = self.parent._qtwindow.chan_map
+        chan_map = self.chan_map
         x_pts, y_pts = cxx_to_pairs(Ct, chan_map)
         # covar will be matrix with shape T, X
         covar = list()
@@ -627,7 +627,7 @@ class SpatialVariance(PlotsInterval):
         splot = SavesFigure.live_fig(fig)
 
     def _plot_stcov_fired(self):
-        t, y = self.parent._qtwindow.current_data()
+        t, y = self.curve_collection.current_data()
         y *= 1e6
         t_stamp = t[0].mean()
         t = (t[0] - t[0, 0]) * 1e3
@@ -651,7 +651,7 @@ class SpatialVariance(PlotsInterval):
             nrm = np.sqrt(Ct[0].diagonal())
             Ct /= np.outer(nrm, nrm)
 
-        chan_map = self.parent._qtwindow.chan_map
+        chan_map = self.chan_map
         stcov = list()
         for Ct_ in tqdm(Ct, desc='Centering S-T kernels'):
             stcov.append(spatial_autocovariance(Ct_, chan_map, mean=True))
@@ -772,14 +772,14 @@ class SpatialVariance(PlotsInterval):
             self._animating = False
             return
 
-        t, y = self.parent._qtwindow.current_data()
+        t, y = self.curve_collection.current_data()
         y *= 1e6
         t = t[0]
         if self.normalize:
             y = y / np.std(y, axis=1, keepdims=1)
             #y = y / np.std(y, axis=0, keepdims=1)
 
-        cm = self.parent._qtwindow.chan_map
+        cm = self.chan_map
 
         t0 = time.time()
         r = self.compute_variogram(y[:, 0][:, None], cm, n_samps=1, normalize=False, cloud=False)
@@ -845,9 +845,9 @@ class SpatialVariance(PlotsInterval):
         self._f_anim._start()
 
     def _plot_fired(self):
-        t, y = self.parent._qtwindow.current_data()
+        t, y = self.curve_collection.current_data()
         y *= 1e6
-        r = self.compute_variogram(y, self.parent._qtwindow.chan_map)
+        r = self.compute_variogram(y, self.chan_map)
         if self.cloud:
             xc, yc, x, svg, svg_se, Nd = r
         else:

@@ -25,6 +25,7 @@ class IntervalTraces(PlotsInterval):
     plot = Button('Plot')
     new_figure = Bool(True)
     label_channels = Bool(False)
+    plot_selected = Bool(False)
 
     map_row = Enum(1, list(range(1, 11)))
     map_col = Enum(1, list(range(1, 11)))
@@ -35,7 +36,9 @@ class IntervalTraces(PlotsInterval):
     mm_per_pixel = Int(3)
 
     def _plot_fired(self):
-        x, y = self.parent._qtwindow.current_data()
+        x, y = self.curve_collection.current_data()
+        if self.plot_selected:
+            y = np.take(y, self.curve_collection.selected_channels(), axis=0)
         y *= 1e6
         x = x[0]
         dy = self.parent.y_spacing
@@ -43,7 +46,7 @@ class IntervalTraces(PlotsInterval):
         clr = self._colors[self._axplots[ax]]
         y_levels = np.arange(len(y)) * dy
         units = 'uV'
-        if np.log10(y_levels[-1]) > 4:
+        if len(y) > 1 and np.log10(y_levels[-1]) > 4:
             convert_scale(y, 'uv', 'mv')
             convert_scale(y_levels, 'uv', 'mv')
             units = 'mv'
@@ -54,7 +57,11 @@ class IntervalTraces(PlotsInterval):
             ax.set_ylabel(label)
         else:
             ax.set_yticks(y_levels)
-            ii, jj = self.parent._qtwindow.chan_map.to_mat()
+            ii, jj = self.chan_map.to_mat()
+            if self.plot_selected:
+                subset = self.curve_collection.selected_channels()
+                ii = np.take(ii, subset, axis=0)
+                jj = np.take(jj, subset, axis=0)
             labels = map(str, zip(ii, jj))
             ax.set_yticklabels(labels, fontsize=8)
         ax.set_xlabel('Time (s)')
@@ -68,7 +75,7 @@ class IntervalTraces(PlotsInterval):
         self.create_maps()
 
     def create_maps(self):
-        g = self.parent._qtwindow.chan_map.geometry
+        g = self.chan_map.geometry
         # this is an over-estimate of inches per pixel, maybe
         # find another rule
         inch_per_pixel = 0.039 * self.mm_per_pixel
@@ -105,9 +112,9 @@ class IntervalTraces(PlotsInterval):
             self.create_maps()
         ax = self._grid[self._g_idx]
         self._g_idx = (self._g_idx + 1) % len(self._grid)
-        chan_map = self.parent._qtwindow.chan_map
+        chan_map = self.chan_map
 
-        x, y = self.parent._qtwindow.current_data()
+        x, y = self.curve_collection.current_data()
         y *= 1e6
         x = x[0]
         if self.map_rms:
@@ -137,6 +144,8 @@ class IntervalTraces(PlotsInterval):
                     UItem('plot'),
                     Label('Label Channels'),
                     UItem('label_channels'),
+                    Label('Plot selected chans'),
+                    UItem('plot_selected'),
                     label='Plot current window'
                 ),
                 Group(

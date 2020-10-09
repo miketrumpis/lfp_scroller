@@ -36,7 +36,7 @@ class BandPowerMap(PlotsInterval):
 
     @property_depends_on('BW')
     def _get__f_hi(self):
-        x, _ = self.parent._qtwindow.current_data()
+        x, _ = self.curve_collection.current_data()
         dt = x[0, 1] - x[0, 0]
         return np.floor(0.5 * (dt ** -1) - self.BW)
 
@@ -48,7 +48,7 @@ class BandPowerMap(PlotsInterval):
         return True
 
     def _plot_fired(self):
-        x, y = self.parent._qtwindow.current_data()
+        x, y = self.curve_collection.current_data()
         # convert to microvolts
         y *= 1e6
         t = 0.5 * (x[0, 0] + x[0, -1])
@@ -80,7 +80,7 @@ class BandPowerMap(PlotsInterval):
         band_power = np.sqrt(np.sum(np.abs(c)**2, axis=1) / N)
 
         f, ax = self._get_fig(figsize=(5, 5))
-        chan_map = self.parent._qtwindow.chan_map
+        chan_map = self.chan_map
         f, cb = chan_map.image(band_power, ax=ax, cmap=self.cmap)
         cb.set_label('Bandpass RMS (uV)')
         ax.set_title(
