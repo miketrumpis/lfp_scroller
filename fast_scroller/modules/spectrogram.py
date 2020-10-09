@@ -54,7 +54,7 @@ class IntervalSpectrogram(PlotsInterval):
     def __default_mtm_kwargs(self, strip):
         kw = dict()
         kw['NW'] = self.NW
-        kw['adaptive'] = self.adaptive
+        kw['adaptive_weights'] = self.adaptive
         Fs = self.parent.x_scale ** -1.0
         kw['Fs'] = Fs
         kw['jackknife'] = False
@@ -83,21 +83,25 @@ class IntervalSpectrogram(PlotsInterval):
         if ptf.ndim < 3:
             ptf = ptf.reshape((1,) + ptf.shape)
         nf = ptf.shape[1]
+        # subtraction and z-score normalizations should be done with log transform
+        if mode.lower() in ('subtract', 'z score'):
+            ptf = np.log10(ptf)
         p_bl = ptf[..., m].transpose(0, 2, 1).copy().reshape(-1, nf)
 
         # get mean of baseline for each freq.
         jn = Jackknife(p_bl, axis=0)
-        mn = jn.estimate(np.mean)
-        # smooth out mean across frequencies
-        mn = gaussian_filter1d(mn, 0.05 * len(mn), mode='reflect')
+        mn = jn.estimate(np.mean, se=False)
+        # smooth out mean across frequencies (5 hz sigma) but only replace after 2NW points
+        bias_pts = int(2 * self.NW)
+        mn[bias_pts:] = gaussian_filter1d(mn, self.NW, mode='reflect')[bias_pts:]
         assert len(mn) == nf, '?'
         if mode.lower() == 'divide':
             ptf = ptf.mean(0) / mn[:, None]
         elif mode.lower() == 'subtract':
-            ptf = np.exp(ptf.mean(0)) - np.exp(mn[:, None])
+            ptf = ptf.mean(0) - mn[:, None]
         elif mode.lower() == 'z score':
-            stdev = jn.estimate(np.std)
-            stdev = gaussian_filter1d(stdev, 0.05 * len(mn), mode='reflect')
+            stdev = jn.estimate(np.std, se=False)
+            stdev[bias_pts:] = gaussian_filter1d(stdev, self.NW, mode='reflect')[bias_pts:]
             ptf = (ptf.mean(0) - mn[:, None]) / stdev[:, None]
         return ptf
 
@@ -132,7 +136,7 @@ class IntervalSpectrogram(PlotsInterval):
         if self.normalize.lower() != 'none':
             ptf = self._normalize(tx, ptf, self.normalize, self.baseline)
         else:
-            ptf = np.log(ptf)
+            ptf = np.log10(ptf)
             if ptf.ndim > 2:
                 ptf = ptf.mean(0)
         # cut out non-display frequencies and advance timebase to match window
