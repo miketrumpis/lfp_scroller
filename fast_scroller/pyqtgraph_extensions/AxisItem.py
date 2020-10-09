@@ -1,4 +1,7 @@
-import os,logging,time
+from distutils.version import StrictVersion
+import os
+import logging
+import time
 import pyqtgraph as pg
 from pyqtgraph import QtCore,QtGui
 from functools import partial
@@ -18,7 +21,13 @@ class AxisItem(pg.AxisItem):
     range_changed=QtCore.pyqtSignal()
     
     def __init__(self, orientation, pen=None, linkView=None, parent=None, maxTickLength=-5, showValues=True):
-        pg.AxisItem.__init__(self,orientation,pen,None,linkView,parent,maxTickLength,showValues)
+        v = StrictVersion(pg.__version__)
+        if v < StrictVersion('0.11.0'):
+            # For pyqtgraph 0.10
+            pg.AxisItem.__init__(self, orientation, pen, linkView, parent, maxTickLength, showValues)
+        else:
+            # For pyqtgraph 0.11
+            pg.AxisItem.__init__(self, orientation, pen, None, linkView, parent, maxTickLength, showValues)
         self.set_lmt_btns=[]
         self.aset_lmt_btns=[]
         path=os.path.dirname(os.path.abspath(__file__))
@@ -46,7 +55,7 @@ class AxisItem(pg.AxisItem):
         self.mouseHovering=False
         self.buttons_enabled=True
         self.updateButtons()
-        
+
     def close(self):
         for btn in self.set_lmt_btns:
             btn.setParent(None)
