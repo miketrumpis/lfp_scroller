@@ -761,7 +761,7 @@ class SpatialVariance(PlotsInterval):
             # this will bring back mean and sem by default
             xb, yb, se = sv.binned_variance_aggregate(xb, yb)
             return xc, yc, xb, yb, se, Nd
-        x, y, se, Nd = vg_method(array[:, pts], combs)
+        x, y, Nd, se = vg_method(array[:, pts], combs)
         return x, y, se, Nd
 
     def _plot_anim_fired(self):
