@@ -95,9 +95,9 @@ class FileData(HasTraits):
         fname = os.path.split(self.file)[1]
         fname, ext = os.path.splitext(fname)
         ds_name = os.path.join(where, fname + '_dnsamp{}.h5'.format(self.ds_rate))
+        Fs = self.Fs
         with h5py.File(self.file, 'r') as h5, h5py.File(ds_name, 'w') as fw:
             arr = h5[self.data_field]
-            Fs = h5[self.fs_field][()]
             n_chan, len_ts = arr.shape
             n = len_ts // self.ds_rate
             if n * self.ds_rate < len_ts:
