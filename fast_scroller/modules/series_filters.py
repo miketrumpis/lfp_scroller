@@ -251,9 +251,8 @@ class SeriesFiltering(VisModule):
         # attach a new debounce filter to this object (if a reference it not saved, it will get garbage-collected!)
         self.cb = FilterSignalDebouncer(filter)
         # We're going to attach this debounced callback to the curve collection that watches the zoom-plot data. The
-        # curve collection is a part of the PyQtGraph panel system that underlies the main plot elements (pointed at
-        # through parent._qtwindow).
-        curve_collection = self.parent._qtwindow.curve_collection
+        # curve collection is a part of the PyQtGraph panel system that underlies the main plot elements.
+        curve_collection = self.curve_collection
         # connect callback to the signal
         self._cb_connection = curve_collection.data_changed.connect(self.cb.debounced_callback)
         # redraw the raw data and emit the data changed signal
@@ -264,9 +263,9 @@ class SeriesFiltering(VisModule):
     def _unset_filter_fired(self):
         # If a connection is present, disconnect it and redraw the raw data (without signaling data change)
         if self._cb_connection is not None:
-            self.parent._qtwindow.curve_collection.data_changed.disconnect(self._cb_connection)
+            self.curve_collection.data_changed.disconnect(self._cb_connection)
             self._cb_connection = None
-            self.parent._qtwindow.curve_collection.redraw_data(ignore_signals=True)
+            self.curve_collection.redraw_data(ignore_signals=True)
         # unset the filter name and callback
         self.applied_filter = 'None'
         self.cb = None
