@@ -172,6 +172,18 @@ class RHDFileData(FileData):
         except:
             return
 
+    def create_downsampled(self, where='.'):
+        super().create_downsampled(where=where)
+        # now copy the JSON header
+        with h5py.File(self.file, 'r') as f:
+            header = json.loads(f.attrs['JSON_header'])
+        header['sample_rate'] = self.Fs / self.ds_rate
+        fname = os.path.split(self.file)[1]
+        fname, ext = os.path.splitext(fname)
+        ds_name = os.path.join(where, fname + '_dnsamp{}.h5'.format(self.ds_rate))
+        with h5py.File(ds_name, 'r+') as f:
+            f.attrs['JSON_header'] = json.dumps(header)
+
 
 class ActiveArrayFileData(FileData):
 
