@@ -3,7 +3,7 @@ from traits.api import Button, Bool, Enum, Property, Float, cached_property, Str
 from traitsui.api import View, VGroup, HGroup, Item, UItem
 
 from ecogdata.util import nextpow2
-from ecogdata.parallel.split_methods import multi_taper_psd
+from ecoglib.estimation.multitaper import MultitaperEstimator
 from ecoglib.estimation.resampling import Jackknife
 from ecoglib.vis.plot_util import filled_interval
 import seaborn as sns
@@ -22,14 +22,15 @@ class IntervalSpectrum(PlotsInterval):
     sem = Bool(True)
     adaptive = Bool(True)
     label = Str
+    plot_selected = Bool(False)
     plot = Button('Plot')
 
     def __default_mtm_kwargs(self, n):
         kw = dict()
         kw['NW'] = self.NW
-        kw['adaptive'] = self.adaptive
-        kw['Fs'] = self.parent.x_scale ** -1.0
-        kw['NFFT'] = nextpow2(n) if self.pow2 else n
+        kw['adaptive_weights'] = self.adaptive
+        kw['fs'] = self.parent.x_scale ** -1.0
+        kw['nfft'] = nextpow2(n) if self.pow2 else n
         kw['jackknife'] = False
         return kw
 
@@ -43,12 +44,14 @@ class IntervalSpectrum(PlotsInterval):
     def spectrum(self, array, **mtm_kw):
         kw = self.__default_mtm_kwargs(array.shape[-1])
         kw.update(mtm_kw)
-        fx, pxx, _ = multi_taper_psd(array, **kw)
+        fx, pxx = MultitaperEstimator.psd(array, **kw)
         return fx, pxx
 
     def _plot_fired(self):
         x, y = self.curve_collection.current_data()
         y *= 1e6
+        if self.plot_selected:
+            y = np.take(y, self.curve_collection.selected_channels(), axis=0)
         fx, pxx = self.spectrum(y)
 
         fig, ax = self._get_fig()
@@ -93,6 +96,7 @@ class IntervalSpectrum(PlotsInterval):
                     Item('adaptive', label='Adaptive MTM'),
                 ),
                 HGroup(
+                    Item('plot_selected', label='Selected chans'),
                     Item('avg_spec', label='Plot avg'),
                     Item('sem', label='Use S.E.M.'),
                     Item('new_figure', label='Plot in new figure')
