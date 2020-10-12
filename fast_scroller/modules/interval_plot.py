@@ -140,12 +140,14 @@ class IntervalTraces(PlotsInterval):
     def default_traits_view(self):
         v = View(
             HGroup(
-                Group(
+                HGroup(
+                    VGroup(
+                        Label('Label Channels'),
+                        UItem('label_channels'),
+                        Label('Plot selected chans'),
+                        UItem('plot_selected')
+                    ),
                     UItem('plot'),
-                    Label('Label Channels'),
-                    UItem('label_channels'),
-                    Label('Plot selected chans'),
-                    UItem('plot_selected'),
                     label='Plot current window'
                 ),
                 Group(
