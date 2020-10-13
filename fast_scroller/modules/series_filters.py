@@ -12,6 +12,7 @@ from ecogdata.parallel.mproc import get_logger
 from ecogdata.filt.time import moving_projection, slepian_projection
 
 from .base import VisModule
+from ..helpers import DebounceCallback
 
 
 # Most of the classes defined here inherit from HasTraits from the traits package. "Traits" can be used
@@ -36,6 +37,11 @@ class AppliesSeriesFiltering(HasTraits):
     def default_traits_view(self):
         return View()
 
+    def apply(self, curve_collection):
+        y = curve_collection.current_data(visible=False)[1]
+        y = self(y)
+        # set data while temporarily disabling the collection listening while data changes
+        curve_collection.set_data_on_collection(y, ignore_signals=True, visible=False)
 
 # A dummy filter when no filter is selected (should probably never be called)
 class NoFilter(AppliesSeriesFiltering):
@@ -96,78 +102,6 @@ class MultitaperDemodulate(AppliesSeriesFiltering):
             )
         )
         return v
-
-# The preceeding filters will be hooked up to a "data changed" signal that fires every time the plot updates. Since
-# transforming the visible window might take a chunk of time, this class smooths out the incoming signals (
-# "debouncing"). After the first signal is dispatched, this class will not respond to other signals for the debounce
-# period. Meanwhile, a timer is started that will dispatch the final signal at the end of the debounce period.
-# Note this class is just a normal Python class.
-class FilterSignalDebouncer:
-    debounce_interval_ms = 200
-
-    def __init__(self, filter):
-        """
-        A de-bounced dispatcher.
-
-        Parameters
-        ----------
-        filter: AppliesSeriesFiltering
-            The callable filter that transforms visible data arrays.
-
-        """
-        self.filter = filter
-        self._signal_times = list()
-
-    def debounced_callback(self, curve_collection):
-        """
-        This callback can be connected to a data_changed signal from fast_scroller.h5scroller.CurveCollection.
-        When this signal debouncer is idle, the first signal will be dispatched and then follow-up signals
-        will be ignored if they follow too closely. A final dispatch will be attempted at the end of the debounce
-        interval.
-
-        Parameters
-        ----------
-        curve_collection: CurveCollection
-            The curve collection emitted by the data changed signal.
-
-        """
-        now = time()
-        if not len(self._signal_times):
-            # dispatch now and start a new timer
-            self.apply_filter(curve_collection)
-            self._signal_times.append(now)
-            do_after(self.debounce_interval_ms, self.apply_filter, curve_collection)
-        else:
-            if (now - self._signal_times[-1]) < self.debounce_interval_ms / 1000:
-                # put this time on the end of the stack
-                self._signal_times.append(now)
-            else:
-                # if more than the debounce interval has elapsed, clear the stack
-                # and call this callback again
-                self._signal_times = list()
-                self.debounced_callback(curve_collection)
-
-    def apply_filter(self, curve_collection):
-        """
-        Apply the filter on the curve collection data.
-
-        Parameters
-        ----------
-        curve_collection: CurveCollection
-            The curve collection emitted by the data changed signal.
-
-        """
-        # if the signal time stack is only one deep, then that signal was already dispatched
-        if len(self._signal_times) == 1:
-            return
-        info = get_logger().info
-        info('applying series filter {}'.format(timestamp()))
-        y = curve_collection.current_data()[1]
-        y = self.filter(y)
-        # set data while temporarily disabling the collection listening while data changes
-        curve_collection.set_data_on_collection(y, ignore_signals=True)
-        # clear the timing stack now that the filter has been applied
-        self._signal_times = list()
 
 
 # A "Handler" in Traits is an object that responds to user input when the response behavior is somewhat non-trivial.
@@ -245,18 +179,21 @@ class SeriesFiltering(VisModule):
             self.filter = None
             self._unset_filter_fired()
             return
+        if self._cb_connection is not None:
+            self.curve_collection.data_changed.disconnect(self._cb_connection)
 
         # get the concrete filter calculator from the current abstract filter
         filter = self.filter.filter
         # attach a new debounce filter to this object (if a reference it not saved, it will get garbage-collected!)
-        self.cb = FilterSignalDebouncer(filter)
         # We're going to attach this debounced callback to the curve collection that watches the zoom-plot data. The
         # curve collection is a part of the PyQtGraph panel system that underlies the main plot elements.
         curve_collection = self.curve_collection
         # connect callback to the signal
-        self._cb_connection = curve_collection.data_changed.connect(self.cb.debounced_callback)
+        self._cb_connection = DebounceCallback.connect(curve_collection.data_changed, filter.apply)
+        # apply the filter and cause the signal to emit
+        filter.apply(curve_collection)
         # redraw the raw data and emit the data changed signal
-        curve_collection.redraw_data(ignore_signals=False)
+        # curve_collection.redraw_data(ignore_signals=False)
         # Now that a filter is applied, set the name for display
         self.applied_filter = self.filter.name
 
@@ -265,10 +202,9 @@ class SeriesFiltering(VisModule):
         if self._cb_connection is not None:
             self.curve_collection.data_changed.disconnect(self._cb_connection)
             self._cb_connection = None
-            self.curve_collection.redraw_data(ignore_signals=True)
+            self.curve_collection.unset_data_on_collection(ignore_signals=True, visible=False)
         # unset the filter name and callback
         self.applied_filter = 'None'
-        self.cb = None
 
     # The view on this module is deceptively simple. In a horizontal span (HGroup), show
     # 1) a group with the filter type options and the set/unset buttons

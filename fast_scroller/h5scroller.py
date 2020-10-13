@@ -9,6 +9,10 @@ from ecogdata.parallel.array_split import timestamp
 from ecogdata.parallel.mproc import get_logger
 from time import time
 
+
+info = get_logger().info
+
+
 def embed_frame(channel_map, vector):
     if isinstance(channel_map, CoordinateChannelMap):
         frame = channel_map.embed(vector, interpolate='cubic')
@@ -111,7 +115,6 @@ class HDF5Plot(pg.PlotCurveItem):
         # only look for x-range changes that actually require loading different data
         if self._view_really_changed():
             if self.offset == 0:
-                info = get_logger().info
                 info('Zoom plot ranged actually changed, '
                      'triggering data load: {} {}'.format(self._view_range(), timestamp()))
             self.updateHDF5Plot()
@@ -123,8 +126,8 @@ class HDF5Plot(pg.PlotCurveItem):
         # Determine what data range must be read from HDF5
         xrange = vb.viewRange()[0]
         srange = list(map(lambda x: int(x / self._xscale), xrange))
-        start = max(0,int(srange[0])-1)
-        stop = min(self.hdf5.shape[-1], int(srange[1]+2))
+        start = max(0, int(srange[0]) - 1)
+        stop = min(self.hdf5.shape[-1], int(srange[1] + 2))
         return start, stop
         
     def _set_data(self):
@@ -142,6 +145,8 @@ class HDF5Plot(pg.PlotCurveItem):
             needs_slice = start < cstart or stop > cstop
 
         if needs_slice:
+            if self.offset == 0:
+                info('Slicing from HDF5 {}'.format(timestamp()))
             N = stop - start
             L = self.hdf5.shape[1]
             # load this many points before and after the view limits so that small updates
@@ -159,13 +164,25 @@ class HDF5Plot(pg.PlotCurveItem):
         self.x_visible = np.arange(start, stop) * self._xscale
 
     def set_external_data(self, y, visible=False):
-        if len(y) != len(self.x_visible):
-            raise ValueError('Shape of external series does not match the current window.')
         if visible:
+            if len(y) != len(self.x_visible):
+                raise ValueError('Shape of external series does not match the current window.')
             self.y_visible = y
+            self.updateHDF5Plot(data_ready=True)
         else:
+            if len(y) != (self._cslice.stop - self._cslice.start):
+                raise ValueError('Shape of external series does not match the cached load.')
             self._y_loaded = y
-        self.updateHDF5Plot(data_ready=True)
+            # update as if data is cached
+            self.updateHDF5Plot()
+
+    def unset_external_data(self, visible=False):
+        if self.offset == 0:
+            info('Unsetting external (visible {}) and updating curve data {}'.format(visible, timestamp()))
+        if not visible:
+            # Clear the saved slice to trigger a reload
+            self._cslice = None
+        self.updateHDF5Plot()
 
     def update_visible_offset(self):
         if self.parentWidget() is None:
@@ -240,6 +257,7 @@ class HDF5Plot(pg.PlotCurveItem):
             wid = max(1, int(0.05 * len(y_visible)))
             n_pos = int(0.2 * len(y_visible))
             y_pos = y_visible[n_pos - wid:n_pos + wid].max() + self.offset
+            info('Setting text {}, {}: {}'.format(x_pos, y_pos, timestamp()))
             self.text.setPos(x_pos, y_pos)
 
     def toggle_text(self, i, j):
@@ -256,29 +274,39 @@ class HDF5Plot(pg.PlotCurveItem):
 
 class CurveCollection(QtCore.QObject):
     data_changed = QtCore.pyqtSignal(QtCore.QObject)
+    plot_changed = QtCore.pyqtSignal(QtCore.QObject)
 
     def __init__(self, curves, *args, **kwargs):
         super(CurveCollection, self).__init__(*args, **kwargs)
         self.curves = curves
         self._current_set = set()
         # self._connections = list()
+        self._current_slice = slice(None)
         for c in curves:
             c.sigPlotChanged.connect(self.count_curves)
             # self._connections.append(c.sigPlotChanged.connect(self.count_curves))
 
     def count_curves(self, curve):
-        # This callback monitors the "plot changed" signal on the curve collection.
-        # When a curve emits, add it to a list.
-        # When the list is full, then emit the "data changed" signal to update graphics.
+        """
+        This callback monitors the "plot changed" signal on the curve collection.
+        When a curve emits, add it to a list.
+        When the list is full, then emit the "plot changed" signal to update graphics.
+        Separately, if the underlying curve data has changed, emit the "data changed" signal
+
+        """
         self._current_set.add(curve)
         if len(self._current_set) == len(self.curves):
-            self.data_changed.emit(self)
-            info = get_logger().info
-            info('CurveCollection emitting and resetting current set')
+            self.plot_changed.emit(self)
+            info('CurveCollection emitting plot_changed and resetting current set')
             self._current_set = set()
+            sl = self.curves[0]._cslice
+            if sl != self._current_slice:
+                self.data_changed.emit(self)
+                self._current_slice = sl
+                info('CurveCollection emitting data_changed')
         else:
-            info = get_logger().info
             info('added {} len curve set {}'.format(curve.number, len(self._current_set)))
+
 
     def selected_channels(self):
         return [i for i, c in enumerate(self.curves) if c.selected]
@@ -314,39 +342,45 @@ class CurveCollection(QtCore.QObject):
     @contextmanager
     def disable_listener(self, blocking=True):
         if blocking:
-            # for cnx, curve in zip(self._connections, self.curves):
-            #     curve.sigPlotChanged.disconnect(cnx)
+            info('Blocking sigPlotChanged callbacks {}'.format(timestamp()))
             for curve in self.curves:
                 # just disconnect the slot (i.e. the callable)
                 curve.sigPlotChanged.disconnect(self.count_curves)
-            # self._connections = list()
         try:
             yield
         finally:
             if blocking:
+                info('Reinstating sigPlotChanged callbacks {}'.format(timestamp()))
                 for c in self.curves:
                     c.sigPlotChanged.connect(self.count_curves)
-                    # self._connections.append(c.sigPlotChanged.connect(self.count_curves))
 
     def set_data_on_collection(self, array, ignore_signals=True, visible=True):
+        info('Setting external data to curves: '
+             'ignore {}, visible {} {}'.format(ignore_signals, visible, timestamp()))
         with self.disable_listener(blocking=ignore_signals):
             for data, line in zip(array, self.curves):
                 line.set_external_data(data, visible=visible)
 
+    def unset_data_on_collection(self, ignore_signals=True, visible=True):
+        info('Unsetting external array on curves, blocking: {} {}'.format(ignore_signals, timestamp()))
+        with self.disable_listener(blocking=ignore_signals):
+            for line in self.curves:
+                line.unset_external_data(visible=visible)
+
     def redraw_data(self, ignore_signals=False):
+        info('calling updateHDF5Plot on curves, ignore {} {}'.format(ignore_signals, timestamp()))
         with self.disable_listener(blocking=ignore_signals):
             for line in self.curves:
                 line.updateHDF5Plot()
+        info('done updateHDF5Plot on curves, {}'.format(timestamp()))
 
     def redraw_data_offsets(self, ignore_signals=False):
         # this would be used e.g. when the y-offsets have changed but the view limits have not
         # block on all but the last curve, then do as instructed for the final curve
-        info = get_logger().info
         info('start redrawing curve collection {}'.format(timestamp()))
         with self.disable_listener(blocking=ignore_signals):
             for line in self.curves:
                 line.update_visible_offset()
-        # self.data_changed.emit(self)
         info('end redrawing curve collection {}'.format(timestamp()))
 
 
@@ -527,6 +561,7 @@ class FastScroller(object):
         newX = self.p2.vb.mapSceneToView(pos).x()
         minX, maxX = self.region.getRegion()
         rng = 0.5 * (maxX - minX)
+        info('Jump-updating region box {}'.format(timestamp()))
         self.update_region([newX - rng, newX + rng])
 
     def fine_nav(self, evt):
@@ -555,6 +590,7 @@ class FastScroller(object):
         frame = embed_frame(self.chan_map, frame_vec)
         if self.frame_filter:
             frame = self.frame_filter(frame)
+        info('Setting voltage frame {}'.format(timestamp()))
         self.img.setImage(frame, autoLevels=False)
         self.frame_text.setText('Time {:.3f}s'.format(x))
         if move_vline and x is not None:
@@ -569,6 +605,7 @@ class FastScroller(object):
         x_vis = self._curves[0].x_visible
         x_avg = 0.5 * (x_vis[0] + x_vis[-1])
         frame = embed_frame(self.chan_map, image)
+        info('setting RMS frame {}'.format(timestamp()))
         self.img.setImage(frame, autoLevels=False)
         self.frame_text.setText('Time ~ {:.3f}s'.format(x_avg))
 
@@ -582,7 +619,6 @@ class FastScroller(object):
     def update_zoom_callback(self):
         # in callback mode, disable the signal from the zoom plot
         with block_signals(self.p1):
-            info = get_logger().info
             info('zoom callback called with block: {} {}'.format(self.p1.signalsBlocked(), timestamp()))
             self.update_zoom_from_region()
 
