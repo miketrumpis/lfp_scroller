@@ -1,3 +1,4 @@
+import numpy as np
 import h5py
 from traits.api import Button, Str, File, Bool, HasTraits, List, Instance, on_trait_change
 from traitsui.api import View, Group, UItem, Label, HGroup, EnumEditor, VGroup, TableEditor
@@ -24,6 +25,7 @@ class TimeStampSet(HasTraits):
     timing_array = Str
     timing_channels = Str('0')
     is_binary = Bool(True)
+    is_seconds = Bool(False)
     show = Bool(False)
 
     #load = Button('Show timestamps')
@@ -39,6 +41,11 @@ class TimeStampSet(HasTraits):
         if self.is_binary:
             time_stamps, _ = process_trigger(chans)
             time_stamps = time_stamps.astype('d') * self.parent.x_scale
+        elif self.is_seconds:
+            time_stamps = chans.astype('d')
+            time_stamps = np.unique(time_stamps)
+            if time_stamps.size != chans.size:
+                print('dropped {} duplicate times'.format(chans.size - time_stamps.size))
         else:
             time_stamps = chans.astype('d') * self.parent.x_scale
         return time_stamps
@@ -123,6 +130,8 @@ tab_editor = TableEditor(
         ObjectColumn(name='color', label='Color', editable=True),
         CheckboxColumn(name='is_binary', label='Binary?',
                        editable=True, width=0.1),
+        CheckboxColumn(name='is_seconds', label='Seconds?',
+                       editable=True, width=0.1),
         CheckboxColumn(name='show', label='Visible', editable=True, width=0.1)
     ],
     auto_size=False,
@@ -162,13 +171,16 @@ class Timestamps(VisModule):
         from ..data_files import FileHandler
         v = View(
             HGroup(
-                Group(Label('HDF5 file with timing signal'),
-                      UItem('file')),
-                Group(Label('Array with timing channel(s)'),
-                      UItem('timing_array',
-                            editor=EnumEditor(name='handler.fields'))),
-                Group(Label('Channel(s) with timing signal (comma-sep)'),
-                      UItem('timing_channels')),
+                VGroup(
+                    Group(Label('HDF5 file with timing signal'),
+                    UItem('file')),
+                    HGroup(
+                        Group(Label('Array with timing channel(s)'),
+                              UItem('timing_array', editor=EnumEditor(name='handler.fields'))),
+                        Group(Label('Channel(s) with timing signal (comma-sep)'),
+                              UItem('timing_channels'))
+                    )
+                ),
                 ## Item('is_binary', label='Binary series?'),
                 VGroup(
                     UItem('add_set', enabled_when='len(timing_source) > 0'),
