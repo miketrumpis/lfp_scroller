@@ -190,16 +190,13 @@ class HDF5Plot(pg.PlotCurveItem):
         tic = time()
         y_visible = self.y_visible + self.offset
         self.setData(x=self.x_visible, y=y_visible)
-        # self.resetTransform()
-        # self.set_text_position()
+        self.resetTransform()
+        self.set_text_position()
         toc = time() - tic
-        info = get_logger().info
-        info('set data time {}'.format(toc))
+        if self.offset == 0:
+            info('set data time {}'.format(toc))
         
     def updateHDF5Plot(self, data_ready=False):
-        # if self.offset == 0:
-        info = get_logger().info
-        info('Update hdf5 lines called num {}: external data {} {}'.format(self.number, data_ready, timestamp()))
         if self.hdf5 is None:
             self.setData([])
             return
@@ -211,7 +208,7 @@ class HDF5Plot(pg.PlotCurveItem):
             return
         start, stop = r
         # Decide by how much we should downsample 
-        ds = int((stop-start) / self.limit) + 1
+        ds = int((stop - start) / self.limit) + 1
         if ds == 1:
             # Small enough to display with no intervention.
             visible = self.y_visible
@@ -221,24 +218,41 @@ class HDF5Plot(pg.PlotCurveItem):
             # array suitable for visualizing.
 
             N = len(self.y_visible)
-            Nsub = max(5, N // ds)
-            # 1st axis: number of display points
-            # 2nd axis: number of raw points per display point
-            y = self.y_visible[:Nsub * ds].reshape(Nsub, ds)
 
             # This downsample does min/max interleaving
+            # -- does not squash noise
+            # 1st axis: number of display points
+            # 2nd axis: number of raw points per display point
+            # ds = ds * 2
+            # Nsub = max(5, N // ds)
+            # y = self.y_visible[:Nsub * ds].reshape(Nsub, ds)
             # visible = np.empty(Nsub * 2, dtype='d')
             # visible[0::2] = y.min(axis=1)
             # visible[1::2] = y.max(axis=1)
 
+            # This downsample picks 2 points regularly spaced in the segment
+            ds = ds * 2
+            Nsub = max(5, N // ds)
+            p1 = ds // 4
+            p2 = (3 * ds) // 4
+            y = self.y_visible[:Nsub * ds].reshape(Nsub, ds)
+            visible = np.empty(Nsub * 2, dtype='d')
+            visible[0::2] = y[:, p1]
+            visible[1::2] = y[:, p2]
+
             # This downsample does block averaging
-            visible = y.mean(axis=1)
+            # -- this flattens noisy segments
+            # Nsub = max(5, N // ds)
+            # y = self.y_visible[:Nsub * ds].reshape(Nsub, ds)
+            # visible = y.mean(axis=1)
 
             x_samp = np.linspace(ds // 2, len(self.x_visible) - ds // 2, len(visible)).astype('i')
             if x_samp[-1] >= len(self.x_visible):
                 x_samp[-1] = N - 1
             x_visible = np.take(self.x_visible, x_samp)
 
+        if self.offset == 0:
+            info('Update hdf5 lines called num {}: external data {} {}'.format(self.number, data_ready, timestamp()))
         visible = visible + self.offset
         self.setData(x=x_visible, y=visible)  # update_zoom_callback the plot
         self.resetTransform()
