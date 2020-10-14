@@ -62,7 +62,7 @@ class IntervalSpectrogram(PlotsInterval):
         lag = int(Fs * self.lag / 1000.)
         if strip is None:
             strip = int(Fs * self.strip / 1000.)
-        kw['NFFT'] = nextpow2(strip)
+        kw['nfft'] = nextpow2(strip)
         kw['pl'] = 1.0 - float(lag) / strip
         if self.high_res:
             kw['samp_factor'] = self.over_samp
