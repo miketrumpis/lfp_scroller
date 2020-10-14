@@ -310,14 +310,14 @@ class CurveCollection(QtCore.QObject):
         """
         self._current_set.add(curve)
         if len(self._current_set) == len(self.curves):
-            self.plot_changed.emit(self)
             info('CurveCollection emitting plot_changed and resetting current set')
+            self.plot_changed.emit(self)
             self._current_set = set()
             sl = self.curves[0]._cslice
             if sl != self._current_slice:
+                info('CurveCollection emitting data_changed')
                 self.data_changed.emit(self)
                 self._current_slice = sl
-                info('CurveCollection emitting data_changed')
         else:
             info('added {} len curve set {}'.format(curve.number, len(self._current_set)))
 
