@@ -6,7 +6,6 @@ from functools import partial
 import numpy as np
 import scipy.optimize as so
 
-from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 from matplotlib.animation import FuncAnimation
@@ -29,7 +28,7 @@ from ecoglib.vis.gui_tools import ArrayMap, SavesFigure
 from ecoglib.vis.plot_util import subplots, subplot2grid
 import seaborn as sns
 
-from .base import PlotsInterval, MultiframeSavesFigure, colormaps
+from .base import PlotsInterval, MultiframeSavesFigure, colormaps, FigureCanvas
 from ..helpers import PersistentWindow
 
 __all__ = ['ArrayVarianceTool', 'SpatialVariance']

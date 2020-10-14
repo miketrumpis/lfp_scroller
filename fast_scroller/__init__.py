@@ -13,9 +13,11 @@ import matplotlib
 import pyqtgraph as pg
 qt_version = pg.Qt.VERSION_INFO.split()[-1]
 if StrictVersion('4.5.0') <= StrictVersion(qt_version) < StrictVersion('5.0.0'):
+    QT5 = False
     pg.QtGui.QApplication.setGraphicsSystem('raster')
     matplotlib.use('Qt4Agg')
 else:
+    QT5 = True
     matplotlib.use('Qt5Agg')
 import pyface
 pyf_version = StrictVersion(pyface.__version__)
