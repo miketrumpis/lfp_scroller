@@ -2,6 +2,11 @@
 New timeseries scrolling tool with baseline analysis modules.
 """
 
+import platform
+import multiprocessing
+# fork is nicer than spawn with GUIs
+if platform.system() != 'Windows':
+    multiprocessing.set_start_method('fork')
 from distutils.version import StrictVersion
 # these imports set up some qt runtime stuff
 # pyqtgraph does not seem to support PySide2, so prefer PyQt5
