@@ -84,12 +84,17 @@ class HeadstageHandler(Handler):
 
 
 _subset_chan_maps = ('psv_244_mux1', 'psv_244_mux3') + tuple(multi_arm_electrodes.keys())
+# Short-cuts for two of the passive-244 permutations: all old/new headstages.
+# For future additions -- format should be "map_name" + "/shortcutname" (to split on "/")
+_subset_shortcuts = {'psv_244/newintan': ['intan64_new'] * 4,
+                     'psv_244/oldintan': ['intan64'] * 4}
 # append some non-standard channel maps for
 # 1) active electrodes (these are constructed on the fly based on geometry)
 # 2) unknown (can be built in the GUI)
 # 3) a value that is set programmatically via the .set_chan_map attribute
 available_chan_maps = sorted(electrode_maps.keys()) + \
                       sorted(multi_arm_electrodes.keys()) + \
+                      list(_subset_shortcuts.keys()) + \
                       ['active', 'pickled', 'unknown', 'settable']
 
 
@@ -119,9 +124,7 @@ class VisLauncher(HasTraits):
     skip_chan = Str
     elec_geometry = Str
     chan_map_connectors = Str
-    _is_subset_map = Property(
-        fget=lambda self: self.chan_map in _subset_chan_maps
-        )
+    _is_subset_map = Property(fget=lambda self: self.chan_map in _subset_chan_maps)
     screen_channels = Bool(False)
     screen_start = Float(0)
     concat_tool_launch = Button('Launch Batch Tool')
@@ -205,6 +208,11 @@ class VisLauncher(HasTraits):
             cnx = self.chan_map_connectors.split(',')
             cnx = [c.strip() for c in cnx]
             chan_map, nc, rf = get_electrode_map(self.chan_map, connectors=cnx)
+            nc = list(set(nc).union(rf))
+        elif self.chan_map in _subset_shortcuts:
+            cnx = _subset_shortcuts[self.chan_map]
+            map_name, shortcut = self.chan_map.split('/')
+            chan_map, nc, rf = get_electrode_map(map_name, connectors=cnx)
             nc = list(set(nc).union(rf))
         elif self.chan_map == 'settable':
             chan_map = self.set_chan_map
