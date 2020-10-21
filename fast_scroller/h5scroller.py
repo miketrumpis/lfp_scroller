@@ -33,19 +33,23 @@ def block_signals(qtobj, forced_state=None):
 
     Parameters
     ----------
-    qtobj: QtCore.QObject
+    qtobj: (list of) QtCore.QObject
     forced_state: bool or None
 
     """
+    if not isinstance(qtobj, (list, tuple)):
+        qtobj = [qtobj]
+    n_objs = len(qtobj)
     if forced_state is not None:
-        state = not forced_state
+        states = [not forced_state] * n_objs
     else:
-        state = qtobj.signalsBlocked()
+        states = [qo.signalsBlocked() for qo in qtobj]
     try:
-        orig_state = qtobj.blockSignals(not state)
+        orig_state = [qo.blockSignals(not state) for (qo, state) in zip(qtobj, states)]
         yield
     finally:
-        qtobj.blockSignals(orig_state)
+        for qo, state in zip(qtobj, orig_state):
+            qo.blockSignals(state)
 
 
 class HMSAxis(pg.AxisItem):
