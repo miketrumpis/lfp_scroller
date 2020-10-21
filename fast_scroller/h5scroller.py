@@ -9,6 +9,8 @@ from ecogdata.parallel.array_split import timestamp
 from ecogdata.parallel.mproc import get_logger
 from time import time
 
+from .helpers import DebounceCallback
+
 
 info = get_logger().info
 
