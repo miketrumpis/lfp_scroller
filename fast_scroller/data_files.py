@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from glob import glob
 from functools import partial
 from contextlib import ExitStack
@@ -120,7 +121,7 @@ class FileData(HasTraits):
                     arr_row = interpolate_blanked(arr_row, m, inplace=True)
                 x_ds, fs = downsample(arr_row, Fs, r=self.ds_rate)
                 y[i,:] = x_ds
-        return ds_name
+        return Path(ds_name)
     
     def _downsample_fired(self):
         self.file = self.create_downsampled()
@@ -173,16 +174,14 @@ class RHDFileData(FileData):
             return
 
     def create_downsampled(self, where='.'):
-        super().create_downsampled(where=where)
+        ds_name = super().create_downsampled(where=where)
         # now copy the JSON header
         with h5py.File(self.file, 'r') as f:
             header = json.loads(f.attrs['JSON_header'])
         header['sample_rate'] = self.Fs / self.ds_rate
-        fname = os.path.split(self.file)[1]
-        fname, ext = os.path.splitext(fname)
-        ds_name = os.path.join(where, fname + '_dnsamp{}.h5'.format(self.ds_rate))
         with h5py.File(ds_name, 'r+') as f:
             f.attrs['JSON_header'] = json.dumps(header)
+        return ds_name
 
 
 class ActiveArrayFileData(FileData):
