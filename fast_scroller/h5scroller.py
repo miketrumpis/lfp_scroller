@@ -536,8 +536,9 @@ class FastScroller(object):
         self.p2.setYRange(*np.percentile(nav_trace, [1, 99]))
         
         # Set bidirectional plot interaction
-        self.region.sigRegionChanged.connect(self.update_zoom_callback)
-        self.p1.sigXRangeChanged.connect(self.update_region_callback)
+        # need to hang onto references?
+        self._db_cnx1 = DebounceCallback.connect(self.region.sigRegionChanged, self.update_zoom_callback)
+        self._db_cnx2 = DebounceCallback.connect(self.p1.sigXRangeChanged, self.update_region_callback)
 
         # Do navigation jumps (if shift key is down)
         self.p2.scene().sigMouseClicked.connect(self.jump_nav)
@@ -630,7 +631,7 @@ class FastScroller(object):
         # update image with mean of the current view interval
         self.set_mean_image()
 
-    def update_zoom_callback(self):
+    def update_zoom_callback(self, *args):
         # in callback mode, disable the signal from the zoom plot
         with block_signals(self.p1):
             info('zoom callback called with block: {} {}'.format(self.p1.signalsBlocked(), timestamp()))
@@ -661,7 +662,7 @@ class FastScroller(object):
         info('setting both sides with block: {} {}'.format(self.region.signalsBlocked(), timestamp()))
         self.region.setRegion(view_range)
 
-    def update_region_callback(self, window, view_range):
+    def update_region_callback(self, window, view_range, *args):
         info = get_logger().info
         with block_signals(self.region):
             info('region callback called with block: {} {}'.format(self.region.signalsBlocked(), timestamp()))

@@ -1,15 +1,13 @@
-from time import time
 import numpy as np
 from scipy.signal import hilbert
+from scipy.ndimage import gaussian_filter1d
 from traits.api import HasTraits, Instance, Button, Int, Enum, Float, Str, Bool, Property
 from traitsui.api import View, UItem, Handler, Group, HGroup, VGroup, Label
-from pyface.timer.api import do_after
 
 from ecoglib.estimation.multitaper import bw2nw
 from ecogdata.util import nextpow2
-from ecogdata.parallel.array_split import timestamp
-from ecogdata.parallel.mproc import get_logger
-from ecogdata.filt.time import moving_projection, slepian_projection
+from ecogdata.parallel.array_split import split_at
+from ecogdata.filt.time import moving_projection, slepian_projection, filter_array
 
 from .base import VisModule
 from ..helpers import DebounceCallback
@@ -30,6 +28,8 @@ class AppliesSeriesFiltering(HasTraits):
     # Traits are (most commonly) defined using class member syntax (i.e. at the class level).
     # They are typed according to type names from traits.api (usually upper-case versions of Python types).
 
+    # All filters can make use of the sampling rate
+    sample_rate = Float
     # let the parent object know whether there are any config parameters to display in GUI
     has_params = Bool(False)
 
@@ -62,29 +62,98 @@ class HilbertEnvelope(AppliesSeriesFiltering):
         return np.abs(xa[:, :n])
 
 
+# Very simple bandpass -> rectify -> smooth transform
+class RectifyAndSmooth(AppliesSeriesFiltering):
+    has_params = True
+    bandpass = Str
+    f_lo = Property(Float, depends_on='bandpass')
+    f_hi = Property(Float, depends_on='bandpass')
+    square = Bool(True)
+    tau = Float
+    para = Bool(False)
+
+    def _parse_bandpass(self):
+        lo = -1
+        hi = -1
+        if len(self.bandpass):
+            split = self.bandpass.split(',')
+            try:
+                lo = float(split[0])
+            except:
+                pass
+            try:
+                hi = float(split[1])
+            except:
+                pass
+        return lo, hi
+
+    def _get_f_lo(self):
+        return self._parse_bandpass()[0]
+
+    def _get_f_hi(self):
+        return self._parse_bandpass()[1]
+
+    def default_traits_view(self):
+        v = View(
+            HGroup(
+                VGroup(Label('Band (comma-sep)'), UItem('bandpass')),
+                VGroup(Label('Square?'), UItem('square')),
+                VGroup(Label('Gauss tau (s)'), UItem('tau')),
+                VGroup(Label('Theaded?'), UItem('para'))
+            )
+        )
+        return v
+
+    def __call__(self, array):
+        if self.f_lo > 0 or self.f_hi > 0:
+            block_filter = 'parallel' if self.para else 'serial'
+            fdes = dict(lo=self.f_lo, hi=self.f_hi, Fs=self.sample_rate, ord=3)
+            print(fdes)
+            y = filter_array(array, inplace=False, block_filter=block_filter, design_kwargs=fdes)
+            print(y.ptp())
+        if self.square:
+            y **= 2
+        else:
+            np.abs(y, out=y)
+        tau_samps = self.tau * self.sample_rate
+        if tau_samps > 0:
+            if self.para:
+                gauss_para = split_at()(gaussian_filter1d)
+                y = gauss_para(y, tau_samps, axis=1)
+            else:
+                y = gaussian_filter1d(y, tau_samps, axis=-1)
+        if self.square:
+            np.sqrt(y, out=y)
+        print(y.ptp())
+        return y
+
+
 # This is a slightly more tunable power envelope calculator. Unlike the Hilbert transform, this estimator can make
 # narrowband envelopes on broadband series. You can control the bandwidth and center frequency of
 # the power estimate before demodulating to baseband. All these parameters are defined as traits on the object.
 class MultitaperDemodulate(AppliesSeriesFiltering):
     has_params = True
-    BW = Float(0.05)  # half-bandwidth of projection in Hz
-    Fs = Float(1)  # full bandwidth of series
+    BW = Float(10)  # half-bandwidth of projection in Hz
     f0 = Float   # center frequency of bandpass
     N = Int(100)  # segment size (moving projection slides this window over the whole series)
-    NW = Property(Float, depends_on='BW, N, Fs')  # This property updates the order of the DPSS projectors
+    NW = Property(Float, depends_on='BW, N')  # This property updates the order of the DPSS projectors
+    moving = Bool(True)
+    Kmax = Int
 
     # NW is a "property", which is dynamically calculated based on the values of other traits. It gets updated when
     # any of the traits it depends on change.
     def _get_NW(self):
-        return bw2nw(self.BW, self.N, self.Fs, halfint=True)
+        return bw2nw(self.BW, self.N, self.sample_rate, halfint=True)
 
     def __call__(self, array):
         nx = array.shape[1]
         # if the window is shorter than N, just make a non-moving projection
-        if nx <= self.N:
-            baseband = slepian_projection(array, self.BW, self.Fs, w0=self.f0, baseband=True, onesided=True)
+        if nx <= self.N or not self.moving:
+            Kmax = self.Kmax if self.Kmax else None
+            baseband = slepian_projection(array, self.BW, self.sample_rate, w0=self.f0, Kmax=Kmax, baseband=True,
+                                          onesided=True)
         else:
-            baseband = moving_projection(array, self.N, self.BW, Fs=self.Fs, f0=self.f0, baseband=True)
+            baseband = moving_projection(array, self.N, self.BW, Fs=self.sample_rate, f0=self.f0, baseband=True)
         return np.abs(baseband)
 
     # A HasTraits object can expose its traits for GUI manipulation using a View. The MultitaperDemodulate object
@@ -95,9 +164,10 @@ class MultitaperDemodulate(AppliesSeriesFiltering):
         v = View(
             HGroup(
                 VGroup(Label('half-BW (Hz)'), UItem('BW')),
-                VGroup(Label('samp freq (Hz)'), UItem('Fs')),
                 VGroup(Label('center freq (Hz)'), UItem('f0')),
                 VGroup(Label('Win size (pts)'), UItem('N')),
+                VGroup(Label('Slide win'), UItem('moving')),
+                VGroup(Label('Kmax'), UItem('Kmax')),
                 VGroup(Label('DPSS ord.'), UItem('NW', style='readonly'))
             )
         )
@@ -115,9 +185,11 @@ class SeriesFilterHandler(Handler):
     def object_name_changed(self, info):
         name = info.object.name.lower()
         if name == 'hilbert envelope':
-            info.object.filter = HilbertEnvelope()
+            info.object.filter = HilbertEnvelope(sample_rate=info.object.sample_rate)
         elif name == 'mult.taper demodulate':
-            info.object.filter = MultitaperDemodulate()
+            info.object.filter = MultitaperDemodulate(sample_rate=info.object.sample_rate)
+        elif name == 'rectify & smooth':
+            info.object.filter = RectifyAndSmooth(sample_rate=info.object.sample_rate)
         elif name == 'none':
             info.object.filter = NoFilter()
 
@@ -127,6 +199,7 @@ class SeriesFilterHandler(Handler):
 class SeriesFilter(HasTraits):
     name = Str
     filter = Instance(AppliesSeriesFiltering)
+    sample_rate = Float
 
     view = View(
         HGroup(
@@ -142,7 +215,7 @@ class SeriesFilter(HasTraits):
 
 
 # Name the available filters
-series_filters = ('None', 'Hilbert envelope', 'Mult.Taper demodulate')
+series_filters = ('None', 'Hilbert envelope', 'Rectify & smooth', 'Mult.Taper demodulate')
 
 
 # This is the actual module class that is represented as a panel in the main GUI window. It inherits from VisModule,
@@ -170,7 +243,8 @@ class SeriesFiltering(VisModule):
         # Every time the filter type changes from the drop-down menu,
         # change the current filter configuration object. This *does not*
         # change the applied filter -- need to hit "set filter" button to do that.
-        self.filter = SeriesFilter(name=self.filter_type)
+        rate = self.parent.x_scale ** -1.0
+        self.filter = SeriesFilter(name=self.filter_type, sample_rate=rate)
 
     # Button response behavior defined with "_<button-name>_fired(self)" method.
     def _set_filter_fired(self):

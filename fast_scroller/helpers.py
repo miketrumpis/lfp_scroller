@@ -71,7 +71,7 @@ class DebounceCallback:
         # return the callable that can be disconnected
         return debounced.debounced_callback
 
-    def debounced_callback(self, emitting):
+    def debounced_callback(self, *emitting):
         """
         This callback can be connected to a signal emitting object.
         When this signal debouncer is idle, the first signal will be dispatched and then follow-up signals
@@ -88,9 +88,9 @@ class DebounceCallback:
         print('callback for {}, now is {}'.format(self.callback, self._signal_times))
         if not len(self._signal_times):
             # dispatch now and start a new timer
-            self.apply_callback(emitting)
+            self.apply_callback(*emitting)
             self._signal_times.append(now)
-            do_after(self.debounce_interval_ms, self.apply_callback, emitting)
+            do_after(self.debounce_interval_ms, self.apply_callback, *emitting)
         else:
             if (now - self._signal_times[-1]) < self.debounce_interval_ms / 1000:
                 # put this time on the end of the stack
@@ -99,9 +99,9 @@ class DebounceCallback:
                 # if more than the debounce interval has elapsed, clear the stack
                 # and call this callback again
                 self._signal_times = list()
-                self.debounced_callback(emitting)
+                self.debounced_callback(*emitting)
 
-    def apply_callback(self, emitting):
+    def apply_callback(self, *emitting):
         """
         Apply the real callback
 
@@ -115,8 +115,8 @@ class DebounceCallback:
         if len(self._signal_times) == 1:
             return
         info = get_logger().info
-        info('applying callback {}'.format(timestamp()))
-        self.callback(emitting)
+        info('applying callback {} {} {}'.format(self.callback, emitting, timestamp()))
+        self.callback(*emitting)
         self._signal_times = list()
 
 
