@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.ticker as ticker
 from scipy.ndimage import gaussian_filter1d
 
-from traits.api import Button, Bool, Enum, Property, Float, Range, HasTraits, cached_property
+from traits.api import Button, Bool, Enum, Property, Float, Range, HasTraits, Instance, cached_property
 from traitsui.api import View, Group, VGroup, HGroup, Item, UItem, Label, EnumEditor
 
 
@@ -10,13 +10,15 @@ from ecogdata.util import nextpow2
 from ecoglib.estimation.resampling import Jackknife
 import ecoglib.estimation.multitaper as msp
 
-from .base import PlotsInterval
+from .base import PlotsInterval, GridSpecStack
 
 __all__ = ['IntervalSpectrogram']
 
 
 class IntervalSpectrogram(PlotsInterval):
     name = 'Spectrogram'
+    # overload the figure stack to use GridSpec
+    _figstack = Instance(GridSpecStack, args=())
 
     ## channel = Str('all')
     ## _chan_list = Property(depends_on='parent.chan_map')
@@ -35,6 +37,7 @@ class IntervalSpectrogram(PlotsInterval):
     plot = Button('Plot')
     freq_hi = Float
     freq_lo = Float(0)
+    log_freq = Bool(False)
     new_figure = Bool(True)
 
     colormap = 'Spectral_r'
@@ -143,16 +146,29 @@ class IntervalSpectrogram(PlotsInterval):
         m = (fx >= self.freq_lo) & (fx <= self.freq_hi)
         ptf = ptf[m]
         fx = fx[m]
+        if fx[0] == 0 and self.log_freq:
+            fx[0] = 0.5 * (fx[0] + fx[1])
         tx += x[0]
-        fig, ax = self._get_fig()
-        im = ax.imshow(
+        # fig, ax = self._get_fig()
+        fig, gs = self._get_fig(figsize=(8, 10), nrows=2, ncols=2, height_ratios=[1, 3], width_ratios=[20, 1])
+        ts_ax = fig.add_subplot(gs[0, 0])
+        ts_ax.plot(x, y)
+        ts_ax.set_ylabel(r'$\mu$V')
+        for t in ts_ax.get_xticklabels():
+            t.set_visible(False)
+        sg_ax = fig.add_subplot(gs[1, 0])
+        im = sg_ax.imshow(
             ptf, extent=[tx[0], tx[-1], fx[0], fx[-1]],
             cmap=self.colormap, origin='lower'
         )
-        ax.axis('auto')
-        ax.set_xlabel('Time (s)')
-        ax.set_ylabel('Frequency (Hz)')
-        cbar = fig.colorbar(im, ax=ax, shrink=0.5)
+        if self.log_freq:
+            sg_ax.set_yscale('log')
+            sg_ax.set_ylim(fx[1], fx[-1])
+        sg_ax.axis('auto')
+        sg_ax.set_xlabel('Time (s)')
+        sg_ax.set_ylabel('Frequency (Hz)')
+        cb_ax = fig.add_subplot(gs[:, 1])
+        cbar = fig.colorbar(im, cax=cb_ax, aspect=80)
         cbar.locator = ticker.MaxNLocator(nbins=3)
         if self.normalize.lower() == 'divide':
             title = 'Normalized ratio'
@@ -163,7 +179,9 @@ class IntervalSpectrogram(PlotsInterval):
         else:
             title = 'Log-power'
         cbar.set_label(title)
-        fig.tight_layout()
+        # fig.tight_layout()
+        gs.tight_layout(fig, w_pad=0.025)
+        ts_ax.set_xlim(sg_ax.get_xlim())
         try:
             fig.canvas.draw_idle()
         except:
@@ -172,15 +190,20 @@ class IntervalSpectrogram(PlotsInterval):
     def default_traits_view(self):
         v = View(
             HGroup(
-                Group(
-                    Label('Channel to plot'),
-                    UItem('channel',
-                          editor=EnumEditor(name='object._chan_list')),
-                    UItem('plot'),
-                    Label('Freq. Range'),
+                VGroup(
+                    HGroup(
+                        VGroup(
+                            Label('Channel to plot'),
+                            UItem('channel', editor=EnumEditor(name='object._chan_list'))
+                        ),
+                        Label('Log-Hz?'),
+                        UItem('log_freq'),
+                        UItem('plot')
+                    ),
                     HGroup(
                         Item('freq_lo', label='low', width=3),
                         Item('freq_hi', label='high', width=3),
+                        label='Freq. Range'
                     )
                 ),
                 VGroup(

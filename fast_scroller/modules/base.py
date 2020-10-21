@@ -5,6 +5,7 @@ from pyqtgraph.Qt import QtGui
 
 import matplotlib as mpl
 from matplotlib.figure import Figure
+from matplotlib.gridspec import GridSpec
 from .. import QT5
 if QT5:
     from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -166,13 +167,19 @@ class FigureStack(OrderedDict):
         return self[k]
 
 
+class GridSpecStack(FigureStack):
+
+    def _create_figure(self, figsize=None, nrows=1, ncols=1, **kwargs):
+        # creates a figure and then a GridSpec to make subplots
+        fig = Figure(figsize=figsize)
+        gs = GridSpec(nrows, ncols, figure=fig, **kwargs)
+        return fig, gs
+
+
 class AxesGridStack(FigureStack):
 
-    def _create_figure(self, **kwargs):
+    def _create_figure(self, figsize=None, **kwargs):
         # creates a figure and then an AxesGrid in the 111 position
-
-        # other than figsize, no other Figure kwargs allowed
-        figsize = kwargs.pop('figsize', None)
         fig = Figure(figsize=figsize)
         grid = AxesGrid(fig, 111, **kwargs)
         self.grid = grid
