@@ -118,7 +118,7 @@ class HDF5Plot(pg.PlotCurveItem):
         return self.text.isVisible()
 
     @property
-    def _y_slice(self):
+    def y_slice(self):
         return self._raw_slice if self._use_raw_slice else self._external_slice
 
     def _view_really_changed(self):
@@ -179,7 +179,7 @@ class HDF5Plot(pg.PlotCurveItem):
         x0 = self._cslice.start
         y_start = start - x0
         y_stop = y_start + (stop - start)
-        self.y_visible = self._y_loaded[y_start:y_stop]
+        self.y_visible = self.y_slice[y_start:y_stop]
         self.x_visible = np.arange(start, stop) * self._xscale
 
     def set_external_data(self, y, visible=False):
@@ -363,7 +363,7 @@ class CurveCollection(QtCore.QObject):
 
         """
         x_vis = self.curves[0].x_visible
-        y_vis = self.curves[0].y_visible if visible else self.curves[0]._y_loaded
+        y_vis = self.curves[0].y_visible if visible else self.curves[0].y_slice
         n_curves = len(self.curves)
         x = np.empty((n_curves, len(x_vis)), x_vis.dtype)
         y = np.empty((n_curves, len(y_vis)), y_vis.dtype)
@@ -371,7 +371,7 @@ class CurveCollection(QtCore.QObject):
         y[0] = y_vis
         for i in range(1, n_curves):
             x[i] = self.curves[i].x_visible
-            y[i] = self.curves[i].y_visible if visible else self.curves[i]._y_loaded
+            y[i] = self.curves[i].y_visible if visible else self.curves[i].y_slice
         return x, y
 
     @contextmanager
