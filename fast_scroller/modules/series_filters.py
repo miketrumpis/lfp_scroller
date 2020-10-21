@@ -250,11 +250,12 @@ class SeriesFiltering(VisModule):
     def _set_filter_fired(self):
         if self.filter is None or self.filter.name == 'None':
             # this is the same as unsetting a filter
-            self.filter = None
             self._unset_filter_fired()
             return
         if self._cb_connection is not None:
-            self.curve_collection.data_changed.disconnect(self._cb_connection)
+            # disconnect and make sure that that curve collection resets to raw slices,
+            # but do not trigger a data-changed signal
+            self.disconnect_filter(trigger_redraw=False)
 
         # get the concrete filter calculator from the current abstract filter
         filter = self.filter.filter
@@ -271,12 +272,15 @@ class SeriesFiltering(VisModule):
         # Now that a filter is applied, set the name for display
         self.applied_filter = self.filter.name
 
+    def disconnect_filter(self, trigger_redraw=True):
+        self.curve_collection.data_changed.disconnect(self._cb_connection)
+        self.curve_collection.unset_data_on_collection(ignore_signals=not trigger_redraw, visible=False)
+        self._cb_connection = None
+
     def _unset_filter_fired(self):
         # If a connection is present, disconnect it and redraw the raw data (without signaling data change)
         if self._cb_connection is not None:
-            self.curve_collection.data_changed.disconnect(self._cb_connection)
-            self._cb_connection = None
-            self.curve_collection.unset_data_on_collection(ignore_signals=True, visible=False)
+            self.disconnect_filter(trigger_redraw=True)
         # unset the filter name and callback
         self.applied_filter = 'None'
 

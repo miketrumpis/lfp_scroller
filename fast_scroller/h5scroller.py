@@ -97,6 +97,12 @@ class HDF5Plot(pg.PlotCurveItem):
         self._cx2 = 0
         # track current ACTUAL slice (including any pre-loaded buffer)
         self._cslice = None
+        # Set some state tracking to know whether to use slices from the underlying HDF buffer,
+        # or modified/filtered versions set by an external module. This state only affects
+        # the underlying loaded data, which is a superset of the visible data
+        self._use_raw_slice = True
+        self._raw_slice = None
+        self._external_slice = None
         
     def setHDF5(self, data, index, offset, number, dx=1.0, scale=1):
         self.hdf5 = data
@@ -110,6 +116,10 @@ class HDF5Plot(pg.PlotCurveItem):
     @property
     def selected(self):
         return self.text.isVisible()
+
+    @property
+    def _y_slice(self):
+        return self._raw_slice if self._use_raw_slice else self._external_slice
 
     def _view_really_changed(self):
         r = self._view_range()
@@ -151,6 +161,8 @@ class HDF5Plot(pg.PlotCurveItem):
             needs_slice = start < cstart or stop > cstop
 
         if needs_slice:
+            # When this condition, automatically reset state to raw slices.
+            # If anything is watching this data to change, it will need access to the raw slice.
             if self.offset == 0:
                 info('Slicing from HDF5 {}'.format(timestamp()))
             N = stop - start
@@ -159,7 +171,8 @@ class HDF5Plot(pg.PlotCurveItem):
             # can grab pre-loaded data
             extra = int(self.load_extra / 2 * N)
             sl = np.s_[self.index, max(0, start - extra):min(L, stop + extra)]
-            self._y_loaded = self.hdf5[sl] * self._yscale
+            self._use_raw_slice = True
+            self._raw_slice = self.hdf5[sl] * self._yscale
             self._cslice = sl[1]
 
         # can retreive data within the pre-load
@@ -178,7 +191,9 @@ class HDF5Plot(pg.PlotCurveItem):
         else:
             if len(y) != (self._cslice.stop - self._cslice.start):
                 raise ValueError('Shape of external series does not match the cached load.')
-            self._y_loaded = y
+            # If setting on the underlying slice, then set it here and update the mode
+            self._external_slice = y
+            self._use_raw_slice = False
             # update as if data is cached
             self.updateHDF5Plot()
 
@@ -186,8 +201,8 @@ class HDF5Plot(pg.PlotCurveItem):
         if self.offset == 0:
             info('Unsetting external (visible {}) and updating curve data {}'.format(visible, timestamp()))
         if not visible:
-            # Clear the saved slice to trigger a reload
-            self._cslice = None
+            # Revert to raw slices and reset visible data
+            self._use_raw_slice = True
         self.updateHDF5Plot()
 
     def update_visible_offset(self):
