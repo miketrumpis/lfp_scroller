@@ -108,9 +108,7 @@ class RectifyAndSmooth(AppliesSeriesFiltering):
         if self.f_lo > 0 or self.f_hi > 0:
             block_filter = 'parallel' if self.para else 'serial'
             fdes = dict(lo=self.f_lo, hi=self.f_hi, Fs=self.sample_rate, ord=3)
-            print(fdes)
             y = filter_array(array, inplace=False, block_filter=block_filter, design_kwargs=fdes)
-            print(y.ptp())
         if self.square:
             y **= 2
         else:
@@ -124,7 +122,6 @@ class RectifyAndSmooth(AppliesSeriesFiltering):
                 y = gaussian_filter1d(y, tau_samps, axis=-1)
         if self.square:
             np.sqrt(y, out=y)
-        print(y.ptp())
         return y
 
 

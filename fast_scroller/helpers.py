@@ -85,7 +85,8 @@ class DebounceCallback:
 
         """
         now = time()
-        print('callback for {}, now is {}'.format(self.callback, self._signal_times))
+        info = get_logger().info
+        info('callback for {}, now is {}'.format(self.callback, self._signal_times))
         if not len(self._signal_times):
             # dispatch now and start a new timer
             self.apply_callback(*emitting)
