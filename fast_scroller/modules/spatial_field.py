@@ -243,7 +243,7 @@ class STSemivar(PersistentWindow):
         block_time = []
         combs = chan_map.site_combinations
 
-        for i in range(xb.nblock):
+        for i in range(len(xb)):
 
             xb_ = xb.block(i)
             if normed:
