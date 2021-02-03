@@ -2,8 +2,11 @@ from traits.api import Instance, Float, Enum, Any, List, on_trait_change, Event,
 from traitsui.api import View, UItem, VSplit, CustomEditor, HSplit, Group, Label, ListEditor
 
 from pyqtgraph.Qt import QtGui
+from pyqtgraph.graphicsItems.GradientEditorItem import Gradients
+from .pyqtgraph_extensions import get_colormap_lut
 
 from .helpers import PersistentWindow
+from .h5scroller import FastScroller
 from .modules import *
 
 
@@ -17,6 +20,7 @@ class VisWrapper(PersistentWindow):
     x_scale = Float
     _y_spacing_enum = Enum(200, [0, 20, 50, 100, 200, 500, 1000, 2000, 5000, 'entry'])
     _y_spacing_entry = Float(0.0)
+    colormap = Enum('bipolar', Gradients.keys())
     y_spacing = Property
     chan_map = Any
     region = Event
@@ -27,13 +31,14 @@ class VisWrapper(PersistentWindow):
                      SpatialVariance] )
     recording = Str
 
-    def __init__(self, qtwindow, **traits):
+    def __init__(self, qtwindow: FastScroller, **traits):
         self._qtwindow = qtwindow
         # Filter this keyword argument: this class can be called with "y_spacing" specified, even
         # though the "y_spacing" property on this class is read-only.
-        dy = traits.pop('y_spacing', None)
+        dy = traits.pop('y_spacing', 100)
         traits['_y_spacing_enum'] = dy
         super(VisWrapper, self).__init__(**traits)
+        self._qtwindow.img.setLookupTable(get_colormap_lut(name=self.colormap))
         # connect the region-changed signal to signal a traits callback
         qtwindow.region.sigRegionChanged.connect(self._region_did_change)
         self._make_modules()
@@ -64,6 +69,10 @@ class VisWrapper(PersistentWindow):
         if self.y_spacing == self._y_spacing_entry:
             self._change_spacing()
 
+    @on_trait_change('colormap')
+    def _change_colormap(self):
+        self._qtwindow.img.setLookupTable(get_colormap_lut(self.colormap))
+
     def default_traits_view(self):
         ht = 1000
         v = View(
@@ -78,7 +87,9 @@ class VisWrapper(PersistentWindow):
                     Group(Label('Trace spacing (uV)'),
                           UItem('_y_spacing_enum', resizable=True),
                           Label('Enter spacing (uV)'),
-                          UItem('_y_spacing_entry')),
+                          UItem('_y_spacing_entry'),
+                          Label('Color map'),
+                          UItem('colormap')),
                     UItem('modules', style='custom', resizable=True,
                           editor=ListEditor(use_notebook=True,
                                             deletable=False, 
