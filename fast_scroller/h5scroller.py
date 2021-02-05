@@ -5,8 +5,7 @@ from pyqtgraph.Qt import QtCore, QtGui
 pg.setConfigOptions(imageAxisOrder='row-major')
 from .pyqtgraph_extensions import ImageItem, ColorBarItem, get_colormap_lut
 from ecogdata.channel_map import ChannelMap, CoordinateChannelMap
-from ecogdata.parallel.array_split import timestamp
-from ecogdata.parallel.mproc import get_logger
+from ecogdata.parallel.mproc import get_logger, timestamp
 from time import time
 
 from .helpers import DebounceCallback

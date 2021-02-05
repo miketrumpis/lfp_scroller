@@ -5,8 +5,7 @@ from time import time
 from traits.api import HasTraits, Str
 from traitsui.api import View, VGroup, spring, HGroup, Item
 from pyface.timer.api import do_after
-from ecogdata.parallel.array_split import timestamp
-from ecogdata.parallel.mproc import get_logger
+from ecogdata.parallel.mproc import get_logger, timestamp
 
 
 # A HasTraits "mixin" that keeps a reference to its own UI window so that
