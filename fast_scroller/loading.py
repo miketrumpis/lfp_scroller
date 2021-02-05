@@ -271,7 +271,7 @@ class VisLauncher(HasTraits):
                                max_zoom=self.max_window_width)
         file_name = os.path.split(self.file_data.file)[1]
         file_name = os.path.splitext(file_name)[0]
-        v_win = VisWrapper(new_vis, x_scale = x_scale, chan_map=chan_map,
+        v_win = VisWrapper(new_vis, x_scale=x_scale, chan_map=chan_map,
                            y_spacing=self.offset, modules=modules, recording=file_name)
         view = v_win.default_traits_view()
         view.kind = 'live'

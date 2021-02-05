@@ -79,6 +79,7 @@ class PlainSecAxis(pg.AxisItem):
 
 
 class HDF5Plot(pg.PlotCurveItem):
+    vis_rate_changed = QtCore.pyqtSignal(QtCore.QObject)
     def __init__(self, *args, **kwds):
         self.hdf5 = None
         # maximum number of samples to be plotted
@@ -309,13 +310,15 @@ class HDF5Plot(pg.PlotCurveItem):
 class CurveCollection(QtCore.QObject):
     data_changed = QtCore.pyqtSignal(QtCore.QObject)
     plot_changed = QtCore.pyqtSignal(QtCore.QObject)
-
+    vis_rate_changed = QtCore.pyqtSignal(np.float64)
     def __init__(self, curves, *args, **kwargs):
         super(CurveCollection, self).__init__(*args, **kwargs)
         self.curves = curves
         self._current_set = set()
         # self._connections = list()
         self._current_slice = slice(None)
+        x = curves[0].getData()[0]
+        self._current_rate = (x[1] - x[0]) ** -1
         for c in curves:
             c.sigPlotChanged.connect(self.count_curves)
             # self._connections.append(c.sigPlotChanged.connect(self.count_curves))
@@ -333,14 +336,19 @@ class CurveCollection(QtCore.QObject):
             info('CurveCollection emitting plot_changed and resetting current set')
             self.plot_changed.emit(self)
             self._current_set = set()
-            sl = self.curves[0]._cslice
+            sl = curve._cslice
             if sl != self._current_slice:
                 info('CurveCollection emitting data_changed')
                 self.data_changed.emit(self)
                 self._current_slice = sl
+            x = curve.getData()[0]
+            rate = (x[1] - x[0]) ** -1
+            if rate != self._current_rate:
+                self.vis_rate_changed.emit(rate)
+                self._current_rate = rate
         else:
-            info('added {} len curve set {}'.format(curve.number, len(self._current_set)))
-
+            if curve.number in (0, len(self.curves) - 1):
+                info('added {} len curve set {}'.format(curve.number, len(self._current_set)))
 
     def selected_channels(self):
         return [i for i, c in enumerate(self.curves) if c.selected]

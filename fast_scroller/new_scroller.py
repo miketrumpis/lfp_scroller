@@ -1,6 +1,6 @@
 from traits.api import Instance, Float, Enum, Any, List, on_trait_change, Event, Str, Property
-from traitsui.api import View, UItem, VSplit, CustomEditor, HSplit, Group, Label, ListEditor
-
+from traitsui.api import View, UItem, VSplit, CustomEditor, HSplit, Group, HGroup, Label, ListEditor
+from collections import OrderedDict
 from pyqtgraph.Qt import QtGui
 from pyqtgraph.graphicsItems.GradientEditorItem import Gradients
 from .pyqtgraph_extensions import get_colormap_lut
@@ -22,6 +22,7 @@ class VisWrapper(PersistentWindow):
     _y_spacing_entry = Float(0.0)
     colormap = Enum('bipolar', Gradients.keys())
     y_spacing = Property
+    vis_rate = Float
     chan_map = Any
     region = Event
     modules = List( [IntervalTraces,
@@ -37,21 +38,28 @@ class VisWrapper(PersistentWindow):
         # though the "y_spacing" property on this class is read-only.
         dy = traits.pop('y_spacing', 100)
         traits['_y_spacing_enum'] = dy
+        x = qtwindow.current_data()[0][0]
+        traits['vis_rate'] = (x[1] - x[0]) ** -1
         super(VisWrapper, self).__init__(**traits)
         self._qtwindow.img.setLookupTable(get_colormap_lut(name=self.colormap))
         # connect the region-changed signal to signal a traits callback
         qtwindow.region.sigRegionChanged.connect(self._region_did_change)
+        qtwindow.curve_collection.vis_rate_changed.connect(self._follow_vis_rate)
         self._make_modules()
 
     def _region_did_change(self):
         self.region = True
 
+    def _follow_vis_rate(self, rate):
+        self.vis_rate = rate
+
     def _make_modules(self):
         mods = self.modules[:]
-        self.modules = []
+        self.modules_by_name = OrderedDict()
         for m in mods:
             module = m(parent=self, chan_map=self.chan_map, curve_collection=self._qtwindow.curve_collection)
-            self.modules.append(module)
+            self.modules_by_name[module.name] = module
+        self.modules = list(self.modules_by_name.values())
 
     def _get_y_spacing(self):
         if self._y_spacing_enum == 'entry':
@@ -89,7 +97,9 @@ class VisWrapper(PersistentWindow):
                           Label('Enter spacing (uV)'),
                           UItem('_y_spacing_entry'),
                           Label('Color map'),
-                          UItem('colormap')),
+                          UItem('colormap'),
+                          HGroup(Label('Vis. sample rate'), UItem('vis_rate')),
+                          ),
                     UItem('modules', style='custom', resizable=True,
                           editor=ListEditor(use_notebook=True,
                                             deletable=False, 
