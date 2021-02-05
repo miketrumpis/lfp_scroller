@@ -4,8 +4,9 @@ import os,sys
 import pyqtgraph as pg
 from pyqtgraph import QtGui,QtCore
 # should be a case statement here
-QtCore.pyqtSignal = QtCore.Signal
-QtCore.pyqtSlot = QtCore.Slot
+if not hasattr(QtCore, 'pyqtSignal'):
+    QtCore.pyqtSignal = QtCore.Signal
+    QtCore.pyqtSlot = QtCore.Slot
 import pyqtgraph.exporters as pgex
 from scipy.interpolate import interp1d
 from pyqtgraph.graphicsItems.GradientEditorItem import Gradients
