@@ -584,6 +584,9 @@ class FastScroller(object):
         # a callable frame filter may be set on this object to affect frame display
         self.frame_filter = None
 
+        # set up initial frame
+        self.set_mean_image()
+
     def current_frame(self):
         return self.region.getRegion()
 
