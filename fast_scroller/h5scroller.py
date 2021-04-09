@@ -5,13 +5,13 @@ from pyqtgraph.Qt import QtCore, QtGui
 pg.setConfigOptions(imageAxisOrder='row-major')
 from .pyqtgraph_extensions import ImageItem, ColorBarItem, get_colormap_lut
 from ecogdata.channel_map import ChannelMap, CoordinateChannelMap
-from ecogdata.parallel.mproc import get_logger, timestamp
+from ecogdata.parallel.mproc import parallel_context, timestamp
 from time import time
 
 from .helpers import DebounceCallback
 
 
-info = get_logger().info
+info = parallel_context.get_logger().info
 
 
 def embed_frame(channel_map, vector):
@@ -685,7 +685,7 @@ class FastScroller(object):
         else:
             first_region = [orig_range[0], view_range[1]]
         # do right-side while blocked (force block in case we're already in a blocking context)
-        info = get_logger().info
+        info = parallel_context.get_logger().info
         with block_signals(self.region, forced_state=True):
             info('setting first range with block: {} {}'.format(self.region.signalsBlocked(), timestamp()))
             self.region.setRegion(first_region)
@@ -694,7 +694,7 @@ class FastScroller(object):
         self.region.setRegion(view_range)
 
     def update_region_callback(self, window, view_range, *args):
-        info = get_logger().info
+        info = parallel_context.get_logger().info
         with block_signals(self.region):
             info('region callback called with block: {} {}'.format(self.region.signalsBlocked(), timestamp()))
             self.update_region(view_range)

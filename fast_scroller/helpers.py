@@ -5,7 +5,7 @@ from time import time
 from traits.api import HasTraits, Str
 from traitsui.api import View, VGroup, spring, HGroup, Item
 from pyface.timer.api import do_after
-from ecogdata.parallel.mproc import get_logger, timestamp
+from ecogdata.parallel.mproc import parallel_context, timestamp
 
 
 # A HasTraits "mixin" that keeps a reference to its own UI window so that
@@ -84,7 +84,7 @@ class DebounceCallback:
 
         """
         now = time()
-        info = get_logger().info
+        info = parallel_context.get_logger().info
         info('callback for {}, now is {}'.format(self.callback, self._signal_times))
         if not len(self._signal_times):
             # dispatch now and start a new timer
@@ -114,7 +114,7 @@ class DebounceCallback:
         # if the signal time stack is only one deep, then that signal was already dispatched
         if len(self._signal_times) == 1:
             return
-        info = get_logger().info
+        info = parallel_context.get_logger().info
         info('applying callback {} {} {}'.format(self.callback, emitting, timestamp()))
         self.callback(*emitting)
         self._signal_times = list()
