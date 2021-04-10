@@ -13,6 +13,7 @@ from .band_power_map import BandPowerMap
 from .navigators import NavigatorManager
 from .frame_filters import FrameFilters
 from .series_filters import SeriesFiltering
+from .hfo_finder import HFOLocator
 
 
 __all__ = ['AnimateInterval',
@@ -27,6 +28,7 @@ __all__ = ['AnimateInterval',
            'NavigatorManager',
            'FrameFilters',
            'SeriesFiltering',
+           'HFOLocator',
            'YRange',
            'ana_modules',
            'default_modules']
@@ -63,6 +65,7 @@ ana_modules = {
     'Navigators': NavigatorManager,
     'Spatial filters': FrameFilters,
     'Series filters': SeriesFiltering,
+    'HFO Locator': HFOLocator
     }
 
 
