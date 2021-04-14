@@ -5,8 +5,61 @@ from traits.api import Int, Float, Range, Button, Bool, Str, File, HasTraits, on
 from traitsui.api import View, Group, HGroup, VGroup, UItem, Item, Label, RangeEditor
 
 from .base import VisModule
+from ..h5scroller import PlotCurveCollection
 
 __all__ = ['HFOLocator']
+
+
+class HFOCollection(PlotCurveCollection):
+    events_table: OrderedDict
+
+    @classmethod
+    def cloned_from_collection(cls, curve_collection: PlotCurveCollection, events_table: OrderedDict):
+        hfos = cls(curve_collection.hdf_data, curve_collection.plot_channels,
+                   curve_collection.dx, curve_collection.dy, curve_collection._y_offset)
+        hfos.events_table = events_table
+        hfos.setPen(width=4, color='r')
+        hfos.setShadowPen(color='r', width=4)
+        connection_id = curve_collection.plot_changed.connect(hfos._yoke_offset)
+        hfos._yoke = (curve_collection.plot_changed, connection_id)
+        return hfos
+
+    def _yoke_offset(self, curves):
+        if curves._y_offset != self._y_offset:
+            self.y_offset = curves._y_offset
+
+    def __del__(self):
+        signal, connection = self._yoke
+        signal.disconnect(connection)
+
+    def updatePlotData(self, data_ready=False):
+        r = self._view_range()
+        if not r:
+            print('no view range')
+            return
+        start, stop = r
+        offsets = self.y_offset.squeeze()
+        x_data = list()
+        y_data = list()
+        connections = list()
+        for time in self.events_table:
+            if start < time < stop:
+                e_start = time
+                for channel, e_stop in self.events_table[time]:
+                    data_channel = self.plot_channels[channel]
+                    data = self.hdf_data[data_channel, e_start:e_stop] * self.dy + offsets[channel]
+                    y_data.append(data)
+                    x_data.append(np.arange(e_start, e_stop) * self.dx)
+                    c = np.ones(e_stop - e_start, dtype='>i4')
+                    c[-1] = 0
+                    connections.append(c)
+        print(x_data)
+        print(y_data)
+        x = np.concatenate(x_data)
+        y = np.concatenate(y_data)
+        connect = np.concatenate(connections)
+        # print('x, y, c =', x.shape, y.shape, connect.shape)
+        self.setData(x=x, y=y, connect=connect)
 
 
 class HFOLocator(VisModule):
@@ -14,7 +67,7 @@ class HFOLocator(VisModule):
     file = File(exists=True)
     next = Button('Next event')
     prev = Button('Previous event')
-    clear = Bool('Clear marks')
+    show_hfos = Bool(True)
     has_events = Bool(False)
     event_idx = Int(-1)
     last_idx = Int(0)
@@ -35,6 +88,7 @@ class HFOLocator(VisModule):
         self.event_idx = -1
         self.last_idx = len(self.event_table)
         self.has_events = True
+        self._toggle_curves()
 
     @on_trait_change('event_idx')
     def move_to_event(self, event=None):
@@ -50,9 +104,22 @@ class HFOLocator(VisModule):
         event_time = event_time * self.parent.x_scale
         view_range = [event_time + self.before_time / 1e3, event_time + self.after_time / 1e3]
         self.parent._qtwindow.update_region(view_range)
-        xrange = self.parent._qtwindow.p2.getXRange()
+        xrange = self.parent._qtwindow.p2.viewRange()[0]
         dx = xrange[1] - xrange[0]
-        self.parent._qtwindow.p2.setXRange([event_time - dx / 2, event_time + dx / 2])
+        self.parent._qtwindow.p2.setXRange(event_time - dx / 2, event_time + dx / 2)
+
+    @on_trait_change('show_hfos')
+    def _toggle_curves(self):
+        if not self.has_events:
+            return
+        if self.show_hfos:
+            self.hfo_curves = HFOCollection.cloned_from_collection(self.curve_collection, self.event_table)
+            self.parent._qtwindow.p1.addItem(self.hfo_curves)
+        else:
+            if not hasattr(self, 'hfo_curves'):
+                return
+            self.parent._qtwindow.p1.removeItem(self.hfo_curves)
+            del self.hfo_curves
 
     def _change_event(self, sign):
         if 0 <= self.event_idx + sign < self.last_idx:
@@ -72,7 +139,8 @@ class HFOLocator(VisModule):
                        UItem('after_time')),
                 VGroup(Label('Event file'),
                        UItem('file'),
-                       Item('has_events', label='Events ready', style='readonly')),
+                       Item('has_events', label='Events ready', style='readonly'),
+                       HGroup(Label('Highlight HFOs'), UItem('show_hfos'))),
                 VGroup(UItem('next', enabled_when='event_idx < last_idx - 1'),
                        UItem('prev', enabled_when='event_idx > 0'))
             ),
