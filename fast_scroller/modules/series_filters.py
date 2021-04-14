@@ -41,7 +41,7 @@ class AppliesSeriesFiltering(HasTraits):
         y = curve_collection.current_data(visible=False)[1]
         y = self(y)
         # set data while temporarily disabling the collection listening while data changes
-        curve_collection.set_data_on_collection(y, ignore_signals=True, visible=False)
+        curve_collection.set_external_data(y, visible=False, redraw=True)
 
 # A dummy filter when no filter is selected (should probably never be called)
 class NoFilter(AppliesSeriesFiltering):
@@ -271,7 +271,7 @@ class SeriesFiltering(VisModule):
 
     def disconnect_filter(self, trigger_redraw=True):
         self.curve_collection.data_changed.disconnect(self._cb_connection)
-        self.curve_collection.unset_data_on_collection(ignore_signals=not trigger_redraw, visible=False)
+        self.curve_collection.unset_external_data(visible=False, redraw=trigger_redraw)
         self._cb_connection = None
 
     def _unset_filter_fired(self):

@@ -296,8 +296,7 @@ class PlotCurveCollection(pg.PlotCurveItem):
             self.vis_rate_changed.emit(vis_rate)
         self.plot_changed.emit(self)
 
-
-    def set_external_data(self, array, visible=False):
+    def set_external_data(self, array, redraw=False, visible=False):
         # visible == True only changes the on-screen data, rather than the extended slice
         if visible:
             if array.shape[1] != self.x_visible.shape[1]:
@@ -305,7 +304,8 @@ class PlotCurveCollection(pg.PlotCurveItem):
             self.y_visible = array
             if self.x_visible is None:
                 self.x_visible = np.tile(np.arange(array.shape[1]), (array.shape[0], 1))
-            self.updatePlotData(data_ready=True)
+            if redraw:
+                self.updatePlotData(data_ready=True)
         else:
             if array.shape[1] != (self._cslice.stop - self._cslice.start):
                 raise ValueError('Shape of external series does not match the cached load.')
@@ -313,45 +313,16 @@ class PlotCurveCollection(pg.PlotCurveItem):
             self._external_slice = array
             self._use_raw_slice = False
             # update as if data is cached
-            self.updatePlotData()
+            if redraw:
+                self.updatePlotData()
 
-    def unset_external_data(self, visible=False):
+    def unset_external_data(self, redraw=False, visible=False):
         info('Unsetting external (visible {}) and updating curve data {}'.format(visible, timestamp()))
         if not visible:
             # Revert to raw slices and reset visible data
             self._use_raw_slice = True
-        self.updatePlotData()
-
-    def set_data_on_collection(self, array, ignore_signals=True, visible=True):
-        self.set_external_data(array, visible=visible)
-        # info('Setting external data to curves: '
-        #      'ignore {}, visible {} {}'.format(ignore_signals, visible, timestamp()))
-        # with self.disable_listener(blocking=ignore_signals):
-        #     for data, line in zip(array, self.curves):
-        #         line.set_external_data(data, visible=visible)
-
-    def unset_data_on_collection(self, ignore_signals=True, visible=True):
-        info('Unsetting external array on curves, blocking: {} {}'.format(ignore_signals, timestamp()))
-        self.unset_external_data(visible=visible)
-        # with self.disable_listener(blocking=ignore_signals):
-        #     for line in self.curves:
-        #         line.unset_external_data(visible=visible)
-
-    # def redraw_data(self, ignore_signals=False):
-    #     info('calling updateHDF5Plot on curves, ignore {} {}'.format(ignore_signals, timestamp()))
-    #     with self.disable_listener(blocking=ignore_signals):
-    #         for line in self.curves:
-    #             line.updateHDF5Plot()
-    #     info('done updateHDF5Plot on curves, {}'.format(timestamp()))
-
-    # def redraw_data_offsets(self, ignore_signals=False):
-    #     # this would be used e.g. when the y-offsets have changed but the view limits have not
-    #     # block on all but the last curve, then do as instructed for the final curve
-    #     info('start redrawing curve collection {}'.format(timestamp()))
-    #     with self.disable_listener(blocking=ignore_signals):
-    #         for line in self.curves:
-    #             line.update_visible_offset()
-    #     info('end redrawing curve collection {}'.format(timestamp()))
+        if redraw:
+            self.updatePlotData()
 
 
 class LabeledCurveCollection(PlotCurveCollection):
