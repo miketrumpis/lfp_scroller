@@ -3,10 +3,9 @@ import numpy as np
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 pg.setConfigOptions(imageAxisOrder='row-major')
-# from .pyqtgraph_extensions import ImageItem, ColorBarItem, get_colormap_lut
+from ecogdata.util import ToggleState
 from ecogdata.channel_map import ChannelMap, CoordinateChannelMap
 from ecogdata.parallel.mproc import parallel_context, timestamp
-from time import time
 
 from .helpers import DebounceCallback
 from .h5data import ReadCache
@@ -84,6 +83,9 @@ class PlotCurveCollection(pg.PlotCurveItem):
     plot_changed = QtCore.pyqtSignal(QtCore.QObject)
     vis_rate_changed = QtCore.pyqtSignal(np.float64)
 
+    def __new__(cls, *args, **kwargs):
+        return super().__new__(cls)
+
     def __init__(self, data: ReadCache, plot_channels: list,
                  dx: float, dy:float, y_offset: float, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -97,11 +99,6 @@ class PlotCurveCollection(pg.PlotCurveItem):
         self.limit = kwargs.pop('points_limit', 6000)
         self.load_extra = kwargs.pop('load_extra', 0.25)
         self._current_vis_rate = 1 / dx
-        # This item also has a curve point and (in)visible text
-        # self.curve_point = pg.CurvePoint(self)
-        # self.text = pg.TextItem('empty', anchor=(0.5, 1.0), color=(255, 98, 65), fill=(65, 222, 255, 180))
-        # self.text.setParent(self.curve_point)
-        # self.text.setVisible(False)
         # track current values of (x1, x2) to protect against reloads triggered by spurious view changes
         self._cx1 = 0
         self._cx2 = 0
@@ -203,8 +200,6 @@ class PlotCurveCollection(pg.PlotCurveItem):
             extra = int(self.load_extra / 2 * N)
             sl = np.s_[max(0, start - extra):min(L, stop + extra)]
             self._use_raw_slice = True
-            # TODO: note this should now be setting a FULL array of raw slice on this object (no need for individual
-            #  raw slices)
             self._raw_slice = self.hdf_data[(self.plot_channels, sl)] * self.dy
             # self._raw_slice = self.hdf5[sl] * self._yscale
             self._cslice = sl
@@ -214,12 +209,12 @@ class PlotCurveCollection(pg.PlotCurveItem):
         x0 = self._cslice.start
         y_start = start - x0
         y_stop = y_start + (stop - start)
-        # TODO: this is calling up whatever existing data in the "y_slice" property
         self.y_visible = self.y_slice[:, y_start:y_stop]
         self.x_visible = np.tile(np.arange(start, stop) * self.dx, (len(self.plot_channels), 1))
         print('x,y arrays set:', self.y_visible.shape, self.x_visible.shape)
 
     def updatePlotData(self, data_ready=False):
+        # Use data_ready=True to indicate that there's pre-defined x- and y-visible data ready to plot
         if self.hdf_data is None or not len(self.plot_channels):
             self.setData([])
             self.y_visible = None
@@ -325,26 +320,139 @@ class PlotCurveCollection(pg.PlotCurveItem):
             self.updatePlotData()
 
 
-class LabeledCurveCollection(PlotCurveCollection):
+# This should work like a PlotCurveCollection, but should only draw data from a source collection,
+# and not from a raw data source. Whenever the source data is modified (e.g. by external filtering),
+# those modifications are then applied to any follower collections.
+class FollowerCollection(PlotCurveCollection):
+    can_update = ToggleState(init_state=False)
+    connection_ids = list()
 
-    def __init__(self, data: ReadCache, plot_channels: list, label_set: list,
-                 dx: float, dy: float, y_offset: float, *args, **kwargs):
+    def __new__(cls, curve_collection: PlotCurveCollection, *args, **kwargs):
+        # Create a new sub-type of PlotCurveCollection and then initiate it with the source material
+        obj = PlotCurveCollection.__new__(cls, curve_collection.hdf_data, curve_collection.plot_channels,
+                                          curve_collection.dx, curve_collection.dy, curve_collection._y_offset)
+                                          # *args, **kwargs)
+        super(FollowerCollection, obj).__init__(curve_collection.hdf_data, curve_collection.plot_channels,
+                                                curve_collection.dx, curve_collection.dy, curve_collection._y_offset)
+                                                # *args, **kwargs)
+        return obj
 
-        super().__init__(data, list(), dx, dy, y_offset, *args, **kwargs)
-        self.setPen(width=0)
-        self.setShadowPen(color='c', width=4)
-        self._available_channels = plot_channels[:]
-        self._active_channels = np.zeros(len(plot_channels), dtype='?')
+    def __init__(self, curve_collection: PlotCurveCollection):
+        self._source = curve_collection
+        self.register_connection(curve_collection.data_changed, self._source_triggered_update)
+        self.register_connection(curve_collection.plot_changed, self._source_triggered_update)
+        self.register_connection(curve_collection.plot_changed, self._yoke_offset)
+        self.setData([])
 
-        # text item can be looked up by position (which is found through closest row in the visible data)
-        self.texts = list()
-        for label in label_set:
-            text = pg.TextItem(label, anchor=(0.5, 1.0), color=(255, 98, 65), fill=(65, 222, 255, 180))
-            text.setVisible(False)
-            text.setText(label)
-            self.texts.append(text)
-        self.plot_changed.connect(self.set_text_position)
+    @property
+    def x_visible(self):
+        return self._source.x_visible
 
+    @x_visible.setter
+    def x_visible(self, new):
+        return
+
+    @property
+    def y_visible(self):
+        return self._source.y_visible
+
+    @y_visible.setter
+    def y_visible(self, new):
+        return
+
+    def register_connection(self, signal: QtCore.pyqtSignal, callback: callable):
+        # register a signal connection so that it can be disabled later
+        signal.connect(callback)
+        self.connection_ids.append((signal, callback))
+
+    def _cleanup(self):
+        for signal, cb in self.connection_ids:
+            try:
+                signal.disconnect(cb)
+            except TypeError:
+                pass
+
+    def _yoke_offset(self, source):
+        if source._y_offset != self._y_offset:
+            with self.can_update(True):
+                self.y_offset = source._y_offset
+
+    def _source_triggered_update(self, source):
+        blocking = source._y_offset != self._y_offset
+        # Proceed to update unless this has been triggered by an offset change.
+        # The yoke_offset callback will handle that
+        with self.can_update(not blocking):
+            self.updatePlotData()
+
+    # This method will be triggered by the PlotItem. Ignore it if the source data is not ready.
+    # This method is also attached indirectly to data_changed and plot_changed signals.
+    def viewRangeChanged(self):
+        return
+
+    def updatePlotData(self, data_ready=False):
+        # By defaullt, plots everything that is visible on the source.
+        if not self.can_update:
+            return
+        print('updating based on source data: ', self.x_visible.shape, self.y_visible.shape)
+        super().updatePlotData(data_ready=True)
+
+
+class SelectedFollowerCollection(FollowerCollection):
+
+    _available_channels: list
+    _active_channels: np.ndarray
+    selection_changed = QtCore.pyqtSignal(QtCore.QObject)
+
+    def __init__(self, curve_collection: PlotCurveCollection, clickable: bool=False, pen_args=None,
+                 shadowpen_args=None):
+        super().__init__(curve_collection)
+        if not pen_args:
+            pen_args = dict(width=0)
+        if not shadowpen_args:
+            shadowpen_args = dict(width=4, color='c')
+        self._available_channels = self._source.plot_channels[:]
+        self._active_channels = np.zeros(len(self._available_channels), dtype='?')
+        self.setPen(**pen_args)
+        self.setShadowPen(**shadowpen_args)
+        if clickable:
+            curve_collection.setClickable(True, width=10)
+            curve_collection.sigClicked.connect(self.report_clicked)
+
+    def report_clicked(self, curves: PlotCurveCollection, event: QtCore.QEvent):
+        ex, ey = event.pos()
+        vx, vy = curves.current_data()
+        vy = vy[:, vx.searchsorted(ex)] + curves.y_offset.squeeze()
+        channel = np.argmin(np.abs(vy - ey))
+        b = self._active_channels[channel]
+        print('click pos', event.pos(), 'channel', channel, 'changing to', not b)
+        self._active_channels[channel] = not b
+        with self.can_update(True):
+            self.updatePlotData()
+        self.selection_changed.emit(self)
+
+    @property
+    def x_visible(self):
+        x = self._source.x_visible
+        if x is not None:
+            x = x[self._active_channels]
+        return x
+
+    @x_visible.setter
+    def x_visible(self, new):
+        return
+
+    @property
+    def y_visible(self):
+        y = self._source.y_visible
+        if y is not None:
+            y = y[self._active_channels]
+        return y
+
+    @y_visible.setter
+    def y_visible(self, new):
+        return
+
+    # TODO: All this property trickery was to enable the base updatePlotData to work as-is, maybe it can be re-thought
     @property
     def plot_channels(self):
         can_plot = [self._available_channels[i] for i in self.selected_channels]
@@ -369,38 +477,42 @@ class LabeledCurveCollection(PlotCurveCollection):
     @y_offset.setter
     def y_offset(self, new):
         self._y_offset = new
-        self.updatePlotData()
-
-    def report_clicked(self, curves: PlotCurveCollection, event: QtCore.QEvent):
-        ex, ey = event.pos()
-        vx, vy = curves.current_data()
-        vy = vy[:, vx.searchsorted(ex)] + curves.y_offset.squeeze()
-        channel = np.argmin(np.abs(vy - ey))
-        # print('click pos', event.pos(), 'channel', channel)
-        b = self._active_channels[channel]
-        self._active_channels[channel] = not b
-        self.texts[channel].setVisible(not b)
-        self._cslice = None  # This will trigger a data reload
-        self.updatePlotData()
+        with self.can_update(True):
+            self.updatePlotData()
 
 
-    def set_text_position(self):
+class LabeledCurveCollection(SelectedFollowerCollection):
+
+    def __init__(self, curve_collection: PlotCurveCollection, label_set: list,
+                 clickable: bool=False, pen_args=None, shadowpen_args=None):
+        super().__init__(curve_collection, clickable=clickable, pen_args=pen_args, shadowpen_args=shadowpen_args)
+        self.texts = list()
+        for label in label_set:
+            text = pg.TextItem(label, anchor=(0.5, 1.0), color=(255, 98, 65), fill=(65, 222, 255, 180))
+            text.setVisible(False)
+            # text.setText(label)
+            self.texts.append(text)
+        self.selection_changed.connect(self.set_text_position)
+
+    def set_text_position(self, obj):
+        # the number of rows in x- and y-visible is equal to the number of active channels
         x_visible = self.x_visible
         y_visible = self.y_visible + self.y_offset
-        i = 0
-        for text in self.texts:
+        label_row = 0
+        for i, text in enumerate(self.texts):
+            text.setVisible(self._active_channels[i])
             if not text.isVisible():
                 continue
             # put text 20% from the left
-            x_pos = 0.8 * x_visible[i, 0] + 0.2 * x_visible[i, -1]
+            x_pos = 0.8 * x_visible[label_row, 0] + 0.2 * x_visible[label_row, -1]
             # set height to the max in a 10% window around x_pos
             wid = max(1, int(0.05 * y_visible.shape[1]))
             n_pos = int(0.2 * y_visible.shape[1])
-            y_pos = y_visible[i, n_pos - wid:n_pos + wid].max()
+            y_pos = y_visible[label_row, n_pos - wid:n_pos + wid].max()
             info('Setting text {}, {}: {}'.format(x_pos, y_pos, timestamp()))
-            print('Setting text {}, {}: {}'.format(x_pos, y_pos, timestamp()))
+            # print('Setting text {}, {}: {}'.format(x_pos, y_pos, timestamp()))
             text.setPos(x_pos, y_pos)
-            i += 1
+            label_row += 1
 
 
 class FastScroller(object):
@@ -534,13 +646,14 @@ class FastScroller(object):
 
         # Selected curve & label set that calls up data on-demand
         labels = ['({}, {})'.format(i, j) for i, j in zip(*chan_map.to_mat())]
-        selected_curves = LabeledCurveCollection(array, load_channels, labels, x_scale, y_scale, y_spacing)
+        # selected_curves = LabeledCurveCollection(array, load_channels, labels, x_scale, y_scale, y_spacing)
+        selected_curves = LabeledCurveCollection(curves, labels, clickable=True)
         self.p1.addItem(selected_curves)
         for text in selected_curves.texts:
             self.p1.addItem(text)
         self.selected_curve_collection = selected_curves
-        self.curve_collection.setClickable(True, width=None)
-        self.curve_collection.sigClicked.connect(self.selected_curve_collection.report_clicked)
+        # self.curve_collection.setClickable(True, width=None)
+        # self.curve_collection.sigClicked.connect(self.selected_curve_collection.report_clicked)
 
         # Add mean trace to bottom plot
         self.nav_trace = pg.PlotCurveItem(x=np.arange(len(nav_trace)) * x_scale, y=nav_trace)
