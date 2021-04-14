@@ -102,13 +102,15 @@ class ReadCache(object):
         return self._array
 
     def __getitem__(self, sl):
-        indx, range = sl
-        if not isinstance(indx, (np.integer, int)):
+        indx, srange = sl
+        # Only access diretly if the first part of the slice is also a slice.
+        # In other cases, slice all first and then use numpy indexing
+        if isinstance(indx, slice):
             return self._array[sl].copy()
-        if self._current_slice != range:
-            all_sl = ( slice(None), range )
+        if self._current_slice != srange:
+            all_sl = (slice(None), srange)
             self._current_seg = self._array[all_sl]
-            self._current_slice = range
+            self._current_slice = srange
         # always return the full range after slicing with possibly
         # complex original range
         new_range = slice(None)
@@ -120,17 +122,18 @@ class CommonReferenceReadCache(ReadCache):
     """Returns common-average re-referenced blocks"""
 
     def __getitem__(self, sl):
-        indx, range = sl
-        if not isinstance(indx, (np.integer, int)):
+        indx, srange = sl
+        if isinstance(indx, slice):
+            # This returns without CAR?
             return self._array[sl].copy()
-        if self._current_slice != range:
-            all_sl = ( slice(None), range )
+        if self._current_slice != srange:
+            all_sl = (slice(None), srange)
             if self.dtype in np.sctypes['int']:
                 self._current_seg = self._array[all_sl].astype('d')
             else:
                 self._current_seg = self._array[all_sl].copy()
             self._current_seg -= self._current_seg.mean(0)
-            self._current_slice = range
+            self._current_slice = srange
         # always return the full range after slicing with possibly
         # complex original range
         new_range = slice(None)

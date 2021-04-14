@@ -2,8 +2,9 @@ from traits.api import Instance, Float, Enum, Any, List, on_trait_change, Event,
 from traitsui.api import View, UItem, VSplit, CustomEditor, HSplit, Group, HGroup, Label, ListEditor
 from collections import OrderedDict
 from pyqtgraph.Qt import QtGui
-from pyqtgraph.graphicsItems.GradientEditorItem import Gradients
-from .pyqtgraph_extensions import get_colormap_lut
+# from pyqtgraph.graphicsItems.GradientEditorItem import Gradients
+# from .pyqtgraph_extensions import get_colormap_lut
+from pyqtgraph.colormap import listMaps, get as get_colormap
 
 from .helpers import PersistentWindow
 from .h5scroller import FastScroller
@@ -20,7 +21,7 @@ class VisWrapper(PersistentWindow):
     x_scale = Float
     _y_spacing_enum = Enum(200, [0, 20, 50, 100, 200, 500, 1000, 2000, 5000, 'entry'])
     _y_spacing_entry = Float(0.0)
-    colormap = Enum('bipolar', Gradients.keys())
+    colormap = Enum('coolwarm', listMaps(source='matplotlib'))
     y_spacing = Property
     vis_rate = Float
     chan_map = Any
@@ -38,11 +39,9 @@ class VisWrapper(PersistentWindow):
         # though the "y_spacing" property on this class is read-only.
         dy = traits.pop('y_spacing', 100)
         traits['_y_spacing_enum'] = dy
-        x = qtwindow.current_data()[0][0]
-        traits['vis_rate'] = (x[1] - x[0]) ** -1
+        traits['vis_rate'] = 1 / qtwindow.curve_collection.dx
         super(VisWrapper, self).__init__(**traits)
-        self._qtwindow.img.setLookupTable(get_colormap_lut(name=self.colormap))
-        # connect the region-changed signal to signal a traits callback
+        self._change_colormap()
         qtwindow.region.sigRegionChanged.connect(self._region_did_change)
         qtwindow.curve_collection.vis_rate_changed.connect(self._follow_vis_rate)
         self._make_modules()
@@ -57,7 +56,8 @@ class VisWrapper(PersistentWindow):
         mods = self.modules[:]
         self.modules_by_name = OrderedDict()
         for m in mods:
-            module = m(parent=self, chan_map=self.chan_map, curve_collection=self._qtwindow.curve_collection)
+            module = m(parent=self, chan_map=self.chan_map, curve_collection=self._qtwindow.curve_collection,
+                       selected_curve_collection=self._qtwindow.selected_curve_collection)
             self.modules_by_name[module.name] = module
         self.modules = list(self.modules_by_name.values())
 
@@ -79,7 +79,9 @@ class VisWrapper(PersistentWindow):
 
     @on_trait_change('colormap')
     def _change_colormap(self):
-        self._qtwindow.img.setLookupTable(get_colormap_lut(self.colormap))
+        cmap = get_colormap(self.colormap, source='matplotlib')
+        self._qtwindow.cb.setCmap(cmap)
+        # self._qtwindow.img.setLookupTable(cmap)
 
     def default_traits_view(self):
         ht = 1000

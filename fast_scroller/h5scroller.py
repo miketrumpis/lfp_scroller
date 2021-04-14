@@ -3,12 +3,13 @@ import numpy as np
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 pg.setConfigOptions(imageAxisOrder='row-major')
-from .pyqtgraph_extensions import ImageItem, ColorBarItem, get_colormap_lut
+# from .pyqtgraph_extensions import ImageItem, ColorBarItem, get_colormap_lut
 from ecogdata.channel_map import ChannelMap, CoordinateChannelMap
 from ecogdata.parallel.mproc import parallel_context, timestamp
 from time import time
 
 from .helpers import DebounceCallback
+from .h5data import ReadCache
 
 
 info = parallel_context.get_logger().info
@@ -78,20 +79,29 @@ class PlainSecAxis(pg.AxisItem):
         return strns
 
 
-class HDF5Plot(pg.PlotCurveItem):
-    vis_rate_changed = QtCore.pyqtSignal(QtCore.QObject)
-    def __init__(self, *args, **kwds):
-        self.hdf5 = None
+class PlotCurveCollection(pg.PlotCurveItem):
+    data_changed = QtCore.pyqtSignal(QtCore.QObject)
+    plot_changed = QtCore.pyqtSignal(QtCore.QObject)
+    vis_rate_changed = QtCore.pyqtSignal(np.float64)
+
+    def __init__(self, data: ReadCache, plot_channels: list,
+                 dx: float, dy:float, y_offset: float, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # These are HDF5 getter helpers per plot curve line
+        self.hdf_data = data
+        self._y_offset = y_offset
+        self.dx = dx
+        self.dy = dy
+        self.plot_channels = plot_channels
         # maximum number of samples to be plotted
-        self.limit = kwds.pop('points_limit', 6000)
-        self.load_extra = kwds.pop('load_extra', 0.25)
-        pg.PlotCurveItem.__init__(self, *args, **kwds)
+        self.limit = kwargs.pop('points_limit', 6000)
+        self.load_extra = kwargs.pop('load_extra', 0.25)
+        self._current_vis_rate = 1 / dx
         # This item also has a curve point and (in)visible text
-        #self.curve_point = pg.CurvePoint(self)
-        self.text = pg.TextItem('empty', anchor=(0.5, 1.0), color=(255, 98, 65), fill=(65, 222, 255, 180))
-        #self.text.setParent(self.curve_point)
-        self.text.setVisible(False)
-        self.series_filter = None
+        # self.curve_point = pg.CurvePoint(self)
+        # self.text = pg.TextItem('empty', anchor=(0.5, 1.0), color=(255, 98, 65), fill=(65, 222, 255, 180))
+        # self.text.setParent(self.curve_point)
+        # self.text.setVisible(False)
         # track current values of (x1, x2) to protect against reloads triggered by spurious view changes
         self._cx1 = 0
         self._cx2 = 0
@@ -103,19 +113,40 @@ class HDF5Plot(pg.PlotCurveItem):
         self._use_raw_slice = True
         self._raw_slice = None
         self._external_slice = None
-        
-    def setHDF5(self, data, index, offset, number, dx=1.0, scale=1):
-        self.hdf5 = data
-        self.index = index
-        self._yscale = scale
-        self._xscale = dx
-        self.offset = offset
-        self.number = number
-        self.updateHDF5Plot()
+        self.x_visible = None
+        self.y_visible = None
 
     @property
-    def selected(self):
-        return self.text.isVisible()
+    def y_offset(self):
+        return (np.arange(len(self.plot_channels)) * self._y_offset)[:, None]
+
+    @y_offset.setter
+    def y_offset(self, new):
+        self._y_offset = new
+        self.updatePlotData()
+
+    def current_data(self, visible=True, full_xdata=False):
+        """
+        Returns an array of the available display data without offsets
+
+        Parameters
+        ----------
+        visible: bool
+            By default, return the visibly plotted data. If False, return any pre-loaded data as well.
+            In this case, the x array will not be aligned with y.
+
+        Returns
+        -------
+        x: ndarray
+        y: ndarray
+
+        """
+        if self.y_visible is None:
+            return None, None
+        y = self.y_visible if visible else self.y_slice
+        # TODO: so x.shape isn't exactly consistent with y.shape if visible is False
+        x = self.x_visible if full_xdata else self.x_visible[0]
+        return x, y
 
     @property
     def y_slice(self):
@@ -130,10 +161,9 @@ class HDF5Plot(pg.PlotCurveItem):
     def viewRangeChanged(self):
         # only look for x-range changes that actually require loading different data
         if self._view_really_changed():
-            if self.offset == 0:
-                info('Zoom plot ranged actually changed, '
-                     'triggering data load: {} {}'.format(self._view_range(), timestamp()))
-            self.updateHDF5Plot()
+            info('Zoom plot ranged actually changed, '
+                 'triggering data load: {} {}'.format(self._view_range(), timestamp()))
+            self.updatePlotData()
 
     def _view_range(self):
         vb = self.parentWidget()
@@ -141,14 +171,16 @@ class HDF5Plot(pg.PlotCurveItem):
             return  # no ViewBox yet
         # Determine what data range must be read from HDF5
         xrange = vb.viewRange()[0]
-        srange = list(map(lambda x: int(x / self._xscale), xrange))
+        srange = list(map(lambda x: int(x / self.dx), xrange))
         start = max(0, int(srange[0]) - 1)
-        stop = min(self.hdf5.shape[-1], int(srange[1] + 2))
+        stop = min(self.hdf_data.shape[-1], int(srange[1] + 2))
         return start, stop
-        
+
     def _set_data(self):
         r = self._view_range()
         if not r:
+            self.y_visible = None
+            self.x_visible = None
             return
         start, stop = r
 
@@ -163,63 +195,35 @@ class HDF5Plot(pg.PlotCurveItem):
         if needs_slice:
             # When this condition, automatically reset state to raw slices.
             # If anything is watching this data to change, it will need access to the raw slice.
-            if self.offset == 0:
-                info('Slicing from HDF5 {}'.format(timestamp()))
+            info('Slicing from HDF5 {}'.format(timestamp()))
             N = stop - start
-            L = self.hdf5.shape[1]
+            L = self.hdf_data.shape[1]
             # load this many points before and after the view limits so that small updates
             # can grab pre-loaded data
             extra = int(self.load_extra / 2 * N)
-            sl = np.s_[self.index, max(0, start - extra):min(L, stop + extra)]
+            sl = np.s_[max(0, start - extra):min(L, stop + extra)]
             self._use_raw_slice = True
-            self._raw_slice = self.hdf5[sl] * self._yscale
-            self._cslice = sl[1]
+            # TODO: note this should now be setting a FULL array of raw slice on this object (no need for individual
+            #  raw slices)
+            self._raw_slice = self.hdf_data[(self.plot_channels, sl)] * self.dy
+            # self._raw_slice = self.hdf5[sl] * self._yscale
+            self._cslice = sl
+            self.data_changed.emit(self)
 
         # can retreive data within the pre-load
         x0 = self._cslice.start
         y_start = start - x0
         y_stop = y_start + (stop - start)
-        self.y_visible = self.y_slice[y_start:y_stop]
-        self.x_visible = np.arange(start, stop) * self._xscale
+        # TODO: this is calling up whatever existing data in the "y_slice" property
+        self.y_visible = self.y_slice[:, y_start:y_stop]
+        self.x_visible = np.tile(np.arange(start, stop) * self.dx, (len(self.plot_channels), 1))
+        print('x,y arrays set:', self.y_visible.shape, self.x_visible.shape)
 
-    def set_external_data(self, y, visible=False):
-        if visible:
-            if len(y) != len(self.x_visible):
-                raise ValueError('Shape of external series does not match the current window.')
-            self.y_visible = y
-            self.updateHDF5Plot(data_ready=True)
-        else:
-            if len(y) != (self._cslice.stop - self._cslice.start):
-                raise ValueError('Shape of external series does not match the cached load.')
-            # If setting on the underlying slice, then set it here and update the mode
-            self._external_slice = y
-            self._use_raw_slice = False
-            # update as if data is cached
-            self.updateHDF5Plot()
-
-    def unset_external_data(self, visible=False):
-        if self.offset == 0:
-            info('Unsetting external (visible {}) and updating curve data {}'.format(visible, timestamp()))
-        if not visible:
-            # Revert to raw slices and reset visible data
-            self._use_raw_slice = True
-        self.updateHDF5Plot()
-
-    def update_visible_offset(self):
-        if self.parentWidget() is None:
-            return
-        tic = time()
-        y_visible = self.y_visible + self.offset
-        self.setData(x=self.x_visible, y=y_visible)
-        self.resetTransform()
-        self.set_text_position()
-        toc = time() - tic
-        if self.offset == 0:
-            info('set data time {}'.format(toc))
-        
-    def updateHDF5Plot(self, data_ready=False):
-        if self.hdf5 is None:
+    def updatePlotData(self, data_ready=False):
+        if self.hdf_data is None or not len(self.plot_channels):
             self.setData([])
+            self.y_visible = None
+            self.x_visible = None
             return
 
         if not data_ready:
@@ -228,7 +232,7 @@ class HDF5Plot(pg.PlotCurveItem):
         if not r:
             return
         start, stop = r
-        # Decide by how much we should downsample 
+        # Decide by how much we should downsample
         ds = int((stop - start) / self.limit) + 1
         if ds == 1:
             # Small enough to display with no intervention.
@@ -238,7 +242,7 @@ class HDF5Plot(pg.PlotCurveItem):
             # Here convert data into a down-sampled
             # array suitable for visualizing.
 
-            N = len(self.y_visible)
+            N = self.y_visible.shape[1]
 
             # This downsample does min/max interleaving
             # -- does not squash noise
@@ -256,10 +260,11 @@ class HDF5Plot(pg.PlotCurveItem):
             Nsub = max(5, N // ds)
             p1 = ds // 4
             p2 = (3 * ds) // 4
-            y = self.y_visible[:Nsub * ds].reshape(Nsub, ds)
-            visible = np.empty(Nsub * 2, dtype='d')
-            visible[0::2] = y[:, p1]
-            visible[1::2] = y[:, p2]
+            n_rows = self.y_visible.shape[0]
+            y = self.y_visible[:, :Nsub * ds].reshape(n_rows, Nsub, ds)
+            visible = np.empty((n_rows, Nsub * 2), dtype='d')
+            visible[:, 0::2] = y[..., p1]
+            visible[:, 1::2] = y[..., p2]
 
             # This downsample does block averaging
             # -- this flattens noisy segments
@@ -267,163 +272,164 @@ class HDF5Plot(pg.PlotCurveItem):
             # y = self.y_visible[:Nsub * ds].reshape(Nsub, ds)
             # visible = y.mean(axis=1)
 
-            x_samp = np.linspace(ds // 2, len(self.x_visible) - ds // 2, len(visible)).astype('i')
-            if x_samp[-1] >= len(self.x_visible):
+            x_samp = np.linspace(ds // 2, self.x_visible.shape[1] - ds // 2, Nsub * 2).astype('i')
+            if x_samp[-1] >= self.x_visible.shape[1]:
                 x_samp[-1] = N - 1
-            x_visible = np.take(self.x_visible, x_samp)
+            x_visible = np.take(self.x_visible, x_samp, axis=1)
 
-        if self.offset == 0:
-            info('Update hdf5 lines called num {}: external data {} {}'.format(self.number, data_ready, timestamp()))
-        visible = visible + self.offset
-        self.setData(x=x_visible, y=visible)  # update_zoom_callback the plot
+        info('Update hdf5 lines called: external data {} {}'.format(data_ready, timestamp()))
+        visible = visible + self.y_offset
+        connects = np.ones(visible.shape, dtype='>i4')
+        connects[:, -1] = 0
+        # Set the data as one block without connections from row to row
+        info('x shape {}, y shape {}, mask shape {}'.format(x_visible.shape, visible.shape, connects.shape))
+        self.setData(x=x_visible.ravel(), y=visible.ravel(), connect=connects.ravel())  # update_zoom_callback the plot
+        # TODO: is this needed?
         self.resetTransform()
-        self.set_text_position()
+        # self.set_text_position()
         # mark these start, stop positions to match against future view-change signals
         self._cx1 = start
         self._cx2 = stop
+        vis_rate = round(1 / (x_visible[0, 1] - x_visible[0, 0]))
+        if vis_rate != self._current_vis_rate:
+            self._current_vis_rate = vis_rate
+            self.vis_rate_changed.emit(vis_rate)
+        self.plot_changed.emit(self)
 
-    def set_text_position(self):
-        if self.text.isVisible():
-            x_visible = self.x_visible
-            y_visible = self.y_visible
-            # put text 20% from the left
-            x_pos = 0.8 * x_visible[0] + 0.2 * x_visible[-1]
-            # set height to the max in a 10% window around x_pos
-            wid = max(1, int(0.05 * len(y_visible)))
-            n_pos = int(0.2 * len(y_visible))
-            y_pos = y_visible[n_pos - wid:n_pos + wid].max() + self.offset
-            info('Setting text {}, {}: {}'.format(x_pos, y_pos, timestamp()))
-            self.text.setPos(x_pos, y_pos)
 
-    def toggle_text(self, i, j):
-        self.text.setText('({0}, {1})'.format(i, j))
-        vis = self.text.isVisible()
-        self.text.setVisible(not vis)
-        self.set_text_position()
-        if not vis:
-            pen = pg.mkPen(color='c', width=4)
+    def set_external_data(self, array, visible=False):
+        # visible == True only changes the on-screen data, rather than the extended slice
+        if visible:
+            if array.shape[1] != self.x_visible.shape[1]:
+                raise ValueError('Shape of external series does not match the current window.')
+            self.y_visible = array
+            if self.x_visible is None:
+                self.x_visible = np.tile(np.arange(array.shape[1]), (array.shape[0], 1))
+            self.updatePlotData(data_ready=True)
         else:
-            pen = pg.mkPen(width=0)
-        self.setShadowPen(pen)
+            if array.shape[1] != (self._cslice.stop - self._cslice.start):
+                raise ValueError('Shape of external series does not match the cached load.')
+            # If setting on the underlying slice, then set it here and update the mode
+            self._external_slice = array
+            self._use_raw_slice = False
+            # update as if data is cached
+            self.updatePlotData()
 
-
-class CurveCollection(QtCore.QObject):
-    data_changed = QtCore.pyqtSignal(QtCore.QObject)
-    plot_changed = QtCore.pyqtSignal(QtCore.QObject)
-    vis_rate_changed = QtCore.pyqtSignal(np.float64)
-    def __init__(self, curves, *args, **kwargs):
-        super(CurveCollection, self).__init__(*args, **kwargs)
-        self.curves = curves
-        self._current_set = set()
-        # self._connections = list()
-        self._current_slice = slice(None)
-        x = curves[0].getData()[0]
-        self._current_rate = (x[1] - x[0]) ** -1
-        for c in curves:
-            c.sigPlotChanged.connect(self.count_curves)
-            # self._connections.append(c.sigPlotChanged.connect(self.count_curves))
-
-    def count_curves(self, curve):
-        """
-        This callback monitors the "plot changed" signal on the curve collection.
-        When a curve emits, add it to a list.
-        When the list is full, then emit the "plot changed" signal to update graphics.
-        Separately, if the underlying curve data has changed, emit the "data changed" signal
-
-        """
-        self._current_set.add(curve)
-        if len(self._current_set) == len(self.curves):
-            info('CurveCollection emitting plot_changed and resetting current set')
-            self.plot_changed.emit(self)
-            self._current_set = set()
-            sl = curve._cslice
-            if sl != self._current_slice:
-                info('CurveCollection emitting data_changed')
-                self.data_changed.emit(self)
-                self._current_slice = sl
-            x = curve.getData()[0]
-            rate = (x[1] - x[0]) ** -1
-            if rate != self._current_rate:
-                self.vis_rate_changed.emit(rate)
-                self._current_rate = rate
-        else:
-            if curve.number in (0, len(self.curves) - 1):
-                info('added {} len curve set {}'.format(curve.number, len(self._current_set)))
-
-    def selected_channels(self):
-        return [i for i, c in enumerate(self.curves) if c.selected]
-
-    def current_data(self, visible=True):
-        """
-        Returns an array of the available display data.
-
-        Parameters
-        ----------
-        visible: bool
-            By default, return the visibly plotted data. If False, return any pre-loaded data as well.
-            In this case, the x array will not be aligned with y.
-
-        Returns
-        -------
-        x: ndarray
-        y: ndarray
-
-        """
-        x_vis = self.curves[0].x_visible
-        y_vis = self.curves[0].y_visible if visible else self.curves[0].y_slice
-        n_curves = len(self.curves)
-        x = np.empty((n_curves, len(x_vis)), x_vis.dtype)
-        y = np.empty((n_curves, len(y_vis)), y_vis.dtype)
-        x[0] = x_vis
-        y[0] = y_vis
-        for i in range(1, n_curves):
-            x[i] = self.curves[i].x_visible
-            y[i] = self.curves[i].y_visible if visible else self.curves[i].y_slice
-        return x, y
-
-    @contextmanager
-    def disable_listener(self, blocking=True):
-        if blocking:
-            info('Blocking sigPlotChanged callbacks {}'.format(timestamp()))
-            for curve in self.curves:
-                # just disconnect the slot (i.e. the callable)
-                curve.sigPlotChanged.disconnect(self.count_curves)
-        try:
-            yield
-        finally:
-            if blocking:
-                info('Reinstating sigPlotChanged callbacks {}'.format(timestamp()))
-                for c in self.curves:
-                    c.sigPlotChanged.connect(self.count_curves)
+    def unset_external_data(self, visible=False):
+        info('Unsetting external (visible {}) and updating curve data {}'.format(visible, timestamp()))
+        if not visible:
+            # Revert to raw slices and reset visible data
+            self._use_raw_slice = True
+        self.updatePlotData()
 
     def set_data_on_collection(self, array, ignore_signals=True, visible=True):
-        info('Setting external data to curves: '
-             'ignore {}, visible {} {}'.format(ignore_signals, visible, timestamp()))
-        with self.disable_listener(blocking=ignore_signals):
-            for data, line in zip(array, self.curves):
-                line.set_external_data(data, visible=visible)
+        self.set_external_data(array, visible=visible)
+        # info('Setting external data to curves: '
+        #      'ignore {}, visible {} {}'.format(ignore_signals, visible, timestamp()))
+        # with self.disable_listener(blocking=ignore_signals):
+        #     for data, line in zip(array, self.curves):
+        #         line.set_external_data(data, visible=visible)
 
     def unset_data_on_collection(self, ignore_signals=True, visible=True):
         info('Unsetting external array on curves, blocking: {} {}'.format(ignore_signals, timestamp()))
-        with self.disable_listener(blocking=ignore_signals):
-            for line in self.curves:
-                line.unset_external_data(visible=visible)
+        self.unset_external_data(visible=visible)
+        # with self.disable_listener(blocking=ignore_signals):
+        #     for line in self.curves:
+        #         line.unset_external_data(visible=visible)
 
-    def redraw_data(self, ignore_signals=False):
-        info('calling updateHDF5Plot on curves, ignore {} {}'.format(ignore_signals, timestamp()))
-        with self.disable_listener(blocking=ignore_signals):
-            for line in self.curves:
-                line.updateHDF5Plot()
-        info('done updateHDF5Plot on curves, {}'.format(timestamp()))
+    # def redraw_data(self, ignore_signals=False):
+    #     info('calling updateHDF5Plot on curves, ignore {} {}'.format(ignore_signals, timestamp()))
+    #     with self.disable_listener(blocking=ignore_signals):
+    #         for line in self.curves:
+    #             line.updateHDF5Plot()
+    #     info('done updateHDF5Plot on curves, {}'.format(timestamp()))
 
-    def redraw_data_offsets(self, ignore_signals=False):
-        # this would be used e.g. when the y-offsets have changed but the view limits have not
-        # block on all but the last curve, then do as instructed for the final curve
-        info('start redrawing curve collection {}'.format(timestamp()))
-        with self.disable_listener(blocking=ignore_signals):
-            for line in self.curves:
-                line.update_visible_offset()
-        info('end redrawing curve collection {}'.format(timestamp()))
+    # def redraw_data_offsets(self, ignore_signals=False):
+    #     # this would be used e.g. when the y-offsets have changed but the view limits have not
+    #     # block on all but the last curve, then do as instructed for the final curve
+    #     info('start redrawing curve collection {}'.format(timestamp()))
+    #     with self.disable_listener(blocking=ignore_signals):
+    #         for line in self.curves:
+    #             line.update_visible_offset()
+    #     info('end redrawing curve collection {}'.format(timestamp()))
+
+
+class LabeledCurveCollection(PlotCurveCollection):
+
+    def __init__(self, data: ReadCache, plot_channels: list, label_set: list,
+                 dx: float, dy: float, y_offset: float, *args, **kwargs):
+
+        super().__init__(data, list(), dx, dy, y_offset, *args, **kwargs)
+        self.setPen(width=0)
+        self.setShadowPen(color='c', width=4)
+        self._available_channels = plot_channels[:]
+        self._active_channels = np.zeros(len(plot_channels), dtype='?')
+
+        # text item can be looked up by position (which is found through closest row in the visible data)
+        self.texts = list()
+        for label in label_set:
+            text = pg.TextItem(label, anchor=(0.5, 1.0), color=(255, 98, 65), fill=(65, 222, 255, 180))
+            text.setVisible(False)
+            text.setText(label)
+            self.texts.append(text)
+        self.plot_changed.connect(self.set_text_position)
+
+    @property
+    def plot_channels(self):
+        can_plot = [self._available_channels[i] for i in self.selected_channels]
+        return can_plot
+
+    # This is just here to allow the parent class to do self.plot_channels = foo
+    @plot_channels.setter
+    def plot_channels(self, val):
+        return
+
+    @property
+    def selected_channels(self):
+        return np.where(self._active_channels)[0]
+
+    @property
+    def y_offset(self):
+        active = self.selected_channels
+        if not len(active):
+            return 0
+        return (active * self._y_offset)[:, None]
+
+    @y_offset.setter
+    def y_offset(self, new):
+        self._y_offset = new
+        self.updatePlotData()
+
+    def report_clicked(self, curves: PlotCurveCollection, event: QtCore.QEvent):
+        ex, ey = event.pos()
+        vx, vy = curves.current_data()
+        vy = vy[:, vx.searchsorted(ex)] + curves.y_offset.squeeze()
+        channel = np.argmin(np.abs(vy - ey))
+        # print('click pos', event.pos(), 'channel', channel)
+        b = self._active_channels[channel]
+        self._active_channels[channel] = not b
+        self.texts[channel].setVisible(not b)
+        self._cslice = None  # This will trigger a data reload
+        self.updatePlotData()
+
+
+    def set_text_position(self):
+        x_visible = self.x_visible
+        y_visible = self.y_visible + self.y_offset
+        i = 0
+        for text in self.texts:
+            if not text.isVisible():
+                continue
+            # put text 20% from the left
+            x_pos = 0.8 * x_visible[i, 0] + 0.2 * x_visible[i, -1]
+            # set height to the max in a 10% window around x_pos
+            wid = max(1, int(0.05 * y_visible.shape[1]))
+            n_pos = int(0.2 * y_visible.shape[1])
+            y_pos = y_visible[i, n_pos - wid:n_pos + wid].max()
+            info('Setting text {}, {}: {}'.format(x_pos, y_pos, timestamp()))
+            print('Setting text {}, {}: {}'.format(x_pos, y_pos, timestamp()))
+            text.setPos(x_pos, y_pos)
+            i += 1
 
 
 class FastScroller(object):
@@ -482,6 +488,8 @@ class FastScroller(object):
 
         self.array = array
         self.y_scale = y_scale
+        if isinstance(load_channels, str) and load_channels == 'all':
+            load_channels = list(range(len(array)))
         self.load_channels = load_channels
 
         # The main window + layout
@@ -497,12 +505,17 @@ class FastScroller(object):
         sub_layout = layout.addLayout(colspan=1)
         self.p_img = sub_layout.addViewBox(lockAspect=True)
 
-        self.img = ImageItem(np.random.randn(*self.chan_map.geometry))
-        self.img.setLookupTable(get_colormap_lut(name='bipolar'))
+        self.img = pg.ImageItem(image=np.random.randn(*self.chan_map.geometry) * y_spacing * 1e6 / 2)
+        cmap = pg.colormap.get('coolwarm', source='matplotlib')
         self.p_img.addItem(self.img)
         self.p_img.autoRange()
-        self.cb = ColorBarItem(image=self.img, label='Voltage ({0})'.format(units))
-        self.img.setLevels( (-y_spacing, y_spacing) )
+        self.cb = pg.ColorBarItem(limits=None, width=25, cmap=cmap, hoverBrush='#EEEEFF80',
+                                  rounding=10)
+        # self.cb.enableAutoRange()
+        self.cb.setLevels(low=-y_spacing * 1e6, high=y_spacing * 1e6)
+        self.cb.setImageItem(self.img)
+        self.cb.getAxis('left').setLabel('')
+        self.cb.getAxis('right').setLabel('Voltage ({})'.format(units))
         sub_layout.addItem(self.cb)
         mid_x, top_y = self.chan_map.geometry[1] / 2.0, self.chan_map.geometry[0] + 2.0
         # add a text label on top of the box ("anchor" has text box is centered on its x, y position)
@@ -543,19 +556,20 @@ class FastScroller(object):
         self.p1.setXRange(0, initial_pts * x_scale)
         self.p1.vb.setLimits(maxXRange=max_zoom)
 
-        # curves will be itemized in order with the channel map
-        self._curves = []
-        max_visible_points = 1e6 // len(load_channels)
-        for n, i in enumerate(load_channels):
-            curve = HDF5Plot(points_limit=max_visible_points)
-            curve.setHDF5(array, i, y_spacing * n, n, scale=y_scale, dx=x_scale)
-            curve.setClickable(True, width=10)
-            curve.sigClicked.connect(self.highlight_curve)
-            self.p1.addItem(curve)
-            self.p1.addItem(curve.text)
-            self._curves.append(curve)
-        # this is an object to monitor (and manipulate?) the set of curves
-        self.curve_collection = CurveCollection(self._curves)
+        # Multiple curve set that calls up data on-demand
+        curves = PlotCurveCollection(array, load_channels, x_scale, y_scale, y_spacing)
+        self.p1.addItem(curves)
+        self.curve_collection = curves
+
+        # Selected curve & label set that calls up data on-demand
+        labels = ['({}, {})'.format(i, j) for i, j in zip(*chan_map.to_mat())]
+        selected_curves = LabeledCurveCollection(array, load_channels, labels, x_scale, y_scale, y_spacing)
+        self.p1.addItem(selected_curves)
+        for text in selected_curves.texts:
+            self.p1.addItem(text)
+        self.selected_curve_collection = selected_curves
+        self.curve_collection.setClickable(True, width=None)
+        self.curve_collection.sigClicked.connect(self.selected_curve_collection.report_clicked)
 
         # Add mean trace to bottom plot
         self.nav_trace = pg.PlotCurveItem(x=np.arange(len(nav_trace)) * x_scale, y=nav_trace)
@@ -593,10 +607,10 @@ class FastScroller(object):
     def current_data(self):
         return self.curve_collection.current_data()
 
-    def highlight_curve(self, curve):
-        n = self._curves.index(curve)
-        i, j = self.chan_map.rlookup(n)
-        curve.toggle_text(i, j)
+    # def highlight_curve(self, curve):
+    #     n = self._curves.index(curve)
+    #     i, j = self.chan_map.rlookup(n)
+    #     curve.toggle_text(i, j)
         
     def jump_nav(self, evt):
         if QtGui.QApplication.keyboardModifiers() != QtCore.Qt.ShiftModifier:
@@ -619,7 +633,7 @@ class FastScroller(object):
             return
         x_loc = self.p1.vb.mapSceneToView(pos).x()
         self.vline.setPos(x_loc)
-        if not hasattr(self._curves[0], 'y_visible'):
+        if self.curve_collection.y_visible is None:
             return
         self.set_image_frame(x=x_loc, move_vline=False)
 
@@ -628,31 +642,29 @@ class FastScroller(object):
             if x is None:
                 # can't do anything!
                 return
-            idx = self._curves[0].x_visible.searchsorted(x)
-            frame_vec = np.empty(len(self.chan_map), 'd')
-            for i in range(len(self.chan_map)):
-                frame_vec[i] = self._curves[i].y_visible[idx]
+            idx = self.curve_collection.x_visible[0].searchsorted(x)
+            frame_vec = self.curve_collection.y_visible[:, idx]
 
         frame = embed_frame(self.chan_map, frame_vec)
         if self.frame_filter:
             frame = self.frame_filter(frame)
         info('Setting voltage frame {}'.format(timestamp()))
-        self.img.setImage(frame, autoLevels=False)
+        # self.img.setImage(frame, autoLevels=False)
+        self.img.setImage(frame * 1e6, autoLevels=False)
         self.frame_text.setText('Time {:.3f}s'.format(x))
         if move_vline and x is not None:
             self.vline.setPos(x)
         
     def set_mean_image(self):
-        if not hasattr(self._curves[0], 'y_visible'):
+        if self.curve_collection.y_visible is None:
             return
-        image = np.empty(len(self.chan_map), 'd')
-        for i in range(len(self.chan_map)):
-            image[i] = self._curves[i].y_visible.std()
-        x_vis = self._curves[0].x_visible
+        image = self.curve_collection.y_visible.std(axis=1)
+        x_vis = self.curve_collection.x_visible[0]
         x_avg = 0.5 * (x_vis[0] + x_vis[-1])
         frame = embed_frame(self.chan_map, image)
         info('setting RMS frame {}'.format(timestamp()))
-        self.img.setImage(frame, autoLevels=False)
+        # self.img.setImage(frame, autoLevels=False)
+        self.img.setImage(frame * 1e6, autoLevels=False)
         self.frame_text.setText('Time ~ {:.3f}s'.format(x_avg))
 
     def update_zoom_from_region(self):
@@ -700,8 +712,10 @@ class FastScroller(object):
             self.update_region(view_range)
 
     def update_y_spacing(self, offset):
-        for i in range(len(self._curves)):
-            self._curves[i].offset = i * offset
-        x1, x2 = self.current_frame()
-        # need to trigger a redraw with the new spacings--this should emit a data changed signal
-        self.curve_collection.redraw_data_offsets(ignore_signals=False)
+        self.curve_collection.y_offset = offset
+        self.selected_curve_collection.y_offset = offset
+        # for i in range(len(self._curves)):
+        #     self._curves[i].offset = i * offset
+        # x1, x2 = self.current_frame()
+        # # need to trigger a redraw with the new spacings--this should emit a data changed signal
+        # self.curve_collection.redraw_data_offsets(ignore_signals=False)

@@ -521,10 +521,10 @@ class SpatialVariance(PlotsInterval):
         return tool
 
     def _plot_acov_fired(self):
-        t, y = self.curve_collection.current_data()
+        t, y = self.curve_collection.current_data(full_xdata=False)
         y *= 1e6
-        t_stamp = t[0].mean()
-        t = (t[0] - t[0, 0]) * 1e3
+        t_stamp = t.mean()
+        t = (t - t[0]) * 1e3
         dt = t[1] - t[0]
         N = int(self.n_lags / dt)
         Ct = autocov(y, all_lags=False)[:, :min(len(t), N)]
@@ -564,9 +564,9 @@ class SpatialVariance(PlotsInterval):
             self._kernel_plots.append(splot)
 
     def _plot_iso_stcov_fired(self):
-        t, y = self.curve_collection.current_data()
+        t, y = self.curve_collection.current_data(full_xdata=False)
         y *= 1e6
-        t = (t[0] - t[0, 0]) * 1e3
+        t = (t - t[0]) * 1e3
         dt = t[1] - t[0]
         # shoot for minimum of 1 ms per frame
         skip = 1
@@ -629,7 +629,7 @@ class SpatialVariance(PlotsInterval):
         t, y = self.curve_collection.current_data()
         y *= 1e6
         t_stamp = t[0].mean()
-        t = (t[0] - t[0, 0]) * 1e3
+        t = (t - t[0]) * 1e3
         dt = t[1] - t[0]
         # shoot for minimum of 1 ms per frame
         skip = 1
@@ -773,7 +773,6 @@ class SpatialVariance(PlotsInterval):
 
         t, y = self.curve_collection.current_data()
         y *= 1e6
-        t = t[0]
         if self.normalize:
             y = y / np.std(y, axis=1, keepdims=1)
             #y = y / np.std(y, axis=0, keepdims=1)

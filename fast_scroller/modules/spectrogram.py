@@ -126,7 +126,6 @@ class IntervalSpectrogram(PlotsInterval):
     def _plot_fired(self):
         x, y = self.curve_collection.current_data()
         y *= 1e6
-        x = x[0]
         if self.channel.lower() != 'all':
             i, j = list(map(float, self.channel.split(',')))
             y = y[self.chan_map.lookup(i, j)]

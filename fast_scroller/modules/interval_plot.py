@@ -36,11 +36,14 @@ class IntervalTraces(PlotsInterval):
     mm_per_pixel = Int(3)
 
     def _plot_fired(self):
-        x, y = self.curve_collection.current_data()
         if self.plot_selected:
-            y = np.take(y, self.curve_collection.selected_channels(), axis=0)
+            x, y = self.selected_curve_collection.current_data(full_xdata=False)
+        else:
+            x, y = self.curve_collection.current_data(full_xdata=False)
+        if y is None:
+            print('No {}data to plot'.format('selected ' if self.plot_selected else ''))
+            return
         y *= 1e6
-        x = x[0]
         dy = self.parent.y_spacing
         f, ax = self._get_fig()
         clr = self._colors[self._axplots[ax]]
@@ -59,7 +62,7 @@ class IntervalTraces(PlotsInterval):
             ax.set_yticks(y_levels)
             ii, jj = self.chan_map.to_mat()
             if self.plot_selected:
-                subset = self.curve_collection.selected_channels()
+                subset = self.selected_curve_collection.selected_channels
                 ii = np.take(ii, subset, axis=0)
                 jj = np.take(jj, subset, axis=0)
             labels = map(str, zip(ii, jj))
@@ -114,9 +117,8 @@ class IntervalTraces(PlotsInterval):
         self._g_idx = (self._g_idx + 1) % len(self._grid)
         chan_map = self.chan_map
 
-        x, y = self.curve_collection.current_data()
+        x, y = self.curve_collection.current_data(full_xdata=False)
         y *= 1e6
-        x = x[0]
         if self.map_rms:
             img = chan_map.embed(y.std(1))
             label = '~ '+_hh_mm_ss(0.5 * (x[0] + x[-1]))

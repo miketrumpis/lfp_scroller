@@ -85,9 +85,9 @@ class AnimateInterval(VisModule):
                 self._atimer.Stop()
                 return
 
-        x, self.__y = self.curve_collection.current_data()
+        x, self.__y = self.curve_collection.current_data(full_xdata=False)
         self.__f_skip = 1
-        self.__x = x[0]
+        self.__x = x
         dt = self.__x[1] - self.__x[0]
         self.__n_frames = self.__y.shape[1]
         self.__n = 0
@@ -114,9 +114,8 @@ class AnimateInterval(VisModule):
             ev.edit_traits()
             return
 
-        x, y = self.curve_collection.current_data()
+        x, y = self.curve_collection.current_data(full_xdata=False)
         y *= 1e6
-        x = x[0]
         dt = x[1] - x[0]
         # fps is sampling frequency divided by time scale dilation
         fps = (dt * self.anim_time_scale) ** -1.0

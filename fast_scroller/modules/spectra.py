@@ -48,10 +48,14 @@ class IntervalSpectrum(PlotsInterval):
         return fx, pxx
 
     def _plot_fired(self):
-        x, y = self.curve_collection.current_data()
-        y *= 1e6
         if self.plot_selected:
-            y = np.take(y, self.curve_collection.selected_channels(), axis=0)
+            x, y = self.selected_curve_collection.current_data()
+        else:
+            x, y = self.curve_collection.current_data()
+        if y is None:
+            print('No {}data to plot'.format('selected ' if self.plot_selected else ''))
+            return
+        y *= 1e6
         fx, pxx = self.spectrum(y)
 
         fig, ax = self._get_fig()
