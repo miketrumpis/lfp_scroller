@@ -5,34 +5,24 @@ from traits.api import Int, Float, Range, Button, Bool, Str, File, HasTraits, on
 from traitsui.api import View, Group, HGroup, VGroup, UItem, Item, Label, RangeEditor
 
 from .base import VisModule
-from ..h5scroller import PlotCurveCollection
+from ..h5scroller import PlotCurveCollection, FollowerCollection
 
 __all__ = ['HFOLocator']
 
 
-class HFOCollection(PlotCurveCollection):
-    events_table: OrderedDict
+class HFOCollection(FollowerCollection):
 
-    @classmethod
-    def cloned_from_collection(cls, curve_collection: PlotCurveCollection, events_table: OrderedDict):
-        hfos = cls(curve_collection.hdf_data, curve_collection.plot_channels,
-                   curve_collection.dx, curve_collection.dy, curve_collection._y_offset)
-        hfos.events_table = events_table
-        hfos.setPen(width=4, color='r')
-        hfos.setShadowPen(color='r', width=4)
-        connection_id = curve_collection.plot_changed.connect(hfos._yoke_offset)
-        hfos._yoke = (curve_collection.plot_changed, connection_id)
-        return hfos
+    def __init__(self, curve_collection: PlotCurveCollection, events_table: OrderedDict):
+        super().__init__(curve_collection)
+        self.events_table = events_table
+        self.setPen(width=4, color='r')
+        self.setShadowPen(color='r', width=4)
 
-    def _yoke_offset(self, curves):
-        if curves._y_offset != self._y_offset:
-            self.y_offset = curves._y_offset
-
-    def __del__(self):
-        signal, connection = self._yoke
-        signal.disconnect(connection)
+    # TODO: this version should be functional, but as a subclass, it does break the x-/y-visible contract
 
     def updatePlotData(self, data_ready=False):
+        if not self.can_update:
+            return
         r = self._view_range()
         if not r:
             print('no view range')
@@ -44,12 +34,14 @@ class HFOCollection(PlotCurveCollection):
         connections = list()
         for time in self.events_table:
             if start < time < stop:
-                e_start = time
+                e_start = time - start
                 for channel, e_stop in self.events_table[time]:
-                    data_channel = self.plot_channels[channel]
-                    data = self.hdf_data[data_channel, e_start:e_stop] * self.dy + offsets[channel]
+                    e_stop = e_stop - start
+                    # TODO: does channel need to be looked up like self.plot_channels.index(channel)?
+                    print('slicing ch {} from {}-{} on visible slab'.format(channel, e_start, e_stop))
+                    data = self.y_visible[channel, e_start:e_stop] + offsets[channel]
                     y_data.append(data)
-                    x_data.append(np.arange(e_start, e_stop) * self.dx)
+                    x_data.append(np.arange(e_start + start, e_stop + start) * self.dx)
                     c = np.ones(e_stop - e_start, dtype='>i4')
                     c[-1] = 0
                     connections.append(c)
@@ -113,7 +105,7 @@ class HFOLocator(VisModule):
         if not self.has_events:
             return
         if self.show_hfos:
-            self.hfo_curves = HFOCollection.cloned_from_collection(self.curve_collection, self.event_table)
+            self.hfo_curves = HFOCollection(self.curve_collection, self.event_table)
             self.parent._qtwindow.p1.addItem(self.hfo_curves)
         else:
             if not hasattr(self, 'hfo_curves'):
