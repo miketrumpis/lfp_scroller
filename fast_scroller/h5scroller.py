@@ -576,9 +576,8 @@ class FastScroller(object):
         self.load_channels = load_channels
 
         # The main window + layout
-        self.win = pg.GraphicsView()
-        layout = pg.GraphicsLayout(border=(10,10,10))
-        self.win.setCentralItem(layout)
+        self.win = pg.GraphicsLayoutWidget(border=(10, 10, 10))
+        layout = self.win.ci
         # Adding columns to layout: just titles on the top row
         layout.addLabel('Array heatmap')
         layout.addLabel('Zoomed plot')
@@ -586,25 +585,29 @@ class FastScroller(object):
         # Next row has 1) the heatmap image with the colorbar widget
         layout.nextRow()
         sub_layout = layout.addLayout(colspan=1)
-        self.p_img = sub_layout.addViewBox(lockAspect=True)
-
-        self.img = pg.ImageItem(image=np.random.randn(*self.chan_map.geometry) * y_spacing * 1e6 / 2)
+        self.img = pg.ImageItem(image=np.random.randn(*self.chan_map.geometry) * y_spacing)  # * 1e6 / 2)
         cmap = pg.colormap.get('coolwarm', source='matplotlib')
-        self.p_img.addItem(self.img)
-        self.p_img.autoRange()
-        self.cb = pg.ColorBarItem(limits=None, width=25, cmap=cmap, hoverBrush='#EEEEFF80',
-                                  rounding=10)
-        # self.cb.enableAutoRange()
-        self.cb.setLevels(low=-y_spacing * 1e6, high=y_spacing * 1e6)
-        self.cb.setImageItem(self.img)
-        self.cb.getAxis('left').setLabel('')
-        self.cb.getAxis('right').setLabel('Voltage ({})'.format(units))
-        sub_layout.addItem(self.cb)
+        p_img = sub_layout.addPlot()
+        p_img.getViewBox().setAspectLocked()
+        p_img.addItem(self.img)
+        p_img.hideAxis('bottom')
+        p_img.hideAxis('left')
         mid_x, top_y = self.chan_map.geometry[1] / 2.0, self.chan_map.geometry[0] + 2.0
+
         # add a text label on top of the box ("anchor" has text box is centered on its x, y position)
         self.frame_text = pg.TextItem('empty', anchor=(0.5, 0.5), color=(255, 255, 255))
         self.frame_text.setPos(mid_x, top_y)
-        self.p_img.addItem(self.frame_text)
+        # self.vb_img.addItem(self.frame_text)
+        p_img.getViewBox().addItem(self.frame_text)
+        p_img.getViewBox().autoRange()
+
+        # colorbar
+        self.cb = pg.ColorBarItem(limits=None, cmap=cmap, hoverBrush='#EEEEFF80',
+                                  rounding=10e-6, values=(-y_spacing, y_spacing))
+        self.cb.getAxis('left').setLabel('')
+        self.cb.getAxis('right').setLabel('Voltage', units='V')
+        self.cb.setImageItem(self.img)
+        sub_layout.addItem(self.cb)
 
         # 2) the stacked traces plot (colspan 2)
         axis = PlainSecAxis(orientation='bottom')
@@ -646,14 +649,11 @@ class FastScroller(object):
 
         # Selected curve & label set that calls up data on-demand
         labels = ['({}, {})'.format(i, j) for i, j in zip(*chan_map.to_mat())]
-        # selected_curves = LabeledCurveCollection(array, load_channels, labels, x_scale, y_scale, y_spacing)
         selected_curves = LabeledCurveCollection(curves, labels, clickable=True)
         self.p1.addItem(selected_curves)
         for text in selected_curves.texts:
             self.p1.addItem(text)
         self.selected_curve_collection = selected_curves
-        # self.curve_collection.setClickable(True, width=None)
-        # self.curve_collection.sigClicked.connect(self.selected_curve_collection.report_clicked)
 
         # Add mean trace to bottom plot
         self.nav_trace = pg.PlotCurveItem(x=np.arange(len(nav_trace)) * x_scale, y=nav_trace)
@@ -674,7 +674,7 @@ class FastScroller(object):
         self.p1.addItem(self.vline)
         self.p1.scene().sigMouseMoved.connect(self.fine_nav)
         
-        # final adjustments to rows
+        # final adjustments to rows: args are (row, stretch)
         self.win.centralWidget.layout.setRowStretchFactor(0, 0.5)
         self.win.centralWidget.layout.setRowStretchFactor(1, 5)
         self.win.centralWidget.layout.setRowStretchFactor(2, 2.5)
@@ -691,11 +691,6 @@ class FastScroller(object):
     def current_data(self):
         return self.curve_collection.current_data()
 
-    # def highlight_curve(self, curve):
-    #     n = self._curves.index(curve)
-    #     i, j = self.chan_map.rlookup(n)
-    #     curve.toggle_text(i, j)
-        
     def jump_nav(self, evt):
         if QtGui.QApplication.keyboardModifiers() != QtCore.Qt.ShiftModifier:
             return
@@ -734,7 +729,7 @@ class FastScroller(object):
             frame = self.frame_filter(frame)
         info('Setting voltage frame {}'.format(timestamp()))
         # self.img.setImage(frame, autoLevels=False)
-        self.img.setImage(frame * 1e6, autoLevels=False)
+        self.img.setImage(frame, autoLevels=False)
         self.frame_text.setText('Time {:.3f}s'.format(x))
         if move_vline and x is not None:
             self.vline.setPos(x)
@@ -748,7 +743,7 @@ class FastScroller(object):
         frame = embed_frame(self.chan_map, image)
         info('setting RMS frame {}'.format(timestamp()))
         # self.img.setImage(frame, autoLevels=False)
-        self.img.setImage(frame * 1e6, autoLevels=False)
+        self.img.setImage(frame, autoLevels=False)
         self.frame_text.setText('Time ~ {:.3f}s'.format(x_avg))
 
     def update_zoom_from_region(self):
@@ -797,9 +792,4 @@ class FastScroller(object):
 
     def update_y_spacing(self, offset):
         self.curve_collection.y_offset = offset
-        self.selected_curve_collection.y_offset = offset
-        # for i in range(len(self._curves)):
-        #     self._curves[i].offset = i * offset
-        # x1, x2 = self.current_frame()
-        # # need to trigger a redraw with the new spacings--this should emit a data changed signal
-        # self.curve_collection.redraw_data_offsets(ignore_signals=False)
+        # self.selected_curve_collection.y_offset = offset
