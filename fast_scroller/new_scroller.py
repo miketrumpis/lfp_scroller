@@ -1,5 +1,5 @@
-from traits.api import Instance, Float, Enum, Any, List, on_trait_change, Event, Str, Property
-from traitsui.api import View, UItem, VSplit, CustomEditor, HSplit, Group, HGroup, Label, ListEditor
+from traits.api import Instance, Float, Enum, Any, List, on_trait_change, Event, Str, Property, Button
+from traitsui.api import View, UItem, VSplit, CustomEditor, HSplit, Group, VGroup, HGroup, Label, ListEditor
 from collections import OrderedDict
 from pyqtgraph.Qt import QtGui
 # from pyqtgraph.graphicsItems.GradientEditorItem import Gradients
@@ -26,11 +26,12 @@ class VisWrapper(PersistentWindow):
     vis_rate = Float
     chan_map = Any
     region = Event
-    modules = List( [IntervalTraces,
-                     AnimateInterval,
-                     IntervalSpectrum,
-                     IntervalSpectrogram,
-                     SpatialVariance] )
+    clear_selected_channels = Button('Clear selected')
+    modules = List([IntervalTraces,
+                    AnimateInterval,
+                    IntervalSpectrum,
+                    IntervalSpectrogram,
+                    SpatialVariance])
     recording = Str
 
     def __init__(self, qtwindow: FastScroller, **traits):
@@ -77,6 +78,9 @@ class VisWrapper(PersistentWindow):
         if self.y_spacing == self._y_spacing_entry:
             self._change_spacing()
 
+    def _clear_selected_channels_fired(self):
+        self._qtwindow.selected_curve_collection.set_selection(None)
+
     @on_trait_change('colormap')
     def _change_colormap(self):
         cmap = get_colormap(self.colormap, source='matplotlib')
@@ -94,10 +98,11 @@ class VisWrapper(PersistentWindow):
                       #height=(ht-150)),
                       height=0.85),
                 HSplit(
-                    Group(Label('Trace spacing (uV)'),
-                          UItem('_y_spacing_enum', resizable=True),
-                          Label('Enter spacing (uV)'),
-                          UItem('_y_spacing_entry'),
+                    Group(HGroup(VGroup(Label('Trace spacing (uV)'),
+                                        UItem('_y_spacing_enum', resizable=True),
+                                        Label('Enter spacing (uV)'),
+                                        UItem('_y_spacing_entry')),
+                                 UItem('clear_selected_channels')),
                           Label('Color map'),
                           UItem('colormap'),
                           HGroup(Label('Vis. sample rate'), UItem('vis_rate')),
@@ -108,7 +113,8 @@ class VisWrapper(PersistentWindow):
                                             dock_style='tab',
                                             page_name='.name'),
                                             
-                          height=-150),
+                          # height=-150
+                          ),
                       )
                 ),
             width=1200,

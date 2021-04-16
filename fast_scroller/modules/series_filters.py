@@ -98,7 +98,7 @@ class RectifyAndSmooth(AppliesSeriesFiltering):
             HGroup(
                 VGroup(Label('Band (comma-sep)'), UItem('bandpass')),
                 VGroup(Label('Square?'), UItem('square')),
-                VGroup(Label('Gauss tau (s)'), UItem('tau')),
+                VGroup(Label('Gauss tau (s)'), Label('(Or tau=0 to skip rectifier)'), UItem('tau')),
                 VGroup(Label('Theaded?'), UItem('para'))
             )
         )
@@ -109,11 +109,13 @@ class RectifyAndSmooth(AppliesSeriesFiltering):
             block_filter = 'parallel' if self.para else 'serial'
             fdes = dict(lo=self.f_lo, hi=self.f_hi, Fs=self.sample_rate, ord=3)
             y = filter_array(array, inplace=False, block_filter=block_filter, design_kwargs=fdes)
+        tau_samps = self.tau * self.sample_rate
+        if tau_samps == 0:
+            return y
         if self.square:
             y **= 2
         else:
             np.abs(y, out=y)
-        tau_samps = self.tau * self.sample_rate
         if tau_samps > 0:
             if self.para:
                 gauss_para = split_at()(gaussian_filter1d)

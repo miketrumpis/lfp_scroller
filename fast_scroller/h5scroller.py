@@ -211,7 +211,7 @@ class PlotCurveCollection(pg.PlotCurveItem):
         y_stop = y_start + (stop - start)
         self.y_visible = self.y_slice[:, y_start:y_stop]
         self.x_visible = np.tile(np.arange(start, stop) * self.dx, (len(self.plot_channels), 1))
-        print('x,y arrays set:', self.y_visible.shape, self.x_visible.shape)
+        info('x,y arrays set:', self.y_visible.shape, self.x_visible.shape)
 
     def updatePlotData(self, data_ready=False):
         # Use data_ready=True to indicate that there's pre-defined x- and y-visible data ready to plot
@@ -393,7 +393,7 @@ class FollowerCollection(PlotCurveCollection):
         # By defaullt, plots everything that is visible on the source.
         if not self.can_update:
             return
-        print('updating based on source data: ', self.x_visible.shape, self.y_visible.shape)
+        # info('updating based on source data: ', self.x_visible.shape, self.y_visible.shape)
         super().updatePlotData(data_ready=True)
 
 
@@ -426,6 +426,23 @@ class SelectedFollowerCollection(FollowerCollection):
         b = self._active_channels[channel]
         print('click pos', event.pos(), 'channel', channel, 'changing to', not b)
         self._active_channels[channel] = not b
+        with self.can_update(True):
+            self.updatePlotData()
+        self.selection_changed.emit(self)
+
+    def set_selection(self, selected=None):
+        """
+        Set the selection to this subset.
+
+        Parameters
+        ----------
+        selected : array-like
+            Subset of plot channels to select. If None, then selection is blank.
+
+        """
+        self._active_channels[:] = False
+        if selected is not None:
+            self._active_channels[selected] = True
         with self.can_update(True):
             self.updatePlotData()
         self.selection_changed.emit(self)
