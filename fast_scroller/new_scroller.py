@@ -1,6 +1,7 @@
 import numpy as np
 from traits.api import Instance, Float, Enum, Any, List, on_trait_change, Event, Str, Property, Button
-from traitsui.api import View, UItem, VSplit, CustomEditor, HSplit, Group, VGroup, HGroup, Label, ListEditor
+from traitsui.api import View, UItem, VSplit, CustomEditor, HSplit, Group, VGroup, HGroup, Label, ListEditor, \
+    EnumEditor
 from collections import OrderedDict
 from pyqtgraph.Qt import QtGui
 # from pyqtgraph.graphicsItems.GradientEditorItem import Gradients
@@ -29,8 +30,8 @@ class VisWrapper(PersistentWindow):
     chan_map = Any
     region = Event
     clear_selected_channels = Button('Clear selected')
-    _plot_overlays = List
-    active_channels_set = Enum('all', '_plot_overlays')
+    _plot_overlays = List(Str)
+    active_channels_set = Str('all')
     modules = List([IntervalTraces,
                     AnimateInterval,
                     IntervalSpectrum,
@@ -133,7 +134,8 @@ class VisWrapper(PersistentWindow):
                                         UItem('auto_space')),
                                  VGroup(UItem('clear_selected_channels'),
                                         Label('Interactive curves'),
-                                        UItem('active_channels_set'))),
+                                        UItem('active_channels_set',
+                                              editor=EnumEditor(name='_plot_overlays')))),
                           Label('Color map'),
                           UItem('colormap'),
                           HGroup(Label('Vis. sample rate'), UItem('vis_rate')),
