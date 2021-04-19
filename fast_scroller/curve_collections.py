@@ -19,6 +19,31 @@ class PlotCurveCollection(pg.PlotCurveItem):
 
     def __init__(self, data: ReadCache, plot_channels: list,
                  dx: float, dy:float, y_offset: float, *args, **kwargs):
+        """
+        This object is a PlotCurveItem that can draw a lot of disconnected curves that trace multi-channel signals.
+        The data for the active page is drawn from a ReadCache source (i.e. HDF5). Under the hood there is a bit of
+        machinery to avoid making unnecessary disk reads.
+
+        The client-facing parts of this class provide:
+
+        * current_data() -- "visible" data on the page (with or without the present trace offsets "y_offset")
+        * set_external_data() -- setting the data on the page with filtered signals
+        * event signals for: data changed, plot changed, on-screen sampling rate changed
+
+        Parameters
+        ----------
+        data : ReadCache
+            A buffer object that allows slicing into a file mapped 2D array
+        plot_channels : list
+            Which of the mapped array channels are to be plotted (and in which order)
+        dx : float
+            X-axis data rate (or reciprocal of signal sampling rate)
+        dy : float
+            Y-axis quantization: the Volts / data-unit conversion.
+        y_offset : float
+            Offset traces by this gap (Volts units)
+
+        """
         super().__init__(*args, **kwargs)
         # These are HDF5 getter helpers per plot curve line
         self.hdf_data = data
@@ -251,9 +276,6 @@ class PlotCurveCollection(pg.PlotCurveItem):
             self.updatePlotData()
 
 
-# This should work like a PlotCurveCollection, but should only draw data from a source collection,
-# and not from a raw data source. Whenever the source data is modified (e.g. by external filtering),
-# those modifications are then applied to any follower collections.
 class FollowerCollection(PlotCurveCollection):
     can_update = ToggleState(init_state=False)
     connection_ids = list()
@@ -269,6 +291,23 @@ class FollowerCollection(PlotCurveCollection):
         return obj
 
     def __init__(self, curve_collection: PlotCurveCollection):
+        """
+        This class works like a PlotCurveCollection, but only draws data from a source collection,
+        and not from a raw data source. Whenever the source data is modified (e.g. by external filtering),
+        those modifications are then applied to any follower collections.
+
+        x-/y-visible data are retrieved by Property getters (setters do nothing), and y_offset is yoked to the source
+        object. updatePlotData is gated by a context based ToggleState ("can_update").
+
+        This class is essentially an abstract class that provides the curve-copying constructor and the gating
+        mechanisms.
+
+        Parameters
+        ----------
+        curve_collection : PlotCurveCollection
+            Curve collection to clone into this follower.
+
+        """
         self._source = curve_collection
         self.register_connection(curve_collection.data_changed, self._source_triggered_update)
         self.register_connection(curve_collection.plot_changed, self._source_triggered_update)
@@ -336,6 +375,22 @@ class SelectedFollowerCollection(FollowerCollection):
 
     def __init__(self, curve_collection: PlotCurveCollection, clickable: bool=False, pen_args=None,
                  shadowpen_args=None):
+        """
+        This kind of FollowerCollection modifies its visible data (through Property logic) to show only a subset of the
+        source channels.
+
+        Parameters
+        ----------
+        curve_collection : PlotCurveCollection
+            Source collection to follow
+        clickable : bool
+            Curves can be selected by mouse click
+        pen_args : dict
+            For constructing the Pen that draws the selected curves
+        shadowpen_args : dict
+            For constructing the ShadowPen that highlights the selected curves
+
+        """
         super().__init__(curve_collection)
         if not pen_args:
             pen_args = dict(width=0)
@@ -433,6 +488,23 @@ class LabeledCurveCollection(SelectedFollowerCollection):
 
     def __init__(self, curve_collection: PlotCurveCollection, label_set: list,
                  clickable: bool=False, pen_args=None, shadowpen_args=None):
+        """
+        A SelectedFollowerCollection that also has labels for the selected curves.
+
+        Parameters
+        ----------
+        curve_collection : PlotCurveCollection
+            Source collection to follow
+        label_set: list
+            Label for each source curve
+        clickable : bool
+            Curves can be selected by mouse click
+        pen_args : dict
+            For constructing the Pen that draws the selected curves
+        shadowpen_args : dict
+            For constructing the ShadowPen that highlights the selected curves
+
+        """
         super().__init__(curve_collection, clickable=clickable, pen_args=pen_args, shadowpen_args=shadowpen_args)
         self.texts = list()
         for label in label_set:
