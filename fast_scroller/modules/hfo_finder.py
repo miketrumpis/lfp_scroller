@@ -158,11 +158,11 @@ class HFOLocator(VisModule):
             return
         if self.show_hfos:
             self.hfo_curves = HFOCollection(self.curve_collection, self.hfo_lookup)
-            self.parent._qtwindow.p1.addItem(self.hfo_curves)
+            self.parent.add_new_curves(self.hfo_curves, 'HFOs')
         else:
             if not hasattr(self, 'hfo_curves'):
                 return
-            self.parent._qtwindow.p1.removeItem(self.hfo_curves)
+            self.parent.remove_curves('HFOs')
             del self.hfo_curves
 
     def _time_offset_changed(self):
