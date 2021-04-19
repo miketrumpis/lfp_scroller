@@ -140,9 +140,9 @@ class PlotCurveCollection(pg.PlotCurveItem):
         """
         if self.y_visible is None:
             return None, None
-        y = self.y_visible if visible else self.y_slice
+        y = self.y_visible.copy() if visible else self.y_slice.copy()
         # TODO: so x.shape isn't exactly consistent with y.shape if visible is False
-        x = self.x_visible if full_xdata else self.x_visible[0]
+        x = self.x_visible.copy() if full_xdata else self.x_visible[0].copy()
         return x, y
 
     @property
