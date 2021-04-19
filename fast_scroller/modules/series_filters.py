@@ -71,6 +71,7 @@ class RectifyAndSmooth(AppliesSeriesFiltering):
     square = Bool(True)
     tau = Float
     para = Bool(False)
+    filtfilt = Bool(False)
 
     def _parse_bandpass(self):
         lo = -1
@@ -99,7 +100,8 @@ class RectifyAndSmooth(AppliesSeriesFiltering):
                 VGroup(Label('Band (comma-sep)'), UItem('bandpass')),
                 VGroup(Label('Square?'), UItem('square')),
                 VGroup(Label('Gauss tau (s)'), Label('(Or tau=0 to skip rectifier)'), UItem('tau')),
-                VGroup(Label('Theaded?'), UItem('para'))
+                VGroup(Label('Theaded?'), UItem('para'),
+                       Label('Zero-phase?'), UItem('filtfilt'))
             )
         )
         return v
@@ -108,7 +110,8 @@ class RectifyAndSmooth(AppliesSeriesFiltering):
         if self.f_lo > 0 or self.f_hi > 0:
             block_filter = 'parallel' if self.para else 'serial'
             fdes = dict(lo=self.f_lo, hi=self.f_hi, Fs=self.sample_rate, ord=3)
-            y = filter_array(array, inplace=False, block_filter=block_filter, design_kwargs=fdes)
+            farg = dict(filtfilt=self.filtfilt)
+            y = filter_array(array, inplace=False, block_filter=block_filter, design_kwargs=fdes, filt_kwargs=farg)
         tau_samps = self.tau * self.sample_rate
         if tau_samps == 0:
             return y
