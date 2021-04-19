@@ -9,7 +9,8 @@ from pyqtgraph.Qt import QtGui
 from pyqtgraph.colormap import listMaps, get as get_colormap
 
 from .helpers import PersistentWindow
-from .h5scroller import FastScroller, PlotCurveCollection
+from .h5scroller import FastScroller
+from .curve_collections import PlotCurveCollection
 from .modules import *
 
 
