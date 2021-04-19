@@ -1,7 +1,7 @@
 from collections import OrderedDict
 import numpy as np
 import pandas as pd
-from traits.api import Int, Array, Range, Button, Bool, Str, File, on_trait_change
+from traits.api import Int, Float, Array, Range, Button, Bool, Str, File, on_trait_change
 from traitsui.api import View, HGroup, VGroup, UItem, Label, TabularEditor
 from traitsui.tabular_adapter import TabularAdapter
 
@@ -80,11 +80,11 @@ class HFOLocator(VisModule):
     next = Button('Next event')
     prev = Button('Previous event')
     show_hfos = Bool(True)
-    has_events = Bool(False)
     # Does the events table have 1-based indexing?
     matlab_indexing = Bool(True)
     # Are the channel numbers referring to recording or array channels?
     array_channels = Bool(False)
+    time_offset = Float(0)
     event_idx = Int(-1)
     last_idx = Int(0)
     # event_table = Instance(pd.DataFrame)
@@ -96,13 +96,14 @@ class HFOLocator(VisModule):
     after_time = Range(low=0.0, high=1000.0, value=100.0)
 
     @on_trait_change('file')
-    def _setup_events(self):
+    def _read_table(self):
         df = pd.read_csv(self.file, header=None, names=['channel', 'start', 'end'])
         df = df.reindex(['start', 'end', 'channel'], axis=1)
         df.channel = df.channel - int(self.matlab_indexing)
         # keep start / end points as times rounded to nearest millisecond
-        df.start = np.round((df.start - int(self.matlab_indexing)) * 1000 * self.parent.x_scale).astype('i')
-        df.end = np.round((df.end - int(self.matlab_indexing)) * 1000 * self.parent.x_scale).astype('i')
+        offset = self.time_offset * 1000
+        df.start = np.round(df.start + offset).astype('i')
+        df.end = np.round(df.end + offset).astype('i')
         # If the data channels are in array order, then try to infer what the channels
         # were in recording order. This should be possible by sorting the plot channels
         # and then choosing those channels by their order in the range of array channels.
@@ -111,19 +112,23 @@ class HFOLocator(VisModule):
             recording_channels = array_rec_order[df.channel.values]
             df.channel[:] = recording_channels
         df = df.sort_values(by='start', inplace=False).reset_index(drop=True)
+        self.event_table = np.c_[df.start, df.end, df.channel]
+        self.create_event_lookup(self.event_table)
+
+    def create_event_lookup(self, table):
+        start_times, end_times, channels = table.transpose()
         # build a table of all (channel, end-point) pairs for each event start time
         self.hfo_lookup = OrderedDict()
 
-        for start in df.start:
+        for start in start_times:
             if int(start) in self.hfo_lookup:
                 continue
-            df_s = df[df.start == start]
-            self.hfo_lookup[int(start)] = list(zip(df_s.channel.values, df_s.end.values))
+            mask = start_times == start
+            self.hfo_lookup[int(start)] = list(zip(channels[mask], end_times[mask]))
         self.event_idx = -1
-        self.last_idx = len(self.hfo_lookup)
+        # self.last_idx = len(self.hfo_lookup)
+        self.last_idx = len(start_times)
         # convert to regular ndarray because DataFrameEditor is broken :(
-        self.event_table = np.c_[df.start, df.end, df.channel]
-        self.has_events = True
         self._toggle_curves()
 
     @on_trait_change('event_idx')
@@ -149,7 +154,7 @@ class HFOLocator(VisModule):
 
     @on_trait_change('show_hfos')
     def _toggle_curves(self):
-        if not self.has_events:
+        if not len(self.event_table):
             return
         if self.show_hfos:
             self.hfo_curves = HFOCollection(self.curve_collection, self.hfo_lookup)
@@ -159,6 +164,14 @@ class HFOLocator(VisModule):
                 return
             self.parent._qtwindow.p1.removeItem(self.hfo_curves)
             del self.hfo_curves
+
+    def _time_offset_changed(self):
+        if len(self.event_table):
+            if hasattr(self, 'hfo_curves'):
+                self.parent._qtwindow.p1.removeItem(self.hfo_curves)
+                del self.hfo_curves
+            if self.file:
+                self._read_table()
 
     def _change_event(self, sign):
         if 0 <= self.event_idx + sign < self.last_idx:
@@ -185,15 +198,17 @@ class HFOLocator(VisModule):
                        UItem('after_time')),
                 VGroup(Label('Event file'),
                        UItem('file'),
-                       HGroup(UItem('matlab_indexing'), Label('1-based indexing?')),
-                       # HGroup(UItem('array_channels'), Label('Array channel numbering?')),
-                       HGroup(UItem('show_hfos'), Label('Highlight HFOs'))),
-                VGroup(
-                       UItem('event_table', editor=event_editor),
                        HGroup(
-                           UItem('next', enabled_when='event_idx < last_idx - 1'),
+                           VGroup(HGroup(UItem('matlab_indexing'), Label('1-based indexing?')),
+                                  HGroup(UItem('time_offset'), Label('Offset start time (s)'))),
+                           VGroup(HGroup(UItem('show_hfos'), Label('Highlight HFOs')))
+                               # HGroup(UItem('array_channels'), Label('Array channel numbering?')),
+                       )),
+                VGroup(
+                    UItem('event_table', editor=event_editor),
+                    HGroup(UItem('next', enabled_when='event_idx < last_idx - 1'),
                            UItem('prev', enabled_when='event_idx > 0'))
-                       )
+                )
             ),
             resizable=True
         )
