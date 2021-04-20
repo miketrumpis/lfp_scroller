@@ -25,7 +25,6 @@ class IntervalTraces(PlotsInterval):
     plot = Button('Plot')
     new_figure = Bool(True)
     label_channels = Bool(False)
-    plot_selected = Bool(False)
 
     map_row = Enum(1, list(range(1, 11)))
     map_col = Enum(1, list(range(1, 11)))
@@ -36,12 +35,9 @@ class IntervalTraces(PlotsInterval):
     mm_per_pixel = Int(3)
 
     def _plot_fired(self):
-        if self.plot_selected:
-            x, y = self.selected_curve_collection.current_data(full_xdata=False)
-        else:
-            x, y = self.curve_collection.current_data(full_xdata=False)
+        x, y, chan_map = self.parent.get_interactive_data(full_xdata=False)
         if y is None:
-            print('No {}data to plot'.format('selected ' if self.plot_selected else ''))
+            print('No data to plot')
             return
         y *= 1e6
         dy = self.parent.y_spacing
@@ -60,11 +56,7 @@ class IntervalTraces(PlotsInterval):
             ax.set_ylabel(label)
         else:
             ax.set_yticks(y_levels)
-            ii, jj = self.chan_map.to_mat()
-            if self.plot_selected:
-                subset = self.selected_curve_collection.selected_channels
-                ii = np.take(ii, subset, axis=0)
-                jj = np.take(jj, subset, axis=0)
+            ii, jj = chan_map.to_mat()
             labels = map(str, zip(ii, jj))
             ax.set_yticklabels(labels, fontsize=8)
         ax.set_xlabel('Time (s)')
@@ -146,8 +138,6 @@ class IntervalTraces(PlotsInterval):
                     VGroup(
                         Label('Label Channels'),
                         UItem('label_channels'),
-                        Label('Plot selected chans'),
-                        UItem('plot_selected')
                     ),
                     UItem('plot'),
                     label='Plot current window'

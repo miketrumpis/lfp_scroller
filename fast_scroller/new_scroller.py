@@ -98,6 +98,27 @@ class VisWrapper(PersistentWindow):
         self._qtwindow.p1.removeItem(curves)
         self._plot_overlays.remove(label)
 
+    def get_interactive_data(self, full_xdata=False):
+        """
+        Return the x-/y-visible data for the currently selected curve set.
+
+        Returns
+        -------
+        x,y data: ndarrays
+            The x_visible and y_visible arrays
+        channel_map: ChannelMap
+            The electrode map for the returned y-data
+
+        """
+
+        curves = self.overlay_lookup[self.active_channels_set]
+        if self.active_channels_set != 'all':
+            channel_map = curves.map_visible(self.chan_map)
+        else:
+            channel_map = self.chan_map
+        x, y = curves.current_data(visible=True, full_xdata=full_xdata)
+        return x, y, channel_map
+
     @on_trait_change('_y_spacing_enum')
     def _change_spacing(self):
         self._qtwindow.update_y_spacing(self.y_spacing * 1e-6)

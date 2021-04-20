@@ -22,7 +22,6 @@ class IntervalSpectrum(PlotsInterval):
     sem = Bool(True)
     adaptive = Bool(True)
     label = Str
-    plot_selected = Bool(False)
     plot = Button('Plot')
 
     def __default_mtm_kwargs(self, n):
@@ -48,13 +47,9 @@ class IntervalSpectrum(PlotsInterval):
         return fx, pxx
 
     def _plot_fired(self):
-        if self.plot_selected:
-            x, y = self.selected_curve_collection.current_data()
-        else:
-            x, y = self.curve_collection.current_data()
+        x, y, _ = self.parent.get_interactive_data(full_xdata=False)
         if y is None:
-            print('No {}data to plot'.format('selected ' if self.plot_selected else ''))
-            return
+            print('No data to plot')
         y *= 1e6
         fx, pxx = self.spectrum(y)
 
@@ -100,7 +95,6 @@ class IntervalSpectrum(PlotsInterval):
                     Item('adaptive', label='Adaptive MTM'),
                 ),
                 HGroup(
-                    Item('plot_selected', label='Selected chans'),
                     Item('avg_spec', label='Plot avg'),
                     Item('sem', label='Use S.E.M.'),
                     Item('new_figure', label='Plot in new figure')

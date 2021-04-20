@@ -2,6 +2,7 @@ import numpy as np
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore
 from ecogdata.util import ToggleState
+from ecogdata.channel_map import ChannelMap
 from ecogdata.parallel.mproc import parallel_context, timestamp
 
 from .h5data import ReadCache
@@ -98,6 +99,8 @@ class PlotCurveCollection(pg.PlotCurveItem):
             return None, None
         y = self.y_visible.copy() if visible else self.y_slice.copy()
         # TODO: so x.shape isn't exactly consistent with y.shape if visible is False
+        # TODO: option for raw data even if self.y_slice would return external (it would need to be sub-sliced to
+        #  visible range)
         x = self.x_visible.copy() if full_xdata else self.x_visible[0].copy()
         return x, y
 
@@ -433,8 +436,13 @@ class SelectedFollowerCollection(FollowerCollection):
             self.updatePlotData()
         self.selection_changed.emit(self)
 
+    def map_visible(self, channel_map: ChannelMap):
+        return channel_map.subset(self._active_channels)
+
     @property
     def x_visible(self):
+        if not self._active_channels.any():
+            return None
         x = self._source.x_visible
         if x is not None:
             x = x[self._active_channels]
@@ -446,6 +454,8 @@ class SelectedFollowerCollection(FollowerCollection):
 
     @property
     def y_visible(self):
+        if not self._active_channels.any():
+            return None
         y = self._source.y_visible
         if y is not None:
             y = y[self._active_channels]
@@ -455,7 +465,6 @@ class SelectedFollowerCollection(FollowerCollection):
     def y_visible(self, new):
         return
 
-    # TODO: All this property trickery was to enable the base updatePlotData to work as-is, maybe it can be re-thought
     @property
     def plot_channels(self):
         can_plot = [self._available_channels[i] for i in self.selected_channels]
@@ -533,5 +542,9 @@ class LabeledCurveCollection(SelectedFollowerCollection):
             # print('Setting text {}, {}: {}'.format(x_pos, y_pos, timestamp()))
             text.setPos(x_pos, y_pos)
             label_row += 1
+
+    @property
+    def labels(self):
+        return [text.getText() for text in self.texts if text.isVisible()]
 
 
