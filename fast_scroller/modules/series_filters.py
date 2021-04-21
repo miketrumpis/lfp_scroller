@@ -3,6 +3,7 @@ from scipy.signal import hilbert
 from scipy.ndimage import gaussian_filter1d
 from traits.api import HasTraits, Instance, Button, Int, Enum, Float, Str, Bool, Property
 from traitsui.api import View, UItem, Handler, Group, HGroup, VGroup, Label
+from pyqtgraph.Qt import QtCore
 
 from ecoglib.estimation.multitaper import bw2nw
 from ecogdata.util import nextpow2
@@ -11,6 +12,7 @@ from ecogdata.filt.time import moving_projection, slepian_projection, filter_arr
 
 from .base import VisModule
 from ..helpers import DebounceCallback
+from ..curve_collections import SelectedFollowerCollection, PlotCurveCollection
 
 
 # Most of the classes defined here inherit from HasTraits from the traits package. "Traits" can be used
@@ -176,6 +178,76 @@ class MultitaperDemodulate(AppliesSeriesFiltering):
         return v
 
 
+# The previous filters work by replacing on-screen signals in a PlotCurveCollection. As an alternative,
+# plot both signals on screen using a FollowerCollection.
+class FilterFollower(SelectedFollowerCollection):
+    data_filtered = QtCore.pyqtSignal(QtCore.QObject)
+
+    def __init__(self, curve_collection: PlotCurveCollection, transform: AppliesSeriesFiltering, **kwargs):
+        super().__init__(curve_collection, **kwargs)
+        self.signal_transform = transform
+        self._y_filtered = None
+        self.register_connection(curve_collection.data_changed, self.transform_page)
+        self.selection_changed.connect(self.transform_page)
+        self.data_filtered.connect(self._source_triggered_update)
+        # This should be ready at the start
+        self.transform_page(curve_collection)
+
+    def data_ready(self):
+        # Check that the source data_changed signal has triggered a signal transform
+        paged = self._cslice == self._source._cslice
+        if not paged:
+            return False
+        # Check if channels have been activated/deactivated but they're not visible yet (1)
+        n_active = self._active_channels.sum()
+        if n_active > 0 and self.y_visible is None:
+            return False
+        # Check if channels have been activated/deactivated but they're not visible yet (2)
+        if n_active > 0 and len(self.y_visible) != n_active:
+            return False
+        return True
+
+    def transform_page(self, source: PlotCurveCollection):
+        if not self._active_channels.any():
+            self._y_filtered = None
+        else:
+            raw_signal = self._source.y_slice[self._active_channels]
+            self._y_filtered = self.signal_transform(raw_signal)
+        # following this attribute will signal that the filter data is current
+        self._cslice = self._source._cslice
+        self.data_filtered.emit(self)
+
+    @property
+    def y_visible(self):
+        if not self._active_channels.any():
+            return None
+        # This case might catch a transient state going between 0 to >0 active channels
+        if self._y_filtered is None:
+            return None
+        full_start = self._source._cslice.start
+        full_stop = self._source._cslice.stop
+        page_start, page_stop = self._source._view_range()
+        # This should probably not happen, since the follower is only activated after
+        # the source data is ready. But best to check.
+        if page_start < full_start or page_stop > full_stop:
+            return None
+        x1 = page_start - full_start
+        x2 = page_stop - full_start
+        # _y_filtered is already a subset of source channels
+        return self._y_filtered[:, x1:x2]
+
+    @y_visible.setter
+    def y_visible(self, new):
+        return
+
+    def updatePlotData(self, data_ready=False):
+        # This update is ALSO gated on whether the filtered data is ready,
+        # since the source-following callbacks might be out of order.
+        if not (self.can_update and self.data_ready()):
+            return
+        super().updatePlotData(data_ready=True)
+
+
 # A "Handler" in Traits is an object that responds to user input when the response behavior is somewhat non-trivial.
 # In this case, the filtering module will have a choice of filters that can be applied. Based on the GUI manipulation
 # of that choice, a different filter calculator will be constructed (the AppliesSeriesFiltering types defined above)
@@ -234,6 +306,10 @@ class SeriesFiltering(VisModule):
     filter_type = Enum(series_filters[0], series_filters)
     # The name of the applied filter
     applied_filter = Str('None')
+    # Option to replace on-page data (default True)
+    replace_data = Bool(True)
+    # Option to filter selected signals (default False)
+    selected_filter = Bool(False)
     # A Button is a non-Python type with pretty obvious behavior (it can be "fired" when pressed)
     set_filter = Button('Set window filter')
     unset_filter = Button('Remove window filter')
@@ -250,15 +326,17 @@ class SeriesFiltering(VisModule):
 
     # Button response behavior defined with "_<button-name>_fired(self)" method.
     def _set_filter_fired(self):
+        self.disconnect_filter(trigger_redraw=False)
         if self.filter is None or self.filter.name == 'None':
-            # this is the same as unsetting a filter
-            self._unset_filter_fired()
+            # this is the same as unsetting a filter, which has already been done
             return
-        if self._cb_connection is not None:
-            # disconnect and make sure that that curve collection resets to raw slices,
-            # but do not trigger a data-changed signal
-            self.disconnect_filter(trigger_redraw=False)
+        # Decide which filter type to apply
+        if self.replace_data:
+            self.set_inplace_filter()
+        else:
+            self.add_filter_curves()
 
+    def set_inplace_filter(self):
         # get the concrete filter calculator from the current abstract filter
         filter = self.filter.filter
         # attach a new debounce filter to this object (if a reference it not saved, it will get garbage-collected!)
@@ -274,16 +352,30 @@ class SeriesFiltering(VisModule):
         # Now that a filter is applied, set the name for display
         self.applied_filter = self.filter.name
 
-    def disconnect_filter(self, trigger_redraw=True):
-        self.curve_collection.data_changed.disconnect(self._cb_connection)
-        self.curve_collection.unset_external_data(visible=False, redraw=trigger_redraw)
-        self._cb_connection = None
+    def add_filter_curves(self):
+        transform = self.filter.filter
+        clickable = self.selected_filter
+        pen_args = dict(color='r', width=1)
+        filter_follower = FilterFollower(self.curve_collection, transform,
+                                         clickable=clickable,
+                                         init_active=not clickable,
+                                         pen_args=pen_args,
+                                         shadowpen_args=dict())
+        self.parent.add_new_curves(filter_follower, 'filter tab')
+        filter_follower.data_filtered.emit(filter_follower)
 
-    def _unset_filter_fired(self):
+    def disconnect_filter(self, trigger_redraw=True):
         # If a connection is present, disconnect it and redraw the raw data (without signaling data change)
         if self._cb_connection is not None:
-            self.disconnect_filter(trigger_redraw=True)
+            self.curve_collection.data_changed.disconnect(self._cb_connection)
+            self.curve_collection.unset_external_data(visible=False, redraw=trigger_redraw)
+            self._cb_connection = None
+        if 'filter tab' in self.parent.overlay_lookup:
+            self.parent.remove_curves('filter tab')
+
+    def _unset_filter_fired(self):
         # unset the filter name and callback
+        self.disconnect_filter(trigger_redraw=True)
         self.applied_filter = 'None'
 
     # The view on this module is deceptively simple. In a horizontal span (HGroup), show
@@ -293,7 +385,11 @@ class SeriesFiltering(VisModule):
     def default_traits_view(self):
         v = View(
             HGroup(
-                Group(UItem('filter_type'), UItem('set_filter'), UItem('unset_filter')),
+                VGroup(UItem('filter_type'),
+                       HGroup(Label('Replace data'), UItem('replace_data')),
+                       HGroup(Label('Filter selected'), UItem('selected_filter'), enabled_when='not replace_data'),
+                       UItem('set_filter'),
+                       UItem('unset_filter')),
                 Group(UItem('filter'), style='custom', label='Configure filter',
                       visible_when='filter and filter.name != "None"'),
                 Group(Label('Applied filter:'), UItem('applied_filter')),

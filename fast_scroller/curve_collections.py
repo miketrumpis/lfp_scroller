@@ -170,7 +170,7 @@ class PlotCurveCollection(pg.PlotCurveItem):
         y_stop = y_start + (stop - start)
         self.y_visible = self.y_slice[:, y_start:y_stop]
         self.x_visible = np.tile(np.arange(start, stop) * self.dx, (len(self.plot_channels), 1))
-        info('x,y arrays set:', self.y_visible.shape, self.x_visible.shape)
+        info('x,y arrays set: {} {}'.format(self.y_visible.shape, self.x_visible.shape))
 
     def updatePlotData(self, data_ready=False):
         # Use data_ready=True to indicate that there's pre-defined x- and y-visible data ready to plot
@@ -312,7 +312,8 @@ class FollowerCollection(PlotCurveCollection):
 
         """
         self._source = curve_collection
-        self.register_connection(curve_collection.data_changed, self._source_triggered_update)
+        # TODO: do not think this is needed to follow source?
+        # self.register_connection(curve_collection.data_changed, self._source_triggered_update)
         self.register_connection(curve_collection.plot_changed, self._source_triggered_update)
         self.register_connection(curve_collection.plot_changed, self._yoke_offset)
         self.setData([])
@@ -363,7 +364,7 @@ class FollowerCollection(PlotCurveCollection):
         return
 
     def updatePlotData(self, data_ready=False):
-        # By defaullt, plots everything that is visible on the source.
+        # By default, plots everything that is visible on the source.
         if not self.can_update:
             return
         # info('updating based on source data: ', self.x_visible.shape, self.y_visible.shape)
@@ -376,8 +377,8 @@ class SelectedFollowerCollection(FollowerCollection):
     _active_channels: np.ndarray
     selection_changed = QtCore.pyqtSignal(QtCore.QObject)
 
-    def __init__(self, curve_collection: PlotCurveCollection, clickable: bool=False, pen_args=None,
-                 shadowpen_args=None):
+    def __init__(self, curve_collection: PlotCurveCollection, clickable: bool=False, init_active: bool=False,
+                 pen_args=None, shadowpen_args=None):
         """
         This kind of FollowerCollection modifies its visible data (through Property logic) to show only a subset of the
         source channels.
@@ -388,6 +389,8 @@ class SelectedFollowerCollection(FollowerCollection):
             Source collection to follow
         clickable : bool
             Curves can be selected by mouse click
+        init_active : bool
+            Channels begin active (True) or inactive (False)
         pen_args : dict
             For constructing the Pen that draws the selected curves
         shadowpen_args : dict
@@ -395,12 +398,14 @@ class SelectedFollowerCollection(FollowerCollection):
 
         """
         super().__init__(curve_collection)
-        if not pen_args:
+        if pen_args is None:
             pen_args = dict(width=0)
-        if not shadowpen_args:
+        if shadowpen_args is None:
             shadowpen_args = dict(width=4, color='c')
         self._available_channels = self._source.plot_channels[:]
         self._active_channels = np.zeros(len(self._available_channels), dtype='?')
+        if init_active:
+            self._active_channels[:] = True
         self.setPen(**pen_args)
         self.setShadowPen(**shadowpen_args)
         if clickable:
@@ -522,11 +527,14 @@ class LabeledCurveCollection(SelectedFollowerCollection):
             # text.setText(label)
             self.texts.append(text)
         self.selection_changed.connect(self.set_text_position)
+        self.register_connection(curve_collection.plot_changed, self.set_text_position)
 
     def set_text_position(self, obj):
         # the number of rows in x- and y-visible is equal to the number of active channels
         x_visible = self.x_visible
-        y_visible = self.y_visible + self.y_offset
+        y_visible = self.y_visible
+        if y_visible is not None:
+            y_visible = y_visible + self.y_offset
         label_row = 0
         for i, text in enumerate(self.texts):
             text.setVisible(self._active_channels[i])
