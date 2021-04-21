@@ -4,8 +4,6 @@ from traitsui.api import View, UItem, VSplit, CustomEditor, HSplit, Group, VGrou
     EnumEditor
 from collections import OrderedDict
 from pyqtgraph.Qt import QtGui
-# from pyqtgraph.graphicsItems.GradientEditorItem import Gradients
-# from .pyqtgraph_extensions import get_colormap_lut
 from pyqtgraph.colormap import listMaps, get as get_colormap
 
 from .helpers import PersistentWindow
@@ -14,8 +12,9 @@ from .curve_collections import PlotCurveCollection
 from .modules import *
 
 
-def setup_qwidget_control(parent, editor, qwidget):
-    return qwidget
+def setup_qwidget_control(parent, editor):
+    widget = editor.object.graph
+    return widget
 
 
 class VisWrapper(PersistentWindow):
@@ -48,6 +47,7 @@ class VisWrapper(PersistentWindow):
         traits['_y_spacing_enum'] = dy
         traits['vis_rate'] = 1 / qtwindow.curve_collection.dx
         super(VisWrapper, self).__init__(**traits)
+        self.graph = qtwindow.win
         self._change_colormap()
         self._plot_overlays = ['all', 'selected']
         self.overlay_lookup = dict(all=qtwindow.curve_collection,
@@ -143,8 +143,7 @@ class VisWrapper(PersistentWindow):
         v = View(
             VSplit(
                 UItem('graph',
-                      editor=CustomEditor(setup_qwidget_control,
-                                          self._qtwindow.win),
+                      editor=CustomEditor(setup_qwidget_control),
                       resizable=True,
                       #height=(ht-150)),
                       height=0.85),
