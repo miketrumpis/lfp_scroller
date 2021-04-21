@@ -6,7 +6,7 @@ from traitsui.api import View, HGroup, VGroup, UItem, Label, TabularEditor
 from traitsui.tabular_adapter import TabularAdapter
 
 from .base import VisModule
-from ..h5scroller import PlotCurveCollection, FollowerCollection
+from ..curve_collections import PlotCurveCollection, FollowerCollection
 
 __all__ = ['HFOLocator']
 
