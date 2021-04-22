@@ -6,7 +6,7 @@ from collections import OrderedDict
 from pyqtgraph.Qt import QtGui
 from pyqtgraph.colormap import listMaps, get as get_colormap
 
-from .helpers import PersistentWindow
+from .helpers import PersistentWindow, CurveColorSettings
 from .h5scroller import FastScroller
 from .curve_collections import PlotCurveCollection
 from .modules import *
@@ -30,6 +30,7 @@ class VisWrapper(PersistentWindow):
     chan_map = Any
     region = Event
     clear_selected_channels = Button('Clear selected')
+    curve_editor_popup = Button('Curve settings')
     _plot_overlays = List(Str)
     active_channels_set = Str('all')
     modules = List([IntervalTraces,
@@ -132,6 +133,12 @@ class VisWrapper(PersistentWindow):
     def _clear_selected_channels_fired(self):
         self._qtwindow.selected_curve_collection.set_selection(None)
 
+    def _curve_editor_popup_fired(self):
+        curve_tool = CurveColorSettings(self.overlay_lookup)
+        v = curve_tool.default_traits_view()
+        v.kind = 'live'
+        curve_tool.edit_traits(view=v)
+
     @on_trait_change('colormap')
     def _change_colormap(self):
         cmap = get_colormap(self.colormap, source='matplotlib')
@@ -156,7 +163,8 @@ class VisWrapper(PersistentWindow):
                                  VGroup(UItem('clear_selected_channels'),
                                         Label('Interactive curves'),
                                         UItem('active_channels_set',
-                                              editor=EnumEditor(name='_plot_overlays')))),
+                                              editor=EnumEditor(name='_plot_overlays')),
+                                        UItem('curve_editor_popup'))),
                           Label('Color map'),
                           UItem('colormap'),
                           HGroup(Label('Vis. sample rate'), UItem('vis_rate')),

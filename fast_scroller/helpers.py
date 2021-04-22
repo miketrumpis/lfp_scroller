@@ -2,8 +2,8 @@
 
 import os
 from time import time
-from traits.api import HasTraits, Str
-from traitsui.api import View, VGroup, spring, HGroup, Item
+from traits.api import HasTraits, Str, Enum, Instance, on_trait_change, List
+from traitsui.api import View, VGroup, spring, HGroup, Item, Color, UItem, Label, ListEditor
 from pyface.timer.api import do_after
 from ecogdata.parallel.mproc import parallel_context, timestamp
 
@@ -43,6 +43,75 @@ class Error(HasTraits):
             ),
         buttons=['OK']
     )
+
+
+class PlotItemSettings(HasTraits):
+    curve_name = Str
+    pen_color = Color
+    pen_width = Enum(1, (0, 0.5, 1, 2, 3, 4, 5, 6, 7, 8))
+    shadowpen_color = Color
+    shadowpen_width = Enum(1, (0, 0.5, 1, 2, 3, 4, 5, 6, 7, 8))
+    curves = Instance('fast_scroller.curve_collections.PlotCurveCollection')
+
+    def __init__(self, curves, **traits):
+        for pen_name in ('pen', 'shadowPen'):
+            trait_name = pen_name.lower()
+            pen = curves.opts[pen_name]
+            if pen is None:
+                traits[trait_name + '_width'] = 0
+            else:
+                color = pen.color()
+                traits[trait_name + '_color'] = (color.red(), color.blue(), color.green(), color.alpha())
+                traits[trait_name + '_width'] = pen.width()
+        traits['curves'] = curves
+        super().__init__(**traits)
+
+    @on_trait_change('pen_color, pen_width')
+    def set_pen(self):
+        if self.curves is None:
+            return
+        if self.pen_width == 0:
+            self.curves.setPen(None)
+        else:
+            self.curves.setPen(color=self.pen_color, width=self.pen_width)
+
+    @on_trait_change('shadowpen_color, shadowpen_width')
+    def set_shadowpen(self):
+        if self.curves is None:
+            return
+        if self.shadowpen_width == 0:
+            self.curves.setShadowPen(None)
+        else:
+            self.curves.setShadowPen(color=self.shadowpen_color, width=self.shadowpen_width)
+
+    def default_traits_view(self):
+        v = View(
+            VGroup(
+                HGroup(VGroup(Label('Width'), UItem('pen_width')),
+                       VGroup(Label('Color'), UItem('pen_color', style='custom')),
+                       label='Main Curve Settings'),
+                HGroup(VGroup(Label('Width'), UItem('shadowpen_width')),
+                       VGroup(Label('Color'), UItem('shadowpen_color', style='custom')),
+                       label='Curve Shadow Settings'),
+            )
+        )
+        return v
+
+class CurveColorSettings(HasTraits):
+    collections = List(PlotItemSettings)
+
+    def __init__(self, curve_lookup):
+        super().__init__()
+        for name, curves in curve_lookup.items():
+            self.collections.append(PlotItemSettings(curves, curve_name=name))
+
+    def default_traits_view(self):
+        v = View(UItem('collections', style='custom', resizable=True,
+                       editor=ListEditor(use_notebook=True,
+                                         deletable=False,
+                                         dock_style='tab',
+                                         page_name='.curve_name')))
+        return v
 
 
 class DebounceCallback:
