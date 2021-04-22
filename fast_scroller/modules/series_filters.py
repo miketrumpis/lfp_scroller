@@ -1,3 +1,4 @@
+from typing import Union
 import numpy as np
 from scipy.signal import hilbert
 from scipy.ndimage import gaussian_filter1d
@@ -184,11 +185,17 @@ class FilterFollower(SelectedFollowerCollection):
     data_filtered = QtCore.pyqtSignal(QtCore.QObject)
 
     def __init__(self, curve_collection: PlotCurveCollection, transform: AppliesSeriesFiltering, **kwargs):
-        super().__init__(curve_collection, **kwargs)
+        kwargs['clickable'] = False
+        if isinstance(curve_collection, SelectedFollowerCollection):
+            super().__init__(curve_collection._source, **kwargs)
+        else:
+            super().__init__(curve_collection, **kwargs)
         self.signal_transform = transform
         self._y_filtered = None
         self.register_connection(curve_collection.data_changed, self.transform_page)
-        self.selection_changed.connect(self.transform_page)
+        if isinstance(curve_collection, SelectedFollowerCollection):
+            self._active_channels = curve_collection._active_channels.copy()
+            self.register_connection(curve_collection.selection_changed, self.transform_page)
         self.data_filtered.connect(self._source_triggered_update)
         # This should be ready at the start
         self.transform_page(curve_collection)
@@ -207,7 +214,9 @@ class FilterFollower(SelectedFollowerCollection):
             return False
         return True
 
-    def transform_page(self, source: PlotCurveCollection):
+    def transform_page(self, source: Union[PlotCurveCollection, np.ndarray]):
+        if isinstance(source, np.ndarray):
+            self._active_channels = source.copy()
         if not self._active_channels.any():
             self._y_filtered = None
         else:
@@ -355,9 +364,9 @@ class SeriesFiltering(VisModule):
     def add_filter_curves(self):
         transform = self.filter.filter
         clickable = self.selected_filter
+        source = self.selected_curve_collection if clickable else self.curve_collection
         pen_args = dict(color='r', width=1)
-        filter_follower = FilterFollower(self.curve_collection, transform,
-                                         clickable=clickable,
+        filter_follower = FilterFollower(source, transform,
                                          init_active=not clickable,
                                          pen_args=pen_args,
                                          shadowpen_args=dict())

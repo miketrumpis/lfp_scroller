@@ -247,7 +247,7 @@ class PlotCurveCollection(pg.PlotCurveItem):
         vis_rate = round(1 / (x_visible[0, 1] - x_visible[0, 0]))
         if vis_rate != self._current_vis_rate:
             self._current_vis_rate = vis_rate
-            self.vis_rate_changed.emit(vis_rate)
+            self.vis_rate_changed.emit(float(vis_rate))
         self.plot_changed.emit(self)
 
     def set_external_data(self, array, redraw=False, visible=False):
@@ -375,7 +375,7 @@ class SelectedFollowerCollection(FollowerCollection):
 
     _available_channels: list
     _active_channels: np.ndarray
-    selection_changed = QtCore.pyqtSignal(QtCore.QObject)
+    selection_changed = QtCore.pyqtSignal(np.ndarray)
 
     def __init__(self, curve_collection: PlotCurveCollection, clickable: bool=False, init_active: bool=False,
                  pen_args=None, shadowpen_args=None):
@@ -422,7 +422,7 @@ class SelectedFollowerCollection(FollowerCollection):
         self._active_channels[channel] = not b
         with self.can_update(True):
             self.updatePlotData()
-        self.selection_changed.emit(self)
+        self.selection_changed.emit(self._active_channels)
 
     def set_selection(self, selected=None):
         """
@@ -439,7 +439,7 @@ class SelectedFollowerCollection(FollowerCollection):
             self._active_channels[selected] = True
         with self.can_update(True):
             self.updatePlotData()
-        self.selection_changed.emit(self)
+        self.selection_changed.emit(self._active_channels)
 
     def map_visible(self, channel_map: ChannelMap):
         return channel_map.subset(self._active_channels)
@@ -529,7 +529,7 @@ class LabeledCurveCollection(SelectedFollowerCollection):
         self.selection_changed.connect(self.set_text_position)
         self.register_connection(curve_collection.plot_changed, self.set_text_position)
 
-    def set_text_position(self, obj):
+    def set_text_position(self, selection):
         # the number of rows in x- and y-visible is equal to the number of active channels
         x_visible = self.x_visible
         y_visible = self.y_visible
