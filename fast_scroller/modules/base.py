@@ -235,3 +235,9 @@ class PlotsInterval(VisModule):
             return fig, axes
         self._colors = mpl.rcParams["axes.prop_cycle"].by_key()["color"]
         return self._figstack.new_figure(**kwargs)
+
+    @property
+    def page_limits(self):
+        qt_graph = self.parent._qtwindow
+        minX, maxX = qt_graph.region.getRegion()
+        return minX, maxX

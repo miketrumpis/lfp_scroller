@@ -6,11 +6,10 @@ from traits.api import Button, Bool, Enum, Int
 from traitsui.api import View, HGroup, VGroup, Group, Item, UItem, Label
 
 from ecogdata.devices.units import convert_scale, nice_unit_text
-
-import seaborn as sns
+from ecoglib.vis import plotters
 
 from .base import PlotsInterval, SimpleFigure, colormaps
-
+from .plot_types import SimpleTiled
 
 def _hh_mm_ss(t):
     h = int(t // 3600)
@@ -25,6 +24,7 @@ class IntervalTraces(PlotsInterval):
     plot = Button('Plot')
     new_figure = Bool(True)
     label_channels = Bool(False)
+    plot_style = Enum('stacked', ('stacked', 'tiled'))
 
     map_row = Enum(1, list(range(1, 11)))
     map_col = Enum(1, list(range(1, 11)))
@@ -35,6 +35,12 @@ class IntervalTraces(PlotsInterval):
     mm_per_pixel = Int(3)
 
     def _plot_fired(self):
+        if self.plot_style == 'stacked':
+            self.stacked_plot()
+        else:
+            self.tiled_plot()
+
+    def stacked_plot(self):
         x, y, chan_map = self.parent.get_interactive_data(full_xdata=False)
         if y is None:
             print('No data to plot')
@@ -50,9 +56,9 @@ class IntervalTraces(PlotsInterval):
             convert_scale(y_levels, 'uv', 'mv')
             units = 'mv'
         ax.plot(x, y.T + y_levels, lw=0.5, color=clr)
-        sns.despine(ax=ax)
+        plotters.sns.despine(ax=ax)
         if not self.label_channels:
-            label = r'Amplitude {}'.format(nice_unit_text(units))
+            label = u'Amplitude {}'.format(nice_unit_text(units))
             ax.set_ylabel(label)
         else:
             ax.set_yticks(y_levels)
@@ -65,6 +71,23 @@ class IntervalTraces(PlotsInterval):
             f.canvas.draw_idle()
         except:
             pass
+
+    def tiled_plot(self):
+        x, y, chan_map = self.parent.get_interactive_data(full_xdata=True)
+        if y is None:
+            print('No data to plot')
+            return
+        # align everything to the edge of the page
+        x = x - self.page_limits[0]
+        y *= 1e6
+        figsize = SimpleTiled.figsize(chan_map)
+        f, ax = self._get_fig(figsize=figsize)
+        if hasattr(ax, 'simple_tile'):
+            tiles = ax.simple_tile
+            tiles.add_to_tiles(x, y, chan_map)
+            tiles.fig.canvas.draw()
+        else:
+            tiles = SimpleTiled(x, y, chan_map, y_units='uV', x_units='s', ax=ax)
 
     def _new_maps_fired(self):
         self.create_maps()
@@ -136,8 +159,10 @@ class IntervalTraces(PlotsInterval):
             HGroup(
                 HGroup(
                     VGroup(
-                        Label('Label Channels'),
-                        UItem('label_channels'),
+                        HGroup(Label('Label Channels'), UItem('label_channels')),
+                        Label('Plot Style'),
+                        UItem('plot_style'),
+                        HGroup(Label('New Plot'), UItem('new_figure'))
                     ),
                     UItem('plot'),
                     label='Plot current window'
