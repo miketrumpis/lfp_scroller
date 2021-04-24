@@ -124,7 +124,7 @@ class IntervalSpectrogram(PlotsInterval):
         return tx, fx, ptf
 
     def _plot_fired(self):
-        x, y = self.curve_collection.current_data()
+        x, y = self.curve_manager.interactive_curve.current_data()
         y *= 1e6
         if self.channel.lower() != 'all':
             i, j = list(map(float, self.channel.split(',')))

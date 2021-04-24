@@ -351,7 +351,7 @@ class SeriesFiltering(VisModule):
         # attach a new debounce filter to this object (if a reference it not saved, it will get garbage-collected!)
         # We're going to attach this debounced callback to the curve collection that watches the zoom-plot data. The
         # curve collection is a part of the PyQtGraph panel system that underlies the main plot elements.
-        curve_collection = self.curve_collection
+        curve_collection = self.curve_manager.source_curve
         # connect callback to the signal
         self._cb_connection = DebounceCallback.connect(curve_collection.data_changed, filter.apply)
         # apply the filter and cause the signal to emit
@@ -364,23 +364,26 @@ class SeriesFiltering(VisModule):
     def add_filter_curves(self):
         transform = self.filter.filter
         clickable = self.selected_filter
-        source = self.selected_curve_collection if clickable else self.curve_collection
+        if clickable:
+            source = self.curve_manager.curves_by_name('selected')
+        else:
+            source = self.curve_manager.source_curve
         pen_args = dict(color='r', width=1)
         filter_follower = FilterFollower(source, transform,
                                          init_active=not clickable,
                                          pen_args=pen_args,
                                          shadowpen_args=dict())
-        self.parent.add_new_curves(filter_follower, 'filter tab')
+        self.curve_manager.add_new_curves(filter_follower, 'filter tab')
         filter_follower.data_filtered.emit(filter_follower)
 
     def disconnect_filter(self, trigger_redraw=True):
         # If a connection is present, disconnect it and redraw the raw data (without signaling data change)
         if self._cb_connection is not None:
-            self.curve_collection.data_changed.disconnect(self._cb_connection)
-            self.curve_collection.unset_external_data(visible=False, redraw=trigger_redraw)
+            self.curve_manager.source_curve.data_changed.disconnect(self._cb_connection)
+            self.curve_manager.source_curve.unset_external_data(visible=False, redraw=trigger_redraw)
             self._cb_connection = None
-        if 'filter tab' in self.parent.overlay_lookup:
-            self.parent.remove_curves('filter tab')
+        if 'filter tab' in self.curve_manager._curve_names:
+            self.curve_manager.remove_curves('filter tab')
 
     def _unset_filter_fired(self):
         # unset the filter name and callback

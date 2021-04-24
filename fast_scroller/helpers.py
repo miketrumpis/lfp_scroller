@@ -2,10 +2,13 @@
 
 import os
 from time import time
-from traits.api import HasTraits, Str, Enum, Instance, on_trait_change, List
-from traitsui.api import View, VGroup, spring, HGroup, Item, Color, UItem, Label, ListEditor
+from collections import OrderedDict
+from traits.api import HasTraits, Str, Enum, Instance, on_trait_change, List, Property
+from traitsui.api import View, VGroup, spring, HGroup, Item, Color, UItem, Label, ListEditor, Handler, EnumEditor
 from pyface.timer.api import do_after
 from ecogdata.parallel.mproc import parallel_context, timestamp
+
+from .curve_collections import PlotCurveCollection
 
 
 # A HasTraits "mixin" that keeps a reference to its own UI window so that
@@ -97,20 +100,79 @@ class PlotItemSettings(HasTraits):
         )
         return v
 
-class CurveColorSettings(HasTraits):
-    collections = List(PlotItemSettings)
 
-    def __init__(self, curve_lookup):
-        super().__init__()
-        for name, curves in curve_lookup.items():
-            self.collections.append(PlotItemSettings(curves, curve_name=name))
+class CurveManager(HasTraits):
+    plot = Instance('pyqtgraph.graphicsItems.PlotItem.PlotItem')
+    # So... PlotItemSettings has both a label and a PlotCurveCollection.
+    # It can be used to produce the label list and to retrieve the actual curves
+    curve_settings = List(PlotItemSettings)
+    # collections = List(PlotCurveCollection)
+    _curve_names = Property(depends_on='curve_settings')
+    # Curve that's displayed on the heatmap
+    heatmap_name = Str
+    heatmap_curve = Property(depends_on='_heatmap_name')
+    # Curve that's available downstream
+    interactive_name = Str
+    interactive_curve = Property(depends_on='_interactive_name')
+    # TODO: "private" (should not be set more than once)
+    _source_curve_name = Str
+    source_curve = Instance(PlotCurveCollection)
+
+    def _get__curve_names(self):
+        return [s.curve_name for s in self.curve_settings]
+
+    def curves_by_name(self, label, settings=False):
+        curves = [s for s in self.curve_settings if s.curve_name == label]
+        if len(curves):
+            return curves[0] if settings else curves[0].curves
+        return None
+
+    def _get_heatmap_curve(self):
+        return self.curves_by_name(self.heatmap_name, settings=False)
+
+    def _get_interactive_curve(self):
+        return self.curves_by_name(self.interactive_name, settings=False)
+
+    def add_new_curves(self, curves: PlotCurveCollection, label: str, set_source: bool=False):
+        self.plot.addItem(curves)
+        self.curve_settings.append(PlotItemSettings(curves, curve_name=label))
+        if not self.heatmap_name:
+            self.heatmap_name = label
+        if not self.interactive_name:
+            self.interactive_name = label
+        if set_source and not self._source_curve_name:
+            self._source_curve_name = label
+            self.source_curve = curves
+
+    def remove_curves(self, label: str):
+        curve_settings = self.curves_by_name(label, settings=True)
+        if curve_settings is None:
+            print('There was no overlay with label', label)
+            return
+        self.plot.removeItem(curve_settings.curves)
+        self.curve_settings.remove(curve_settings)
+        if self.heatmap_name == label:
+            self.heatmap_name = self._curve_names[0]
+        if self.interactive_name == label:
+            self.heatmap_name = self._curve_names[0]
+        if self._default_curve_name == label:
+            self._default_curve_name = ''
 
     def default_traits_view(self):
-        v = View(UItem('collections', style='custom', resizable=True,
-                       editor=ListEditor(use_notebook=True,
-                                         deletable=False,
-                                         dock_style='tab',
-                                         page_name='.curve_name')))
+        v = View(
+            VGroup(
+                HGroup(Item('heatmap_name', label='Curves for heatmap',
+                            editor=EnumEditor(name='_curve_names')),
+                       Item('interactive_name', label='Curves for modules',
+                            editor=EnumEditor(name='_curve_names'))),
+                UItem('curve_settings', style='custom', resizable=True,
+                      editor=ListEditor(use_notebook=True,
+                                        deletable=False,
+                                        dock_style='tab',
+                                        page_name='.curve_name'))
+            ),
+            resizable=True
+        )
         return v
 
 

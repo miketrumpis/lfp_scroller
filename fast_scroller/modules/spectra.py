@@ -47,7 +47,7 @@ class IntervalSpectrum(PlotsInterval):
         return fx, pxx
 
     def _plot_fired(self):
-        x, y, _ = self.parent.get_interactive_data(full_xdata=False)
+        x, y = self.curve_manager.interactive_curve.current_data(visible=True, full_xdata=False)
         if y is None:
             print('No data to plot')
         y *= 1e6

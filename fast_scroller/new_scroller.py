@@ -6,7 +6,7 @@ from collections import OrderedDict
 from pyqtgraph.Qt import QtGui
 from pyqtgraph.colormap import listMaps, get as get_colormap
 
-from .helpers import PersistentWindow, CurveColorSettings
+from .helpers import PersistentWindow, CurveManager
 from .h5scroller import FastScroller
 from .curve_collections import PlotCurveCollection
 from .modules import *
@@ -31,8 +31,9 @@ class VisWrapper(PersistentWindow):
     region = Event
     clear_selected_channels = Button('Clear selected')
     curve_editor_popup = Button('Curve settings')
-    _plot_overlays = List(Str)
-    active_channels_set = Str('all')
+    # _plot_overlays = List(Str)
+    # active_channels_set = Str('all')
+    curve_manager = Instance(CurveManager)
     modules = List([IntervalTraces,
                     AnimateInterval,
                     IntervalSpectrum,
@@ -46,17 +47,19 @@ class VisWrapper(PersistentWindow):
         # though the "y_spacing" property on this class is read-only.
         dy = traits.pop('y_spacing', 100)
         traits['_y_spacing_enum'] = dy
-        traits['vis_rate'] = 1 / qtwindow.curve_collection.dx
+        traits['vis_rate'] = 1 / qtwindow.curve_manager.source_curve.dx
+        traits['curve_manager'] = qtwindow.curve_manager
+        traits['graph'] = qtwindow.win
         super(VisWrapper, self).__init__(**traits)
-        self.graph = qtwindow.win
         self._change_colormap()
-        self._plot_overlays = ['all', 'selected']
-        self.overlay_lookup = dict(all=qtwindow.curve_collection,
-                                   selected=qtwindow.selected_curve_collection)
+        # self._plot_overlays = ['all', 'selected']
+        # self.overlay_lookup = dict(all=qtwindow.curve_collection,
+        #                            selected=qtwindow.selected_curve_collection)
         qtwindow.region.sigRegionChanged.connect(self._region_did_change)
-        qtwindow.curve_collection.vis_rate_changed.connect(self._follow_vis_rate)
+        qtwindow.curve_manager.source_curve.vis_rate_changed.connect(self._follow_vis_rate)
         self._make_modules()
 
+    # This is here only to announce to traits callbacks that the region has changed
     def _region_did_change(self):
         self.region = True
 
@@ -67,8 +70,7 @@ class VisWrapper(PersistentWindow):
         mods = self.modules[:]
         self.modules_by_name = OrderedDict()
         for m in mods:
-            module = m(parent=self, chan_map=self.chan_map, curve_collection=self._qtwindow.curve_collection,
-                       selected_curve_collection=self._qtwindow.selected_curve_collection)
+            module = m(parent=self, chan_map=self.chan_map, curve_manager=self.curve_manager)
             self.modules_by_name[module.name] = module
         self.modules = list(self.modules_by_name.values())
 
@@ -79,7 +81,7 @@ class VisWrapper(PersistentWindow):
             return float(self._y_spacing_enum)
 
     def _auto_space_fired(self):
-        y = self._qtwindow.curve_collection.current_data(visible=True)[1]
+        y = self.curve_manager.source_curve.current_data(visible=True)[1]
         dy = np.median(y.ptp(axis=1)) * 1e6 * 0.25
         if round(dy) >= 1:
             dy = round(dy)
@@ -99,26 +101,26 @@ class VisWrapper(PersistentWindow):
         self._qtwindow.p1.removeItem(curves)
         self._plot_overlays.remove(label)
 
-    def get_interactive_data(self, full_xdata=False):
-        """
-        Return the x-/y-visible data for the currently selected curve set.
-
-        Returns
-        -------
-        x,y data: ndarrays
-            The x_visible and y_visible arrays
-        channel_map: ChannelMap
-            The electrode map for the returned y-data
-
-        """
-
-        curves = self.overlay_lookup[self.active_channels_set]
-        if self.active_channels_set != 'all':
-            channel_map = curves.map_visible(self.chan_map)
-        else:
-            channel_map = self.chan_map
-        x, y = curves.current_data(visible=True, full_xdata=full_xdata)
-        return x, y, channel_map
+    # def get_interactive_data(self, full_xdata=False):
+    #     """
+    #     Return the x-/y-visible data for the currently selected curve set.
+    #
+    #     Returns
+    #     -------
+    #     x,y data: ndarrays
+    #         The x_visible and y_visible arrays
+    #     channel_map: ChannelMap
+    #         The electrode map for the returned y-data
+    #
+    #     """
+    #
+    #     curves = self.overlay_lookup[self.active_channels_set]
+    #     if self.active_channels_set != 'all':
+    #         channel_map = curves.map_visible(self.chan_map)
+    #     else:
+    #         channel_map = self.chan_map
+    #     x, y = curves.current_data(visible=True, full_xdata=full_xdata)
+    #     return x, y, channel_map
 
     @on_trait_change('_y_spacing_enum')
     def _change_spacing(self):
@@ -131,10 +133,11 @@ class VisWrapper(PersistentWindow):
             self._change_spacing()
 
     def _clear_selected_channels_fired(self):
-        self._qtwindow.selected_curve_collection.set_selection(None)
+        self.curve_manager.curves_by_name('selected').set_selection(None)
 
     def _curve_editor_popup_fired(self):
-        curve_tool = CurveColorSettings(self.overlay_lookup)
+        # curve_tool = CurveColorSettings(self.overlay_lookup)
+        curve_tool = self.curve_manager
         v = curve_tool.default_traits_view()
         v.kind = 'live'
         curve_tool.edit_traits(view=v)
@@ -162,8 +165,8 @@ class VisWrapper(PersistentWindow):
                                         UItem('auto_space')),
                                  VGroup(UItem('clear_selected_channels'),
                                         Label('Interactive curves'),
-                                        UItem('active_channels_set',
-                                              editor=EnumEditor(name='_plot_overlays')),
+                                        UItem('object.curve_manager.interactive_name',
+                                              editor=EnumEditor(name='object.curve_manager._curve_names')),
                                         UItem('curve_editor_popup'))),
                           Label('Color map'),
                           UItem('colormap'),

@@ -492,7 +492,7 @@ class SpatialVariance(PlotsInterval):
     st_lag = Int(10)
 
     def _vis_tool_fired(self):
-        _, y = self.curve_collection.current_data()
+        _, y = self.curve_manager.interactive_curve.current_data()
         y *= 1e6
         if self.normalize:
             cov = np.corrcoef(y)
@@ -506,7 +506,7 @@ class SpatialVariance(PlotsInterval):
         return tool
 
     def _stsemivar_tool_fired(self):
-        _, y = self.curve_collection.current_data()
+        _, y = self.curve_manager.interactive_curve.current_data()
         y *= 1e6
         chan_map = self.chan_map
         bin_size = None if (self.dist_bin < 0) else self.dist_bin
@@ -521,7 +521,7 @@ class SpatialVariance(PlotsInterval):
         return tool
 
     def _plot_acov_fired(self):
-        t, y = self.curve_collection.current_data(full_xdata=False)
+        t, y = self.curve_manager.interactive_curve.current_data(full_xdata=False)
         y *= 1e6
         t_stamp = t.mean()
         t = (t - t[0]) * 1e3
@@ -564,7 +564,7 @@ class SpatialVariance(PlotsInterval):
             self._kernel_plots.append(splot)
 
     def _plot_iso_stcov_fired(self):
-        t, y = self.curve_collection.current_data(full_xdata=False)
+        t, y = self.curve_manager.interactive_curve.current_data(full_xdata=False)
         y *= 1e6
         t = (t - t[0]) * 1e3
         dt = t[1] - t[0]
@@ -626,7 +626,7 @@ class SpatialVariance(PlotsInterval):
         splot = SavesFigure.live_fig(fig)
 
     def _plot_stcov_fired(self):
-        t, y = self.curve_collection.current_data()
+        t, y = self.curve_manager.interactive_curve.current_data()
         y *= 1e6
         t_stamp = t[0].mean()
         t = (t - t[0]) * 1e3
@@ -771,7 +771,7 @@ class SpatialVariance(PlotsInterval):
             self._animating = False
             return
 
-        t, y = self.curve_collection.current_data()
+        t, y = self.curve_manager.interactive_curve.current_data()
         y *= 1e6
         if self.normalize:
             y = y / np.std(y, axis=1, keepdims=1)
@@ -843,7 +843,7 @@ class SpatialVariance(PlotsInterval):
         self._f_anim._start()
 
     def _plot_fired(self):
-        t, y = self.curve_collection.current_data()
+        t, y = self.curve_manager.interactive_curve.current_data()
         y *= 1e6
         r = self.compute_variogram(y, self.chan_map)
         if self.cloud:

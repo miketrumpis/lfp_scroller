@@ -11,6 +11,7 @@ from ecoglib.vis import plotters
 from .base import PlotsInterval, SimpleFigure, colormaps
 from .plot_types import SimpleTiled
 
+
 def _hh_mm_ss(t):
     h = int(t // 3600)
     t -= h * 3600
@@ -41,7 +42,8 @@ class IntervalTraces(PlotsInterval):
             self.tiled_plot()
 
     def stacked_plot(self):
-        x, y, chan_map = self.parent.get_interactive_data(full_xdata=False)
+        x, y = self.curve_manager.interactive_curve.current_data(visible=True, full_xdata=False)
+        chan_map = self.curve_manager.interactive_curve.map_curves(self.chan_map)
         if y is None:
             print('No data to plot')
             return
@@ -73,7 +75,8 @@ class IntervalTraces(PlotsInterval):
             pass
 
     def tiled_plot(self):
-        x, y, chan_map = self.parent.get_interactive_data(full_xdata=True)
+        x, y = self.curve_manager.interactive_curve.current_data(visible=True, full_xdata=False)
+        chan_map = self.curve_manager.interactive_curve.map_curves(self.chan_map)
         if y is None:
             print('No data to plot')
             return
@@ -132,7 +135,7 @@ class IntervalTraces(PlotsInterval):
         self._g_idx = (self._g_idx + 1) % len(self._grid)
         chan_map = self.chan_map
 
-        x, y = self.curve_collection.current_data(full_xdata=False)
+        x, y = self.curve_manager.interactive_curve.current_data(full_xdata=False)
         y *= 1e6
         if self.map_rms:
             img = chan_map.embed(y.std(1))

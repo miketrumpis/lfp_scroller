@@ -6,7 +6,7 @@ pg.setConfigOptions(imageAxisOrder='row-major')
 from ecogdata.channel_map import ChannelMap, CoordinateChannelMap
 from ecogdata.parallel.mproc import parallel_context, timestamp
 
-from .helpers import DebounceCallback
+from .helpers import DebounceCallback, CurveManager
 from .curve_collections import PlotCurveCollection, LabeledCurveCollection
 
 
@@ -207,17 +207,18 @@ class FastScroller(object):
         self.p1.vb.setLimits(maxXRange=max_zoom)
 
         # Multiple curve set that calls up data on-demand
+        self.curve_manager = CurveManager(plot=self.p1)
         curves = PlotCurveCollection(array, load_channels, x_scale, y_scale, y_spacing)
-        self.p1.addItem(curves)
-        self.curve_collection = curves
+        self.curve_manager.add_new_curves(curves, 'all', set_source=True)
+        # Set the heatmap to track these curves
+        self.curve_manager.heatmap_name = 'all'
 
         # Selected curve & label set that calls up data on-demand
         labels = ['({}, {})'.format(i, j) for i, j in zip(*chan_map.to_mat())]
         selected_curves = LabeledCurveCollection(curves, labels, clickable=True)
-        self.p1.addItem(selected_curves)
+        self.curve_manager.add_new_curves(selected_curves, 'selected')
         for text in selected_curves.texts:
             self.p1.addItem(text)
-        self.selected_curve_collection = selected_curves
 
         # Add mean trace to bottom plot
         self.nav_trace = pg.PlotCurveItem(x=np.arange(len(nav_trace)) * x_scale, y=nav_trace)
@@ -252,9 +253,6 @@ class FastScroller(object):
     def current_frame(self):
         return self.region.getRegion()
 
-    def current_data(self):
-        return self.curve_collection.current_data()
-
     def jump_nav(self, evt):
         if QtGui.QApplication.keyboardModifiers() != QtCore.Qt.ShiftModifier:
             return
@@ -276,7 +274,7 @@ class FastScroller(object):
             return
         x_loc = self.p1.vb.mapSceneToView(pos).x()
         self.vline.setPos(x_loc)
-        if self.curve_collection.y_visible is None:
+        if self.curve_manager.heatmap_curve.y_visible is None:
             return
         self.set_image_frame(x=x_loc, move_vline=False)
 
@@ -285,10 +283,10 @@ class FastScroller(object):
             if x is None:
                 # can't do anything!
                 return
-            idx = self.curve_collection.x_visible[0].searchsorted(x)
-            frame_vec = self.curve_collection.y_visible[:, idx]
-
-        frame = embed_frame(self.chan_map, frame_vec)
+            idx = self.curve_manager.heatmap_curve.x_visible[0].searchsorted(x)
+            frame_vec = self.curve_manager.heatmap_curve.y_visible[:, idx]
+        chan_map = self.curve_manager.heatmap_curve.map_curves(self.chan_map)
+        frame = embed_frame(chan_map, frame_vec)
         if self.frame_filter:
             frame = self.frame_filter(frame)
         info('Setting voltage frame {}'.format(timestamp()))
@@ -299,12 +297,13 @@ class FastScroller(object):
             self.vline.setPos(x)
         
     def set_mean_image(self):
-        if self.curve_collection.y_visible is None:
+        if self.curve_manager.heatmap_curve.y_visible is None:
             return
-        image = self.curve_collection.y_visible.std(axis=1)
-        x_vis = self.curve_collection.x_visible[0]
+        image = self.curve_manager.heatmap_curve.y_visible.std(axis=1)
+        chan_map = self.curve_manager.heatmap_curve.map_curves(self.chan_map)
+        x_vis = self.curve_manager.heatmap_curve.x_visible[0]
         x_avg = 0.5 * (x_vis[0] + x_vis[-1])
-        frame = embed_frame(self.chan_map, image)
+        frame = embed_frame(chan_map, image)
         info('setting RMS frame {}'.format(timestamp()))
         # self.img.setImage(frame, autoLevels=False)
         self.img.setImage(frame, autoLevels=False)
@@ -355,5 +354,5 @@ class FastScroller(object):
             self.update_region(view_range)
 
     def update_y_spacing(self, offset):
-        self.curve_collection.y_offset = offset
+        self.curve_manager.source_curve.y_offset = offset
         # self.selected_curve_collection.y_offset = offset

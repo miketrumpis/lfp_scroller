@@ -104,6 +104,10 @@ class PlotCurveCollection(pg.PlotCurveItem):
         x = self.x_visible.copy() if full_xdata else self.x_visible[0].copy()
         return x, y
 
+    # For consistency with subclasses, but all mapped channels are visible so it passes through
+    def map_curves(self, channel_map: ChannelMap):
+        return channel_map
+
     @property
     def y_slice(self):
         return self._raw_slice if self._use_raw_slice else self._external_slice
@@ -441,7 +445,7 @@ class SelectedFollowerCollection(FollowerCollection):
             self.updatePlotData()
         self.selection_changed.emit(self._active_channels)
 
-    def map_visible(self, channel_map: ChannelMap):
+    def map_curves(self, channel_map: ChannelMap):
         return channel_map.subset(self._active_channels)
 
     @property

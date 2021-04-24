@@ -36,7 +36,7 @@ class BandPowerMap(PlotsInterval):
 
     @property_depends_on('BW')
     def _get__f_hi(self):
-        dt = self.curve_collection.dx
+        dt = self.curve_manager.interactive_curve.dx
         return np.floor(0.5 * (dt ** -1) - self.BW)
 
     @property_depends_on('BW')
@@ -47,7 +47,7 @@ class BandPowerMap(PlotsInterval):
         return True
 
     def _plot_fired(self):
-        x, y = self.curve_collection.current_data(full_xdata=False)
+        x, y = self.curve_manager.interactive_curve.current_data(full_xdata=False)
         # convert to microvolts
         y *= 1e6
         t = 0.5 * (x[0] + x[-1])

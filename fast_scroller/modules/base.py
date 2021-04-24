@@ -211,8 +211,9 @@ class VisModule(HasTraits):
     name = Str('__dummy___')
     parent = Instance('fast_scroller.new_scroller.VisWrapper')
     chan_map = Instance('ecogdata.channel_map.ChannelMap')
-    curve_collection = Instance('fast_scroller.curve_collections.PlotCurveCollection')
-    selected_curve_collection = Instance('fast_scroller.curve_collections.LabeledCurveCollection')
+    # curve_collection = Instance('fast_scroller.curve_collections.PlotCurveCollection')
+    # selected_curve_collection = Instance('fast_scroller.curve_collections.LabeledCurveCollection')
+    curve_manager = Instance('fast_scroller.helpers.CurveManager')
     channel = Str('all')
     _chan_list = Property(depends_on='parent.chan_map')
 
