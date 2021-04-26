@@ -24,6 +24,7 @@ class VisWrapper(PersistentWindow):
     _y_spacing_enum = Enum(200, [0, 20, 50, 100, 200, 500, 1000, 2000, 5000, 'entry'])
     _y_spacing_entry = Float(0.0)
     auto_space = Button('Auto y-space')
+    auto_clim = Button('Auto colorbar')
     colormap = Enum('coolwarm', listMaps(source='matplotlib'))
     y_spacing = Property
     vis_rate = Float
@@ -88,39 +89,16 @@ class VisWrapper(PersistentWindow):
         self._y_spacing_enum = 'entry'
         self._y_spacing_entry = dy
 
-    def add_new_curves(self, curves: PlotCurveCollection, label: str):
-        self._qtwindow.p1.addItem(curves)
-        self._plot_overlays.append(label)
-        self.overlay_lookup[label] = curves
-
-    def remove_curves(self, label: str):
-        curves = self.overlay_lookup.pop(label, None)
-        if curves is None:
-            print('There was no overlay with label', label)
-            return
-        self._qtwindow.p1.removeItem(curves)
-        self._plot_overlays.remove(label)
-
-    # def get_interactive_data(self, full_xdata=False):
-    #     """
-    #     Return the x-/y-visible data for the currently selected curve set.
-    #
-    #     Returns
-    #     -------
-    #     x,y data: ndarrays
-    #         The x_visible and y_visible arrays
-    #     channel_map: ChannelMap
-    #         The electrode map for the returned y-data
-    #
-    #     """
-    #
-    #     curves = self.overlay_lookup[self.active_channels_set]
-    #     if self.active_channels_set != 'all':
-    #         channel_map = curves.map_visible(self.chan_map)
-    #     else:
-    #         channel_map = self.chan_map
-    #     x, y = curves.current_data(visible=True, full_xdata=full_xdata)
-    #     return x, y, channel_map
+    def _auto_clim_fired(self):
+        image = self._qtwindow.img.image
+        mn, mx = np.nanpercentile(image, [2, 98])
+        # If bipolar, keep +/- limits same magnitude
+        if mn * mx > 0:
+            limits = mn, mx
+        else:
+            mx = max(np.abs(mn), np.abs(mx))
+            limits = -mx, mx
+        self._qtwindow.cb.setLevels(values=limits)
 
     @on_trait_change('_y_spacing_enum')
     def _change_spacing(self):
@@ -168,9 +146,9 @@ class VisWrapper(PersistentWindow):
                                         UItem('object.curve_manager.interactive_name',
                                               editor=EnumEditor(name='object.curve_manager._curve_names')),
                                         UItem('curve_editor_popup'))),
-                          Label('Color map'),
-                          UItem('colormap'),
-                          HGroup(Label('Vis. sample rate'), UItem('vis_rate')),
+                          HGroup(VGroup(Label('Color map'), UItem('colormap')),
+                                 UItem('auto_clim')),
+                          HGroup(Label('Vis. sample rate'), UItem('vis_rate', style='readonly')),
                           ),
                     UItem('modules', style='custom', resizable=True,
                           editor=ListEditor(use_notebook=True,
