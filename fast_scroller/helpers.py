@@ -155,8 +155,8 @@ class CurveManager(HasTraits):
             self.heatmap_name = self._curve_names[0]
         if self.interactive_name == label:
             self.heatmap_name = self._curve_names[0]
-        if self._default_curve_name == label:
-            self._default_curve_name = ''
+        if self._source_curve_name == label:
+            self._source_curve_name = ''
 
     def default_traits_view(self):
         v = View(
