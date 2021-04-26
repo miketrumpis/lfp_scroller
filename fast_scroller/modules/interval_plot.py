@@ -1,12 +1,12 @@
 import numpy as np
 
 from mpl_toolkits.axes_grid1 import AxesGrid
+from matplotlib.collections import LineCollection
 
 from traits.api import Button, Bool, Enum, Int
 from traitsui.api import View, HGroup, VGroup, Group, Item, UItem, Label
 
 from ecogdata.devices.units import convert_scale, nice_unit_text
-from ecoglib.vis import plotters
 
 from .base import PlotsInterval, SimpleFigure, colormaps
 from .plot_types import SimpleTiled
@@ -42,26 +42,41 @@ class IntervalTraces(PlotsInterval):
             self.tiled_plot()
 
     def stacked_plot(self):
-        x, y = self.curve_manager.interactive_curve.current_data(visible=True, full_xdata=False)
+        x, y = self.curve_manager.interactive_curve.current_data(visible=True, full_xdata=True)
         chan_map = self.curve_manager.interactive_curve.map_curves(self.chan_map)
         if y is None:
             print('No data to plot')
             return
         y *= 1e6
         dy = self.parent.y_spacing
+        # Note: forcing "label channels" to also encode sequential stacking, rather than stacking traces to align
+        # with their position on the main window page.
+        if self.label_channels:
+            y_levels = np.arange(len(y)) * dy
+            y += y_levels[:, None]
+        else:
+            y += self.curve_manager.interactive_curve.y_offset * 1e6
         f, ax = self._get_fig()
         clr = self._colors[self._axplots[ax]]
-        y_levels = np.arange(len(y)) * dy
         units = 'uV'
-        if len(y) > 1 and np.log10(y_levels[-1]) > 4:
+        if hasattr(ax, 'y_units'):
+            convert_to = ax.y_units
+            convert_scale(y, units, convert_to)
+            if self.label_channels:
+                convert_scale(y_levels, units, convert_to)
+            units = convert_to
+        elif len(y) > 1 and np.log10(np.nanmax(y)) > 4:
             convert_scale(y, 'uv', 'mv')
-            convert_scale(y_levels, 'uv', 'mv')
             units = 'mv'
-        ax.plot(x, y.T + y_levels, lw=0.5, color=clr)
-        plotters.sns.despine(ax=ax)
+        simple_lines = LineCollection([np.c_[x[i], y[i]] for i in range(len(y))],
+                                      linewidths=0.5, colors=clr)
+        ax.add_collection(simple_lines)
+        for spine in ('right', 'top'):
+            ax.spines[spine].set_visible(False)
         if not self.label_channels:
             label = u'Amplitude {}'.format(nice_unit_text(units))
             ax.set_ylabel(label)
+            ax.y_units = units
         else:
             ax.set_yticks(y_levels)
             ii, jj = chan_map.to_mat()
@@ -69,13 +84,14 @@ class IntervalTraces(PlotsInterval):
             ax.set_yticklabels(labels, fontsize=8)
         ax.set_xlabel('Time (s)')
         f.tight_layout()
+        ax.autoscale_view(True, True, True)
         try:
             f.canvas.draw_idle()
         except:
             pass
 
     def tiled_plot(self):
-        x, y = self.curve_manager.interactive_curve.current_data(visible=True, full_xdata=False)
+        x, y = self.curve_manager.interactive_curve.current_data(visible=True, full_xdata=True)
         chan_map = self.curve_manager.interactive_curve.map_curves(self.chan_map)
         if y is None:
             print('No data to plot')
