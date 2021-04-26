@@ -192,7 +192,7 @@ class FilterFollower(SelectedFollowerCollection):
             super().__init__(curve_collection, **kwargs)
         self.signal_transform = transform
         self._y_filtered = None
-        self.register_connection(curve_collection.data_changed, self.transform_page)
+        self.register_connection(self._source.data_changed, self.transform_page)
         if isinstance(curve_collection, SelectedFollowerCollection):
             self._active_channels = curve_collection._active_channels.copy()
             self.register_connection(curve_collection.selection_changed, self.transform_page)

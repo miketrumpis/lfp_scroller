@@ -13,7 +13,7 @@ info = parallel_context.get_logger().info
 class PlotCurveCollection(pg.PlotCurveItem):
     data_changed = QtCore.pyqtSignal(QtCore.QObject)
     plot_changed = QtCore.pyqtSignal(QtCore.QObject)
-    vis_rate_changed = QtCore.pyqtSignal(np.float64)
+    vis_rate_changed = QtCore.pyqtSignal(float)
 
     def __new__(cls, *args, **kwargs):
         return super().__new__(cls)
@@ -121,8 +121,7 @@ class PlotCurveCollection(pg.PlotCurveItem):
     def viewRangeChanged(self):
         # only look for x-range changes that actually require loading different data
         if self._view_really_changed():
-            info('Zoom plot ranged actually changed, '
-                 'triggering data load: {} {}'.format(self._view_range(), timestamp()))
+            info('Zoom plot ranged actually changed, redrawing: {} {}'.format(self._view_range(), timestamp()))
             self.updatePlotData()
 
     def _view_range(self):
@@ -155,7 +154,7 @@ class PlotCurveCollection(pg.PlotCurveItem):
         if needs_slice:
             # When this condition, automatically reset state to raw slices.
             # If anything is watching this data to change, it will need access to the raw slice.
-            info('Slicing from HDF5 {}'.format(timestamp()))
+            info('Slicing from HDF5 {} and emitting data_changed'.format(timestamp()))
             N = stop - start
             L = self.hdf_data.shape[1]
             # load this many points before and after the view limits so that small updates
@@ -174,7 +173,7 @@ class PlotCurveCollection(pg.PlotCurveItem):
         y_stop = y_start + (stop - start)
         self.y_visible = self.y_slice[:, y_start:y_stop]
         self.x_visible = np.tile(np.arange(start, stop) * self.dx, (len(self.plot_channels), 1))
-        info('x,y arrays set: {} {}'.format(self.y_visible.shape, self.x_visible.shape))
+        info('{}: x,y arrays set: {} {}'.format(type(self), self.y_visible.shape, self.x_visible.shape))
 
     def updatePlotData(self, data_ready=False):
         # Use data_ready=True to indicate that there's pre-defined x- and y-visible data ready to plot
@@ -235,12 +234,15 @@ class PlotCurveCollection(pg.PlotCurveItem):
                 x_samp[-1] = N - 1
             x_visible = np.take(self.x_visible, x_samp, axis=1)
 
-        info('Update hdf5 lines called: external data {} {}'.format(data_ready, timestamp()))
+        info('{}: Update hdf5 lines called: external data {} {}'.format(type(self), data_ready, timestamp()))
         visible = visible + self.y_offset
         connects = np.ones(visible.shape, dtype='>i4')
         connects[:, -1] = 0
         # Set the data as one block without connections from row to row
-        info('x shape {}, y shape {}, mask shape {}'.format(x_visible.shape, visible.shape, connects.shape))
+        info('{}: x shape {}, y shape {}, mask shape {}'.format(type(self),
+                                                                x_visible.shape,
+                                                                visible.shape,
+                                                                connects.shape))
         self.setData(x=x_visible.ravel(), y=visible.ravel(), connect=connects.ravel())  # update_zoom_callback the plot
         # TODO: is this needed?
         self.resetTransform()
