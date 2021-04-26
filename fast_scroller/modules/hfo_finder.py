@@ -6,20 +6,86 @@ from traitsui.api import View, HGroup, VGroup, UItem, Label, TabularEditor
 from traitsui.tabular_adapter import TabularAdapter
 
 from .base import VisModule
-from ..curve_collections import PlotCurveCollection, FollowerCollection
+from ..curve_collections import PlotCurveCollection, SelectedFollowerCollection
 
 __all__ = ['HFOLocator']
 
 
-class HFOCollection(FollowerCollection):
+class HFOCollection(SelectedFollowerCollection):
 
     def __init__(self, curve_collection: PlotCurveCollection, hfo_lookup: OrderedDict):
         super().__init__(curve_collection)
         self.hfo_lookup = hfo_lookup
         self.setPen(width=4, color='r')
         self.setShadowPen(color='r', width=4)
+        self._x_padded = None
+        self._y_padded = None
+        self._compressed_hfos = None
 
-    # TODO: this version should be functional, but as a subclass, it does break the x-/y-visible contract
+    @property
+    def x_visible(self):
+        return self._x_padded
+
+    @x_visible.setter
+    def x_visible(self, new):
+        return
+
+    @property
+    def y_visible(self):
+        return self._y_padded
+
+    @y_visible.setter
+    def y_visible(self, new):
+        return
+
+    def _set_hfo_data(self):
+        r = self._view_range()
+        if not r:
+            return
+        start, stop = r
+        full_page_size = stop - start
+        active_channels = np.zeros(len(self._active_channels), '?')
+        y_padded = np.empty(self._source.y_visible.shape)
+        y_padded.fill(np.nan)
+        x_padded = np.empty(y_padded.shape)
+        x_padded.fill(np.nan)
+        # offset = self._y_offset
+        x_data = list()
+        y_data = list()
+        # save the number of y steps (apply actual units offset based on state)
+        y_step = list()
+        connections = list()
+        for time in self.hfo_lookup:
+            # convert time in milliseconds to sample index
+            t_idx = int(time / 1000 / self.dx)
+            if start < t_idx < stop:
+                e_start = t_idx - start
+                for channel, e_stop in self.hfo_lookup[time]:
+                    e_stop = int(e_stop / 1000 / self.dx)
+                    e_stop = min(full_page_size, e_stop - start)
+                    plot_channel = self._source.plot_channels.index(channel)
+                    active_channels[plot_channel] = True
+                    print('slicing ch {} from {}-{} on visible slab'.format(plot_channel, e_start, e_stop))
+                    # Compact sets for the plot data
+                    data = self._source.y_visible[plot_channel, e_start:e_stop]
+                    y_data.append(data)
+                    y_step.append(plot_channel)
+                    x_data.append(np.arange(e_start + start, e_stop + start) * self.dx)
+                    c = np.ones(e_stop - e_start, dtype='>i4')
+                    c[-1] = 0
+                    connections.append(c)
+                    # Uncompressed (nan-filled) sets for the x-/y-visible arrays
+                    y_padded[plot_channel, e_start:e_stop] = self._source.y_visible[plot_channel, e_start:e_stop]
+                    x_padded[plot_channel, e_start:e_stop] = self._source.x_visible[plot_channel, e_start:e_stop]
+        self._x_padded = x_padded[active_channels]
+        self._y_padded = y_padded[active_channels]
+        self._compressed_hfos = (np.concatenate(x_data), np.concatenate(connections), y_data, y_step)
+        print(len(self._compressed_hfos))
+        self._active_channels = active_channels
+
+    def _source_triggered_update(self, source):
+        self._set_hfo_data()
+        super()._source_triggered_update(source)
 
     def updatePlotData(self, data_ready=False):
         if not self.can_update:
@@ -28,32 +94,12 @@ class HFOCollection(FollowerCollection):
         if not r:
             print('no view range')
             return
-        start, stop = r
-        offsets = self.y_offset.squeeze()
-        x_data = list()
-        y_data = list()
-        visible_size = self.y_visible.shape[1]
-        connections = list()
-        dx = self.x_visible[0, 1] - self.x_visible[0, 0]
-        for time in self.hfo_lookup:
-            # convert time in milliseconds to sample index
-            t_idx = int(time / 1000 / dx)
-            if start < t_idx < stop:
-                e_start = t_idx - start
-                for channel, e_stop in self.hfo_lookup[time]:
-                    e_stop = int(e_stop / 1000 / dx)
-                    e_stop = min(visible_size, e_stop - start)
-                    plot_channel = self.plot_channels.index(channel)
-                    print('slicing ch {} from {}-{} on visible slab'.format(plot_channel, e_start, e_stop))
-                    data = self.y_visible[plot_channel, e_start:e_stop] + offsets[plot_channel]
-                    y_data.append(data)
-                    x_data.append(np.arange(e_start + start, e_stop + start) * self.dx)
-                    c = np.ones(e_stop - e_start, dtype='>i4')
-                    c[-1] = 0
-                    connections.append(c)
-        x = np.concatenate(x_data)
-        y = np.concatenate(y_data)
-        connect = np.concatenate(connections)
+        x, connect = self._compressed_hfos[:2]
+        y_data, y_step = self._compressed_hfos[2:]
+        if not len(x):
+            return
+        # the y-data needs to be assembled depending on the present y offset
+        y = np.concatenate([y + n * self._y_offset for y, n in zip(y_data, y_step)])
         self.setData(x=x, y=y, connect=connect)
 
 
@@ -108,7 +154,7 @@ class HFOLocator(VisModule):
         # were in recording order. This should be possible by sorting the plot channels
         # and then choosing those channels by their order in the range of array channels.
         if self.array_channels:
-            array_rec_order = np.array(sorted(self.curve_collection.plot_channels))
+            array_rec_order = np.array(sorted(self.curve_manager.source_curve.plot_channels))
             recording_channels = array_rec_order[df.channel.values]
             df.channel[:] = recording_channels
         df = df.sort_values(by='start', inplace=False).reset_index(drop=True)
@@ -157,18 +203,18 @@ class HFOLocator(VisModule):
         if not len(self.event_table):
             return
         if self.show_hfos:
-            self.hfo_curves = HFOCollection(self.curve_collection, self.hfo_lookup)
-            self.parent.add_new_curves(self.hfo_curves, 'HFOs')
+            self.hfo_curves = HFOCollection(self.curve_manager.source_curve, self.hfo_lookup)
+            self.curve_manager.add_new_curves(self.hfo_curves, 'HFOs')
         else:
             if not hasattr(self, 'hfo_curves'):
                 return
-            self.parent.remove_curves('HFOs')
+            self.curve_manager.remove_curves('HFOs')
             del self.hfo_curves
 
     def _time_offset_changed(self):
         if len(self.event_table):
             if hasattr(self, 'hfo_curves'):
-                self.parent._qtwindow.p1.removeItem(self.hfo_curves)
+                self.curve_manager.remove_curves('HFOs')
                 del self.hfo_curves
             if self.file:
                 self._read_table()
