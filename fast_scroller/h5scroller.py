@@ -300,7 +300,7 @@ class FastScroller(object):
     def set_mean_image(self):
         if self.curve_manager.heatmap_curve.y_visible is None:
             return
-        image = self.curve_manager.heatmap_curve.y_visible.std(axis=1)
+        image = np.nanstd(self.curve_manager.heatmap_curve.y_visible, axis=1)
         chan_map = self.curve_manager.heatmap_curve.map_curves(self.chan_map)
         x_vis = self.curve_manager.heatmap_curve.x_visible[0]
         x_avg = 0.5 * (x_vis[0] + x_vis[-1])
