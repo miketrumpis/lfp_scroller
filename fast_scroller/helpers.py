@@ -256,3 +256,14 @@ def validate_file_path(f):
     exists = os.path.exists(os.path.dirname(f))
     not_dir = not os.path.isdir(f)
     return exists and not_dir
+
+
+def view_label_item(trait: str, label: str, vertical: bool=False, label_first: bool=True,
+                    item_kwargs: dict=None, **group_kwargs):
+    l_view = Label(label)
+    if item_kwargs is None:
+        item_kwargs = dict()
+    t_view = UItem(trait, **item_kwargs)
+    g_type = VGroup if vertical else HGroup
+    args = (l_view, t_view) if label_first else (t_view, l_view)
+    return g_type(*args, **group_kwargs)

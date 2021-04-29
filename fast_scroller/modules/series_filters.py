@@ -2,17 +2,17 @@ from typing import Union
 import numpy as np
 from scipy.signal import hilbert
 from scipy.ndimage import gaussian_filter1d
-from traits.api import HasTraits, Instance, Button, Int, Enum, Float, Str, Bool, Property
+from traits.api import HasTraits, Instance, Button, Int, Enum, Float, Str, Bool, Property, Tuple, observe
 from traitsui.api import View, UItem, Handler, Group, HGroup, VGroup, Label
 from pyqtgraph.Qt import QtCore
 
 from ecoglib.estimation.multitaper import bw2nw
-from ecogdata.util import nextpow2
+from ecogdata.util import nextpow2, ToggleState
 from ecogdata.parallel.array_split import split_at
 from ecogdata.filt.time import moving_projection, slepian_projection, filter_array
 
 from .base import VisModule
-from ..helpers import DebounceCallback
+from ..helpers import DebounceCallback, view_label_item
 from ..curve_collections import SelectedFollowerCollection, PlotCurveCollection
 
 
@@ -139,27 +139,61 @@ class RectifyAndSmooth(AppliesSeriesFiltering):
 class MultitaperDemodulate(AppliesSeriesFiltering):
     has_params = True
     BW = Float(10)  # half-bandwidth of projection in Hz
-    f0 = Float   # center frequency of bandpass
+    f0 = Float(0)  # center frequency of bandpass
+    bandpass = Tuple(-5, 5)  # Can also set up filter with a bandpass
     N = Int(100)  # segment size (moving projection slides this window over the whole series)
-    NW = Property(Float, depends_on='BW, N')  # This property updates the order of the DPSS projectors
+    NW = Property(Float, depends_on='BW, N, moving')  # This property updates the order of the DPSS projectors
+    # Moving filters are good for longer windows, but a single filter projection is efficient for short windows
     moving = Bool(True)
+    baseband = Bool(True)  # Demodulate bandpass filter (shift to baseband for power envelope)
     Kmax = Int
+    ignore = ToggleState(init_state=False)
 
     # NW is a "property", which is dynamically calculated based on the values of other traits. It gets updated when
     # any of the traits it depends on change.
     def _get_NW(self):
+        if self.moving:
+            N = self.N
+        else:
+            N = self.curve_manager.source_curve.y_visible.shape[1]
         return bw2nw(self.BW, self.N, self.sample_rate, halfint=True)
+
+    @observe('BW, f0, bandpass')
+    def _sync_filter_spec(self, event):
+        if self.ignore:
+            return
+        if event.name == 'bandpass':
+            lo, hi = self.bandpass
+            with self.ignore(True):
+                self.f0 = (lo + hi) / 2
+                self.BW = (hi - lo) / 2
+        elif event.name in ('BW', 'f0'):
+            lo = self.f0 - self.BW
+            hi = self.f0 + self.BW
+            with self.ignore(True):
+                self.bandpass = lo, hi
 
     def __call__(self, array):
         nx = array.shape[1]
+        # Setting a concentration threshold of 1 - 10^-n only shaves off ~n modes.
+        # Let's set an arbitrary minimum of 10 modes (plus 3 for a safety factor, since
+        # the concentration-to-mode relationship is not perfect).
+        n_play = min(1, max(6, 2 * self.NW - 10 - 3))
+        spectral_concentration = 1 - 10 ** (-n_play)
         # if the window is shorter than N, just make a non-moving projection
         if nx <= self.N or not self.moving:
             Kmax = self.Kmax if self.Kmax else None
-            baseband = slepian_projection(array, self.BW, self.sample_rate, w0=self.f0, Kmax=Kmax, baseband=True,
-                                          onesided=True)
+            baseband = slepian_projection(array, self.BW, self.sample_rate, w0=self.f0, Kmax=Kmax,
+                                          min_conc=spectral_concentration,
+                                          baseband=self.baseband,
+                                          onesided=self.baseband)
         else:
-            baseband = moving_projection(array, self.N, self.BW, Fs=self.sample_rate, f0=self.f0, baseband=True)
-        return np.abs(baseband)
+            baseband = moving_projection(array, self.N, self.BW, Fs=self.sample_rate, f0=self.f0,
+                                         min_conc=spectral_concentration, baseband=self.baseband)
+        # if in Single-side baseband mode, return the magnitude
+        if self.baseband:
+            baseband = np.abs(baseband)
+        return baseband
 
     # A HasTraits object can expose its traits for GUI manipulation using a View. The MultitaperDemodulate object
     # will have a horizontal panel with entry boxes (default input method for numbers). The View has a single HGroup
@@ -168,12 +202,16 @@ class MultitaperDemodulate(AppliesSeriesFiltering):
     def default_traits_view(self):
         v = View(
             HGroup(
-                VGroup(Label('half-BW (Hz)'), UItem('BW')),
-                VGroup(Label('center freq (Hz)'), UItem('f0')),
-                VGroup(Label('Win size (pts)'), UItem('N')),
-                VGroup(Label('Slide win'), UItem('moving')),
-                VGroup(Label('Kmax'), UItem('Kmax')),
-                VGroup(Label('DPSS ord.'), UItem('NW', style='readonly'))
+                VGroup(
+                    HGroup(view_label_item('BW', 'half-BW (Hz)'),
+                           view_label_item('f0', 'center freq (Hz)')),
+                    view_label_item('bandpass', 'bandpass', vertical=False)
+                ),
+                VGroup(view_label_item('moving', 'Slide win'),
+                       view_label_item('baseband', 'Demodulate'),
+                       view_label_item('N', 'Win size (pts)', enabled_when='object.moving')),
+                VGroup(view_label_item('Kmax', 'Kmax'),
+                       view_label_item('NW', 'DPSS ord.', item_kwargs=dict(style='readonly')))
             )
         )
         return v
