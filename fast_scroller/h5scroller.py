@@ -150,6 +150,7 @@ class FastScroller(object):
         self.img = pg.ImageItem(image=np.random.randn(*self.chan_map.geometry) * y_spacing)  # * 1e6 / 2)
         cmap = pg.colormap.get('coolwarm', source='matplotlib')
         p_img = sub_layout.addPlot()
+        self.p_img = p_img
         p_img.getViewBox().setAspectLocked()
         p_img.addItem(self.img)
         p_img.hideAxis('bottom')
