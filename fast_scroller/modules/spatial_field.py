@@ -756,9 +756,8 @@ class SpatialVariance(PlotsInterval):
             bin_size = None if self.dist_bin < 0 else self.dist_bin
             xc, yc = vg_method(array[:, pts], combs)
             xb, yb = sv.binned_variance(xc, yc, binsize=bin_size)
-            Nd = [len(y) for y in yb if len(y) > 1]
             # this will bring back mean and sem by default
-            xb, yb, se = sv.binned_variance_aggregate(xb, yb)
+            xb, yb, se, Nd = sv.binned_variance_aggregate(xb, yb)
             return xc, yc, xb, yb, se, Nd
         x, y, Nd, se = vg_method(array[:, pts], combs)
         return x, y, se, Nd
