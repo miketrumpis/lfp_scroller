@@ -55,32 +55,39 @@ def find_pickled_map(hdf_file):
     return chan_map
 
 
+def assign_file_from_headstage(headstage: str) -> FileData:
+    headstage = headstage.lower()
+    if headstage == 'mux3':
+        fd = Mux7FileData(gain=10)
+    elif headstage in ('mux5', 'mux6'):
+        fd = Mux7FileData(gain=20)
+    elif headstage == 'mux7':
+        fd = Mux7FileData(gain=3)
+    elif headstage == 'stim v4':
+        fd = Mux7FileData(gain=4)
+    elif headstage == 'intan (oephys)':
+        fd = OpenEphysFileData()
+    elif headstage == 'intan (rhd)':
+        fd = RHDFileData()
+    elif headstage == 'blackrock':
+        fd = BlackrockFileData()
+    elif headstage == 'active':
+        fd = ActiveArrayFileData()
+    else:
+        fd = FileData()
+    return fd
+
+
 class HeadstageHandler(Handler):
 
     def object_headstage_changed(self, info):
         if not info.initialized and info.object.file_data:
             return
         hs = info.object.headstage
-        if hs.lower() == 'mux3':
-            fd = Mux7FileData(gain=10)
-        elif hs.lower() in ('mux5', 'mux6'):
-            fd = Mux7FileData(gain=20)
-        elif hs.lower() == 'mux7':
-            fd = Mux7FileData(gain=3)
-        elif hs.lower() == 'stim v4':
-            fd = Mux7FileData(gain=4)
-        elif hs.lower() == 'intan (oephys)':
-            fd = OpenEphysFileData()
-        elif hs.lower() == 'intan (rhd)':
-            fd = RHDFileData()
-        elif hs.lower() == 'blackrock':
-            fd = BlackrockFileData()
-        elif hs.lower() == 'active':
-            fd = ActiveArrayFileData()
+        info.object.file_data = assign_file_from_headstage(hs)
+        # also update channel map for this case
+        if hs == 'active':
             info.object.chan_map = 'active'
-        else:
-            fd = FileData()
-        info.object.file_data = fd
 
 
 _subset_chan_maps = ('psv_244_mux1', 'psv_244_mux3') + tuple(multi_arm_electrodes.keys())
@@ -105,7 +112,7 @@ class VisLauncher(HasTraits):
     """
     
     file_data = Instance(FileData)
-    filters = Instance(FilterPipeline)
+    filters = Instance(FilterPipeline, ())
     module_set = List(default_modules)
     all_modules = List(list(ana_modules.keys()))
     b = Button('Launch Visualization')
@@ -131,7 +138,8 @@ class VisLauncher(HasTraits):
 
     def __init__(self, **traits):
         super(VisLauncher, self).__init__(**traits)
-        self.add_trait('filters', FilterPipeline())
+        if self.headstage:
+            self.file_data = assign_file_from_headstage(self.headstage)
 
     @cached_property
     def _get__max_win(self):
