@@ -167,8 +167,6 @@ class FastScroller(object):
         # colorbar
         self.cb = pg.ColorBarItem(limits=None, cmap=cmap, hoverBrush='#EEEEFF80',
                                   rounding=10e-6, values=(-y_spacing, y_spacing))
-        # forcibly reset image to a column (bug #1733 pyqtgraph)
-        self.cb.bar.setImage(np.linspace(0, 1, 256)[:, np.newaxis])
         self.cb.getAxis('left').setLabel('')
         self.cb.getAxis('right').setLabel('Voltage', units='V')
         self.cb.setImageItem(self.img)
