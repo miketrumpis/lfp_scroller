@@ -6,14 +6,15 @@ from ecogdata.channel_map import ChannelMap
 from ecogdata.parallel.mproc import parallel_context, timestamp
 
 from .h5data import ReadCache
+from . import pyqtSignal
 
 
 info = parallel_context.get_logger().info
 
 class PlotCurveCollection(pg.PlotCurveItem):
-    data_changed = QtCore.pyqtSignal(QtCore.QObject)
-    plot_changed = QtCore.pyqtSignal(QtCore.QObject)
-    vis_rate_changed = QtCore.pyqtSignal(float)
+    data_changed = pyqtSignal(QtCore.QObject)
+    plot_changed = pyqtSignal(QtCore.QObject)
+    vis_rate_changed = pyqtSignal(float)
 
     def __new__(cls, *args, **kwargs):
         return super().__new__(cls)
@@ -340,7 +341,7 @@ class FollowerCollection(PlotCurveCollection):
     def y_visible(self, new):
         return
 
-    def register_connection(self, signal: QtCore.pyqtSignal, callback: callable):
+    def register_connection(self, signal: pyqtSignal, callback: callable):
         # register a signal connection so that it can be disabled later
         signal.connect(callback)
         self.connection_ids.append((signal, callback))
@@ -381,7 +382,7 @@ class SelectedFollowerCollection(FollowerCollection):
 
     _available_channels: list
     _active_channels: np.ndarray
-    selection_changed = QtCore.pyqtSignal(np.ndarray)
+    selection_changed = pyqtSignal(np.ndarray)
 
     def __init__(self, curve_collection: PlotCurveCollection, clickable: bool=False, init_active: bool=False,
                  pen_args=None, shadowpen_args=None):

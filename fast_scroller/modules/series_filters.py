@@ -14,7 +14,7 @@ from ecogdata.filt.time import moving_projection, slepian_projection, filter_arr
 from .base import VisModule
 from ..helpers import DebounceCallback, view_label_item
 from ..curve_collections import SelectedFollowerCollection, PlotCurveCollection
-
+from .. import pyqtSignal
 
 # Most of the classes defined here inherit from HasTraits from the traits package. "Traits" can be used
 # programmatically like regular Python types (e.g. int, str, list). In addition, a trait can also signal when its
@@ -220,7 +220,7 @@ class MultitaperDemodulate(AppliesSeriesFiltering):
 # The previous filters work by replacing on-screen signals in a PlotCurveCollection. As an alternative,
 # plot both signals on screen using a FollowerCollection.
 class FilterFollower(SelectedFollowerCollection):
-    data_filtered = QtCore.pyqtSignal(QtCore.QObject)
+    data_filtered = pyqtSignal(QtCore.QObject)
 
     def __init__(self, curve_collection: PlotCurveCollection, transform: AppliesSeriesFiltering, **kwargs):
         kwargs['clickable'] = False
