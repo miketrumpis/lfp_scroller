@@ -58,10 +58,11 @@ class AutoPanel(ReportsTraits):
 class FilterMenu(AutoPanel):
     """Edits filter arguments."""
 
-    filtfilt = Bool(False, info_text='Forward/reverse filter')
+    def validate_params(self, Fs):
+        return True
 
 
-class NaNFilterMenu(AutoPanel):
+class NaNFilterMenu(FilterMenu):
     """Interpolate through NaN code values"""
 
     interp_order = Enum('linear', ('linear', 'nearest', 'zero',
@@ -71,31 +72,42 @@ class NaNFilterMenu(AutoPanel):
         return partial(block_nan_filter, kind=self.interp_order)
 
 
-class SquareFilterMenu(AutoPanel):
+class SquareFilterMenu(FilterMenu):
     """Square voltage values"""
 
     def make_filter(self, Fs):
         return square_filter
 
 
-class AbsFilterMenu(AutoPanel):
+class AbsFilterMenu(FilterMenu):
     """Rectify voltage values"""
 
     def make_filter(self, Fs):
         return abs_filter
 
 
-class HilbertEnvMenu(AutoPanel):
+class HilbertEnvMenu(FilterMenu):
     """Rectify voltage values"""
 
     def make_filter(self, Fs):
         return hilbert_envelope_filter
 
 
-class BandpassMenu(FilterMenu):
+class LTIFilterMenu(FilterMenu):
+    """LTI filter arguments."""
+
+    filtfilt = Bool(False, info_text='Forward/reverse filter')
+
+
+class BandpassMenu(LTIFilterMenu):
     lo = Float(-1, info_text='low freq cutoff (-1 for none)')
     hi = Float(-1, info_text='high freq cutoff (-1 for none)')
     ord = Int(5, info_text='filter order')
+
+    def validate_params(self, Fs):
+        edge_set = self.lo > 0 or self.hi > 0
+        edge_valid = self.lo < Fs and self.hi < Fs
+        return edge_set and edge_valid
 
 
 class ButterMenu(BandpassMenu):
@@ -121,7 +133,7 @@ class Cheby2Menu(BandpassMenu):
         )
 
 
-class NotchMenu(FilterMenu):
+class NotchMenu(LTIFilterMenu):
     notch = Float(60, info_text='notch frequency')
     nwid = Float(3.0, info_text='notch width (Hz)')
     nzo = Int(3, info_text='number of zeros at notch')
@@ -129,13 +141,20 @@ class NotchMenu(FilterMenu):
     def make_filter(self, Fs):
         return notch(self.notch, Fs, self.nwid, nzo=self.nzo)
 
+    def validate_params(self, Fs):
+        notch_valid = notch < Fs
+        return notch_valid
 
-class MAHPMenu(FilterMenu):
+
+class MAHPMenu(LTIFilterMenu):
     hpc = Float(1, info_text='highpass cutoff')
 
     def make_filter(self, Fs):
         fir = ma_highpass(None, self.hpc/Fs, fir_filt=True)
         return fir, 1
+
+    def validate_params(self, Fs):
+        return self.hpc > 0 and self.hpc < Fs
 
 
 class EllipMenu(BandpassMenu):
@@ -157,14 +176,27 @@ class EllipMenu(BandpassMenu):
             hp_width=self.hp_width, lp_width=self.lp_width, Fs=Fs
         )
 
+    def validate_params(self, Fs):
+        valid_edges = super().validate_params(Fs)
+        trans_valid = True
+        if self.lo > 0:
+            trans_valid = trans_valid and self.lp_width > 0
+        if self.hi > 0:
+            trans_valid = trans_valid and self.hp_width > 0
+        return valid_edges and trans_valid
 
-class SavgolMenu(FilterMenu):
+
+
+class SavgolMenu(LTIFilterMenu):
     T = Float(1.0, info_text='Window length (s)')
     ord = Int(3, info_text='Poly order')
     sm = Bool(True, info_text='Smoothing (T), residual (F)')
 
     def make_filter(self, Fs):
         return savgol(self.T, self.ord, Fs=Fs, smoothing=self.sm)
+
+    def validate_params(self, Fs):
+        return self.T > 0 and self.ord > 0
 
 
 class FilterHandler(Handler):
@@ -361,11 +393,18 @@ class FilterPipeline(HasTraits):
             self.load_pipeline(loader.path)
 
     def make_pipeline(self, Fs, **kwargs):
-        filters = [f.filt_menu.make_filter(Fs) for f in self.filters]
-        filtfilt = []
+        valid_filters = list()
         for f in self.filters:
+            if f.filt_menu is None or not f.filt_menu.validate_params(Fs):
+                continue
+            valid_filters.append(f.filt_menu)
+        # valid_filters = [f.filt_menu for f in self.filters if f.filt_menu.validate_params(Fs)]
+        filters = [f.make_filter(Fs) for f in valid_filters]
+        # filters = [f.filt_menu.make_filter(Fs) for f in self.filters]
+        filtfilt = []
+        for f in filters:
             try:
-                filtfilt.append(f.filt_menu.filtfilt)
+                filtfilt.append(f.filtfilt)
             except AttributeError:
                 filtfilt.append(None)
         return pipeline_factory(filters, filtfilt, **kwargs)
