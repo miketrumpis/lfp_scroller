@@ -3,15 +3,25 @@ New timeseries scrolling tool with baseline analysis modules.
 """
 
 from distutils.version import StrictVersion
+import platform
+import os
+
 # these imports set up some qt runtime stuff
 # pyqtgraph 0.12.x does now supports PySide2, and there is a bad mixture
 # with windows 8, PyQt5, and traitsui -- so prefer to load PySide2 first
-
-try:
-    import PySide2.QtCore
-    pyqtSlot = PySide2.QtCore.Slot
-    pyqtSignal = PySide2.QtCore.Signal
-except ImportError:
+old_windows = platform.system() == 'Windows' and StrictVersion(platform.version()) < StrictVersion('10.0.0')
+# Also respect the QT_API environment variable to load PySide2
+pyside2_env = 'QT_API' in os.environ and os.environ['QT_API'].lower() == 'pyside2'
+pyside2_set = False
+if pyside2_env or old_windows:
+    try:
+        import PySide2.QtCore
+        pyqtSlot = PySide2.QtCore.Slot
+        pyqtSignal = PySide2.QtCore.Signal
+        pyside2_set = True
+    except ImportError:
+        pyside2_set = False
+if not pyside2_set:
     import PyQt5.QtCore
     pyqtSlot = PyQt5.QtCore.pyqtSlot
     pyqtSignal = PyQt5.QtCore.pyqtSignal
