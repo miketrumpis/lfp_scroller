@@ -9,7 +9,4 @@ Entry point:
 
     $ launch_scroller.py
 
-.. image:: docs/images/demo.png?raw=true
-
-
-.. figure:: docs/images/demo.gif
+.. image:: docs/images/newdemo.png?raw=true
