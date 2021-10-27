@@ -11,6 +11,5 @@ Entry point:
 
 .. image:: docs/images/demo.png?raw=true
 
-.. only:: html
 
-   .. figure:: docs/images/demo.gif
+.. figure:: docs/images/demo.gif
