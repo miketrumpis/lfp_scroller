@@ -10,3 +10,5 @@ Entry point:
     $ launch_scroller.py
 
 .. image:: docs/images/newdemo.png?raw=true
+
+For usage, see "docs" directory.
