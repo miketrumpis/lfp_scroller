@@ -26,7 +26,8 @@ from ecoglib.estimation import cxx_to_pairs, matern_semivariogram, matern_spectr
 from ecoglib.vis.traitsui_bridge import MPLFigureEditor, PingPongStartup
 from ecoglib.vis.gui_tools import ArrayMap, SavesFigure
 from ecoglib.vis.plot_util import subplots, subplot2grid
-import seaborn as sns
+from ecoglib.vis import plotters
+
 
 from .base import PlotsInterval, MultiframeSavesFigure, colormaps, FigureCanvas
 from ..helpers import PersistentWindow
@@ -176,7 +177,7 @@ class STSemivar(PersistentWindow):
         ax = self.sv_fig.add_subplot(111)
         self._sv_line = ax.plot(x, st_semivar[:, 0], marker='o', ls='--')[0]
         ax.set_ylim(0, st_semivar.max())
-        sns.despine(ax=ax)
+        plotters.sns.despine(ax=ax)
         self._marked_point = None
         self._fit_line = None
         self._info_text = None
@@ -552,7 +553,7 @@ class SpatialVariance(PlotsInterval):
             ax1.set_title('Map of autocov.  ~ t={0:.2f} sec'.format(t_stamp))
             cb.set_label('Autocovariance')
             ax2.set_ylabel('Autocovariance')
-        sns.despine(ax=ax2)
+        plotters.sns.despine(ax=ax2)
         splot = MultiframeSavesFigure(fig, frames, mode_name='lag (ms)',
                                       frame_index=t[:len(frames)])
         splot.edit_traits()
@@ -833,7 +834,7 @@ class SpatialVariance(PlotsInterval):
             axes.axhline(max_var, color='k', ls='--', lw=2)
 
         #axes.autoscale(axis='both', enable=True)
-        sns.despine(ax=axes)
+        plotters.sns.despine(ax=axes)
         self._f_anim = FuncAnimation(
             fig, _step, blks, interval=scaled_dt * 1e3, blit=True
         )
@@ -875,7 +876,7 @@ class SpatialVariance(PlotsInterval):
         ax.legend()
         ax.set_xlabel('Distance (mm)')
         ax.set_ylabel('Semivariance')
-        sns.despine(ax=ax)
+        plotters.sns.despine(ax=ax)
         fig.tight_layout()
         try:
             fig.canvas.draw_idle()
