@@ -12,6 +12,7 @@ At this point, you have chosen your flavor of virtual environment.
 Next, clone this repository:
 
 .. code-block:: bash
+
     $ git clone https://github.com/miketrumpis/lfp_scroller.git
 
 **Choose whether to use PyQt5 or PySide2.**
