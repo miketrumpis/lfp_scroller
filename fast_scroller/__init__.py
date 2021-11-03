@@ -6,6 +6,10 @@ from distutils.version import StrictVersion
 import platform
 import os
 
+
+__version__ = '0.1.0'
+
+
 # these imports set up some qt runtime stuff
 # pyqtgraph 0.12.x does now supports PySide2, and there is a bad mixture
 # with windows 8, PyQt5, and traitsui -- so prefer to load PySide2 first
@@ -39,3 +43,4 @@ else:
 import pyface
 pyf_version = StrictVersion(pyface.__version__)
 pyf_new_api = pyf_version >= StrictVersion('6.1.0')
+

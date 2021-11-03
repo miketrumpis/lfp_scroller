@@ -23,7 +23,7 @@ Next, clone this repository:
 The LFP scroller can use either package.
 With PySide2, you must set the ``QT_API=pyside2`` environment variable (a la matplotlib).
 
-*Note: if using conda, you may prefer to conda install the requirements in ``setup.cfg``.*
+*Note: if using conda, you may prefer to conda install the requirements in* ``setup.cfg``.
 
 Pip install either as:
 
