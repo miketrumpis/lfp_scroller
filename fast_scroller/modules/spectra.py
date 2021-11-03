@@ -6,7 +6,7 @@ from ecogdata.util import nextpow2
 from ecoglib.estimation.multitaper import MultitaperEstimator
 from ecoglib.estimation.resampling import Jackknife
 from ecoglib.vis.plot_util import filled_interval
-import seaborn as sns
+from ecoglib.vis import plotters
 
 from .base import PlotsInterval
 
@@ -78,7 +78,7 @@ class IntervalSpectrum(PlotsInterval):
             ax.legend(lns[:1], (label,))
         ax.set_ylabel('Power Spectral Density (uV^2 / Hz)')
         ax.set_xlabel('Frequency (Hz)')
-        sns.despine(ax=ax)
+        plotters.sns.despine(ax=ax)
         fig.tight_layout()
         self.label = ''
         try:
