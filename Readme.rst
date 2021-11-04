@@ -1,7 +1,7 @@
 LFP Scroller
 ============
 
-A fast & light scroller based on `pyqtgraph <http://www.pyqtgraph.org/>`_, Enthought `traitsui <http://docs.enthought.com/traitsui/>`_, and HDF5.
+A fast & light scroller based on `pyqtgraph`_, Enthought `traitsui`_, and `HDF5`_.
 
 Installation
 ------------
@@ -53,3 +53,6 @@ For usage, see "docs" directory.
 
 .. _ecogdata: https://github.com/miketrumpis/ecogdata
 .. _ecoglib: https://bitbucket.org/tneuro/ecoglib/src/master/
+.. _HDF5: https://www.h5py.org/
+.. _pyqtgraph: http://www.pyqtgraph.org/
+.. _traitsui: http://docs.enthought.com/traitsui/
