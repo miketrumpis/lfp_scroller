@@ -30,6 +30,8 @@ jobs:
 
     name: "Verify pyside2 install"
     runs-on: "${{ matrix.os }}"
+    env:
+      QT_API: pyside2
 
     steps:
       - uses: "actions/checkout@v2"
