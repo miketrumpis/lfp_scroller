@@ -1,4 +1,4 @@
-name: Build
+name: Installing on Ubuntu, MacOS, Windows
 
 on: [push, pull_request]
 

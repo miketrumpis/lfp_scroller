@@ -1,6 +1,8 @@
 LFP Scroller
 ============
 
+.. image:: https://github.com/miketrumpis/lfp_scroller/actions/workflows/check_install.yml/badge.svg?branch=ghactions
+
 A fast & light scroller based on `pyqtgraph`_, Enthought `traitsui`_, and `HDF5`_.
 
 Installation
