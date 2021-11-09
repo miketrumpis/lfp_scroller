@@ -1,5 +1,4 @@
 from collections import Counter
-from functools import partial
 
 import numpy as np
 import scipy.optimize as so
@@ -24,7 +23,7 @@ from ecoglib.vis.gui_tools import SavesFigure
 from ecoglib.vis.plot_util import subplots, subplot2grid
 from ecoglib.vis import plotters
 
-from .base import PlotsInterval, MultiframeSavesFigure
+from .base import MultiframeSavesFigure
 from . import SpatialVariance
 from ..helpers import PersistentWindow, view_label_item
 
@@ -99,8 +98,8 @@ class STSemivar(PersistentWindow):
 
         super(STSemivar, self).__init__(**traits)
 
-    @staticmethod
-    def from_array_and_lag(x, n, lag, chan_map, normed=False, **kwargs):
+    @classmethod
+    def from_array_and_lag(cls, x, n, lag, chan_map, normed=False, **kwargs):
         """
         Create new STSemivar object from array and short-time specs.
 
@@ -142,7 +141,7 @@ class STSemivar(PersistentWindow):
 
         st_svar = np.array(st_svar).T
         block_time = np.array(block_time)
-        return STSemivar(sx, block_time, st_svar, x, chan_map)
+        return cls(sx, block_time, st_svar, x, chan_map)
 
     @on_trait_change('slider')
     def _slider_changed(self):
@@ -267,7 +266,8 @@ class STSemivar(PersistentWindow):
             mask = self._bin_map == xbin
         else:
             mask = combs.dist == x
-        lines = [(i2, i1)
+        # [::-1] is to transpose the (row, col) to (x, y) coordinates
+        lines = [(i2[::-1], i1[::-1])
                  for i1, i2 in zip(combs.idx1[mask], combs.idx2[mask])]
         self._cnx_lc = LineCollection(
             lines, linewidths=0.5, alpha=0.5, colors='r')
