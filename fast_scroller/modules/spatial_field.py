@@ -18,6 +18,7 @@ from ecoglib.estimation.spatial_variance import semivariogram, fast_semivariogra
 from ecoglib.vis.traitsui_bridge import MPLFigureEditor, PingPongStartup
 from ecoglib.vis.gui_tools import ArrayMap
 from ecoglib.vis.plot_util import subplots
+from ecoglib.signal_testing.signal_plots import plot_site_corr
 from ecoglib.vis import plotters
 
 from .base import PlotsInterval, colormaps, FigureCanvas
@@ -125,7 +126,7 @@ class ArrayVarianceTool(PersistentWindow):
 
 class SpatialVariance(PlotsInterval):
     name = 'Spatial Variance'
-    plot = Button('plot')
+    plot = Button('Plot variogram')
     normalize = Bool(True)
     robust = Bool(True)
     cloud = Bool(False)
@@ -138,20 +139,26 @@ class SpatialVariance(PlotsInterval):
     anim_time_scale = Enum(50, [0.5, 1, 5, 10, 20, 50, 100])
     plot_anim = Button('Animate variogram')
 
-    # spatiotemporal kernel
-    plot_acov = Button('Acov map')
-    plot_stcov = Button('STCov map')
-    plot_iso_stcov = Button('Isom. STCov map')
-    n_lags = Int(10)
-    norm_kernel = Bool(False)
-
-    # tool button
+    # Array map tool button
     vis_tool = Button('Covar map')
 
-    # stvar button
-    stsemivar_tool = Button('Launch')
-    st_len = Int(25)
-    st_lag = Int(10)
+    # Correlation graph button
+    plot_graph = Button('Plot graph')
+    graph_stagger_x = Bool(False)
+    graph_stagger_y = Bool(False)
+
+    def _plot_graph_fired(self):
+        t, y = self.curve_manager.interactive_curve.current_data()
+        y = y[np.newaxis, : , :]
+        label = '{0: .2f} sec'.format(t.mean())
+        fig, axs = self._get_fig(ncols=2, figsize=(12, 5))
+        fig = plot_site_corr(y, self.chan_map, label, normed=self.normalize,
+                             stagger_x=self.graph_stagger_x, stagger_y=self.graph_stagger_y, axs=axs)
+        try:
+            fig.canvas.draw_idle()
+        except BaseException:
+            pass
+        return fig
 
     def _vis_tool_fired(self):
         _, y = self.curve_manager.interactive_curve.current_data()
@@ -341,6 +348,14 @@ class SpatialVariance(PlotsInterval):
                     UItem('new_figure'),
                     UItem('plot'),
                     UItem('vis_tool'),
+                    HGroup(
+                        VGroup(
+                            Item('graph_stagger_x', label='Stagger horizontal'),
+                            Item('graph_stagger_y', label='Stagger vertical')
+                        ),
+                        UItem('plot_graph'),
+                        label='Corr. graph'
+                    )
                 ),
                 VGroup(
                     Item('estimator', label='Estimator'),

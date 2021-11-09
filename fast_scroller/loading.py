@@ -282,6 +282,7 @@ class VisLauncher(HasTraits):
         v_win = VisWrapper(new_vis, x_scale=x_scale, chan_map=chan_map,
                            y_spacing=self.offset, modules=modules, recording=file_name)
         view = v_win.default_traits_view()
+        # TODO: it would be nice to be able to directly call launch() without first showing *this* object's panel
         view.kind = 'live'
         ui = v_win.edit_traits(view=view)
         return v_win
