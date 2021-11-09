@@ -5,6 +5,7 @@ from .base import VisModule
 from .animation import AnimateInterval
 from .interval_plot import IntervalTraces
 from .spatial_field import SpatialVariance, ArrayVarianceTool
+from .spatial_extra import ExtraSpatialVariance
 from .spectra import IntervalSpectrum
 from .spectrogram import IntervalSpectrogram
 from .time_stamps import Timestamps
@@ -17,6 +18,7 @@ from .series_filters import SeriesFiltering
 __all__ = ['AnimateInterval',
            'IntervalTraces',
            'SpatialVariance',
+           'ExtraSpatialVariance',
            'ArrayVarianceTool',
            'IntervalSpectrum',
            'IntervalSpectrogram',
@@ -51,7 +53,8 @@ class YRange(VisModule):
 
 ana_modules = {
     'Stacked traces plot': IntervalTraces,
-    'Spatial variance tool': SpatialVariance,
+    'Spatial variance': SpatialVariance,
+    'Spatial variance (dev)': ExtraSpatialVariance,
     'Power spectrum': IntervalSpectrum,
     'Spectrogram': IntervalSpectrogram,
     'Animator': AnimateInterval,
@@ -63,4 +66,9 @@ ana_modules = {
     }
 
 
-default_modules = ('Stacked traces plot', 'Power spectrum', 'Navigators', 'Animator', 'Band power map', 'Spectrogram')
+default_modules = ('Stacked traces plot',
+                   'Power spectrum',
+                   'Navigators',
+                   'Animator',
+                   'Spatial variance',
+                   'Spectrogram')
