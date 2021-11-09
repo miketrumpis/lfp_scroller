@@ -509,15 +509,16 @@ class ExtraSpatialVariance(SpatialVariance):
             Ct /= np.outer(nrm, nrm)
 
         chan_map = self.chan_map
+        # stcov is a time-lagged sequence of 2D autocovariance (lag-y by lag-x)
         stcov = list()
         for Ct_ in tqdm(Ct, desc='Centering S-T kernels'):
             stcov.append(spatial_autocovariance(Ct_, chan_map, mean=True))
-        stcov = np.array([np.nanmean(s_, axis=0) for s_ in stcov])
+        stcov = np.array(stcov)
         y, x = stcov.shape[-2:]
         midx = int(x / 2)
-        xx = (np.arange(x) - midx) * chan_map.pitch
+        xx = (np.arange(x) - midx) * chan_map.dx
         midy = int(y / 2)
-        yy = (np.arange(y) - midy) * chan_map.pitch
+        yy = (np.arange(y) - midy) * chan_map.dy
         for n in range(N):
             stcov[n, midy, midx] = np.mean(Ct[n].diagonal())
 
