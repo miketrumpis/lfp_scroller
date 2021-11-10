@@ -1,7 +1,7 @@
 from collections import OrderedDict
 import numpy as np
 
-from pyqtgraph.Qt import QtGui
+from pyqtgraph.Qt import QtWidgets
 
 import matplotlib as mpl
 from matplotlib.figure import Figure
@@ -34,7 +34,7 @@ colormaps = sorted(colormaps)
 # https://stackoverflow.com/questions/12459811/how-to-embed-matplotlib-in-pyqt-for-dummies
 
 
-class SimpleFigure(QtGui.QDialog):
+class SimpleFigure(QtWidgets.QWidget):
     def __init__(self, parent=None, **fig_kwargs):
         super(SimpleFigure, self).__init__(parent)
 
@@ -50,7 +50,7 @@ class SimpleFigure(QtGui.QDialog):
         self.toolbar = NavigationToolbar(self.canvas, self)
 
         # set the layout
-        layout = QtGui.QVBoxLayout()
+        layout = QtWidgets.QVBoxLayout()
         layout.addWidget(self.canvas)
         layout.addWidget(self.toolbar)
         self.setLayout(layout)
