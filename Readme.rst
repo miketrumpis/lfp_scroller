@@ -54,7 +54,7 @@ For usage, see "docs" directory.
 
 
 .. _ecogdata: https://github.com/miketrumpis/ecogdata
-.. _ecoglib: https://bitbucket.org/tneuro/ecoglib/src/master/
+.. _ecoglib: https://github.com/miketrumpis/ecoglib
 .. _HDF5: https://www.h5py.org/
 .. _pyqtgraph: http://www.pyqtgraph.org/
 .. _traitsui: http://docs.enthought.com/traitsui/
