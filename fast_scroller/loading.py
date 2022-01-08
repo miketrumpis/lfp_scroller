@@ -25,7 +25,7 @@ from ecoglib.signal_testing import interactive_mask
 from .h5scroller import FastScroller
 from .h5data import h5mean
 
-from .data_files import Mux7FileData, OpenEphysFileData, BlackrockFileData, \
+from .data_files import Mux7FileData, OpenEphysFileData, SIOpenEphysFileData, BlackrockFileData, \
      FileData, BatchFilesTool, ActiveArrayFileData, RHDFileData
 from .filtering import FilterPipeline
 from .new_scroller import VisWrapper
@@ -65,6 +65,8 @@ def assign_file_from_headstage(headstage: str) -> FileData:
         fd = Mux7FileData(gain=3)
     elif headstage == 'stim v4':
         fd = Mux7FileData(gain=4)
+    elif headstage == 'si oephys':
+        fd = SIOpenEphysFileData()
     elif headstage == 'intan (oephys)':
         fd = OpenEphysFileData()
     elif headstage == 'intan (rhd)':
@@ -123,7 +125,7 @@ class VisLauncher(HasTraits):
     max_window_width = Range(low='_min_win', high='_max_win', value=60)
     headstage = Enum('mux7',
                      ('mux3', 'mux5', 'mux6', 'mux7',
-                      'stim v4', 'intan (oephys)', 'intan (rhd)',
+                      'stim v4', 'SI oephys', 'intan (oephys)', 'intan (rhd)',
                       'blackrock', 'active', 'unknown'))
     chan_map = Enum(available_chan_maps[0], available_chan_maps)
 
@@ -146,10 +148,8 @@ class VisLauncher(HasTraits):
         if not self.file_data or not self.file_data.file:
             return 100
         try:
-            with h5py.File(self.file_data.file, 'r') as h5:
-                #Fs = h5[self.file_data.fs_field].value
-                Fs = self.file_data.Fs
-                array_size = h5[self.file_data.data_field].shape
+            Fs = self.file_data.Fs
+            array_size = self.file_data.array_size
             bytes_per_sec = Fs * array_size[0] * 8
             mx = int(MEM_CAP / bytes_per_sec)
             array_len = int(array_size[1] / Fs) + 1
@@ -240,16 +240,10 @@ class VisLauncher(HasTraits):
         if isinstance(self.file_data, ActiveArrayFileData) and self.file_data.is_transpose:
             self.file_data.create_transposed()
             print(self.file_data.file)
-
-        with h5py.File(self.file_data.file, 'r') as h5:
-            #x_scale = h5[self.file_data.fs_field].value ** -1.0
-            x_scale = self.file_data.Fs ** -1.0
-            array_size = h5[self.file_data.data_field].shape[0]
+        x_scale = self.file_data.Fs ** -1
         num_vectors = len(chan_map) + len(nc)
-
         data_channels = [self.file_data.data_channels[i]
                          for i in range(num_vectors) if i not in nc]
-
         # permute  channels to stack rows
         chan_idx = list(zip(*chan_map.to_mat()))
         chan_order = chan_map.lookup(*list(zip( *sorted(chan_idx)[::-1])))
@@ -264,11 +258,8 @@ class VisLauncher(HasTraits):
             data_channels, chan_map = \
               self._get_screen(array, data_channels, chan_map, x_scale**-1.0)
             
-        rm = np.zeros( (array_size,), dtype='?' )
-        rm[data_channels] = True
-              
-
-        nav = h5mean(array.file_array, 0, rowmask=rm)
+        rowmask = self.file_data.data_channels
+        nav = h5mean(array.file_array, 0, rowmask=rowmask)
         nav *= self.file_data.y_scale
 
         modules = [ana_modules[k] for k in self.module_set]

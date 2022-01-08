@@ -9,6 +9,7 @@ from scipy.signal import detrend
 import h5py
 from tqdm import tqdm
 import json
+from spikeinterface.extractors import OpenEphysLegacyRecordingExtractor
 
 from traits.api import Instance, Button, HasTraits, File, Float, \
      Str, Property, List, Enum, Int, Bool, on_trait_change, Directory, \
@@ -24,7 +25,7 @@ from ecogdata.devices.load.active_electrodes import get_daq_unmix, pitch_lookup
 from ecogdata.filt.time import downsample
 from ecogdata.channel_map import ChannelMap
 
-from .h5data import FilteredReadCache, h5mean, ReadCache, \
+from .h5data import FilteredReadCache, h5mean, ReadCache, ExtractorWrapper, \
      DCOffsetReadCache, CommonReferenceReadCache, interpolate_blanked, H5Chunks, passthrough
 from .filtering import FilterPipeline, pipeline_factory
 from .helpers import Error, PersistentWindow
@@ -57,6 +58,7 @@ class FileData(HasTraits):
     Fs = Property(depends_on='file')
     downsample = Button('Downsample')
     ds_rate = Int(10)
+    array_size = Property(depends_on='file,data_field')
 
     def _get_Fs(self):
         try:
@@ -66,17 +68,23 @@ class FileData(HasTraits):
             return None
 
     def _get_data_channels(self):
+        shape = self.array_size
+        if not shape:
+            return list()
+        return list(range(shape[0]))
+
+    def _get_array_size(self):
         if not os.path.exists(self.file):
-            return []
+            return ()
         try:
             with h5py.File(self.file, 'r') as f:
                 if self.data_field in f:
-                    return list(range(f[self.data_field].shape[0]))
+                    return f[self.data_field].shape
                 else:
-                    return []
+                    return ()
         except IOError:
-            return []
-        
+            return ()
+
     def _compose_arrays(self, filter):
         # default is just a wrapped array
         h5 = h5py.File(self.file, 'r')
@@ -317,6 +325,82 @@ class BlackrockFileData(FileData):
                 return f[self.fs_field][()].squeeze()
         except:
             return None
+
+# TODO: make a open ephys variance that uses spikeinterface/neo to map the file..
+#  then the _compose_array method will just return something that maps __getitem__ to get_traces()
+class SIOpenEphysFileData(FileData):
+    file = Directory(exists=True)
+    y_scale = Float(1.95e-7)
+    data_field = Property
+    fs_field = Property
+    _extractor: OpenEphysLegacyRecordingExtractor=None
+
+    @on_trait_change('file')
+    def _update_extractor(self):
+        if not self.file:
+            self._extractor = None
+            return
+        if self._extractor is not None:
+            old_path = self._extractor.neo_reader.dirname
+        else:
+            old_path = ''
+        if old_path != self.file:
+            self._extractor = OpenEphysLegacyRecordingExtractor(self.file, stream_id='CH')
+
+    def _get_data_field(self):
+        return 'CH'
+
+    def _get_fs_field(self):
+        return ''
+
+    def _get_Fs(self):
+        if self._extractor is None:
+            return None
+        return self._extractor.get_sampling_frequency()
+
+    def _get_data_channels(self):
+        if not os.path.exists(self.file):
+            return []
+        if self._extractor is None:
+            return []
+        else:
+            return list(range(self._extractor.get_num_channels()))
+
+    def _get_array_size(self):
+        if self._extractor is None:
+            return ()
+        return (len(self.data_channels), self._extractor.get_num_samples())
+
+    def _compose_arrays(self, filter):
+        si_wrap = ExtractorWrapper(self._extractor)
+        array = filter(si_wrap)
+        # # default is just a wrapped array
+        # h5 = h5py.File(self.file, 'r')
+        # array = filter(h5[self.data_field])
+        if self.zero_windows:
+            array = FilteredReadCache(array, partial(detrend, type='constant'))
+        elif self.car_windows:
+            array = CommonReferenceReadCache(array)
+        else:
+            array = ReadCache(array)
+        return array
+
+    def default_traits_view(self):
+        v = super().default_traits_view()
+        # Unlink handler
+        v.handler = None
+        vg = v.content.content[0]
+        # get rid of data and samp rate field info
+        vg.content.pop(1)
+        # get rid of the downsample stuff in the parent view
+        final_group = vg.content[-1]
+        new_list = list()
+        for item in final_group.content:
+            if item.name in ('downsample', 'ds_rate'):
+                continue
+            new_list.append(item)
+        final_group.content = new_list
+        return v
 
 
 class OpenEphysFileData(FileData):

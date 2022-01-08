@@ -4,8 +4,11 @@ from scipy.signal import lfilter, lfilter_zi, hilbert
 from scipy.interpolate import interp1d
 import h5py
 from tqdm import tqdm
+from typing import Union
+from spikeinterface.extractors.neoextractors.neobaseextractor import NeoBaseRecordingExtractor
 from ecogdata.util import input_as_2d
 from ecogdata.util import nextpow2
+from ecogdata.datasource.array_abstractions import unpack_ellipsis, slice_to_range, range_to_slice
 
 
 def h5mean(array, axis, rowmask=(), start=0, stop=None):
@@ -18,7 +21,10 @@ def h5mean(array, axis, rowmask=(), start=0, stop=None):
         stop = shape[1]
     if axis==1:
         if len(rowmask):
-            mn_size = rowmask.sum()
+            rowmask = np.asarray(rowmask)
+            if rowmask.dtype.char == '?':
+                rowmask = np.where(rowmask)[0]
+            mn_size = len(rowmask)
         else:
             mn_size = shape[0]
     else:
@@ -182,10 +188,44 @@ class DCOffsetReadCache(FilteredReadCache):
         self.offsets = offsets
 
 
+class ExtractorWrapper:
+    """
+    Make a spikeinterface SpikeExtractor look enough like an h5py Dataset to work in this module
+    """
+
+    def __init__(self, extractor: NeoBaseRecordingExtractor):
+        self.ex = extractor
+        self.shape = (self.ex.get_num_channels(), self.ex.get_num_samples())
+        from neo.rawio.openephysrawio import RECORD_SIZE
+        # record size is 1024 (I think).. a chunk size of 100 records seems good
+        self.chunks = (self.shape[0], 100 * RECORD_SIZE)
+        self.dtype = np.dtype(np.int16)
+
+    def __getitem__(self, sl):
+        # arrays are sliced as if they are channel x time..
+        sl = unpack_ellipsis(sl, self.shape)
+        chan_slice = sl[0]
+        if chan_slice is None or chan_slice == slice(None):
+            channel_ids = None
+        else:
+            channel_ids = list(slice_to_range(chan_slice), self.shape[0])
+        if len(sl) > 1:
+            samp_slice = sl[1]
+        else:
+            samp_slice = slice(None)
+        start_frame = samp_slice.start
+        end_frame = samp_slice.stop
+        frame_step = samp_slice.step if samp_slice.step else 1
+        traces = self.ex.get_traces(channel_ids=channel_ids, start_frame=start_frame, end_frame=end_frame)
+        traces = traces[::frame_step].T
+        return traces
+
+
 class H5Chunks(object):
     """Iterates an HDF5 over "chunks" with ndarray-like access"""
 
-    def __init__(self, h5array, out=None, axis=1, min_chunk=None, slices=False, reverse=False):
+    def __init__(self, h5array: Union[h5py.Dataset, ExtractorWrapper], out: h5py.Dataset=None, axis: int=1,
+                 min_chunk: int=None, slices: bool=False, reverse: bool=False):
         """
         Efficient block iterator for HDF5 arrays (streams over chunking sizes to read whole blocks at a time).
 
@@ -483,7 +523,8 @@ def block_itr_factory(x, **kwargs):
         return H5Chunks(x, **kwargs)
 
 
-def bfilter(b, a, x, axis=-1, out=None, filtfilt=False):
+def bfilter(b: np.ndarray, a: np.ndarray, x: Union[ExtractorWrapper, h5py.Dataset],
+            axis: int=-1, out: h5py.Dataset=None, filtfilt: bool=False):
     """
     Apply linear filter inplace over array x streaming from disk.
 
@@ -520,6 +561,7 @@ def bfilter(b, a, x, axis=-1, out=None, filtfilt=False):
     zi_sl = np.s_[None, :] if axis in (-1, 1) else np.s_[:, None]
     xc_sl = np.s_[:, :1] if axis in (-1, 1) else np.s_[:1, :]
     fir_size = len(b)
+    needs_cast = x.dtype in np.sctypes['int'] + np.sctypes['uint']
     if out is None:
         if isinstance(x, (list, tuple)):
             out = 'same'
@@ -528,6 +570,8 @@ def bfilter(b, a, x, axis=-1, out=None, filtfilt=False):
     itr = block_itr_factory(x, axis=axis, out=out, min_chunk=fir_size)
     for n, xc in tqdm(enumerate(itr), desc='Blockwise filtering',
                       leave=True, total=itr.n_blocks):
+        if needs_cast:
+            xc = xc.astype('d')
         if n == 0:
             zi = zii[zi_sl] * xc[xc_sl]
         xcf, zi = lfilter(b, a, xc, axis=axis, zi=zi)
