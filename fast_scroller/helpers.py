@@ -28,6 +28,12 @@ class _window_holder:
 
 class PersistentWindow(HasTraits):
 
+    def configure_traits(self, **args):
+        ui = super(PersistentWindow, self).configure_traits(**args)
+        del_ui = _window_holder(ui)
+        ui.control.destroyed.connect(del_ui)
+        return ui
+
     def edit_traits(self, **args):
         ui = super(PersistentWindow, self).edit_traits(**args)
         del_ui = _window_holder(ui)
