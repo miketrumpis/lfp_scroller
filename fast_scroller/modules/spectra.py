@@ -21,6 +21,7 @@ class IntervalSpectrum(PlotsInterval):
     avg_spec = Bool(True)
     sem = Bool(True)
     adaptive = Bool(True)
+    loglog = Bool(False)
     label = Str
     plot = Button('Plot')
 
@@ -56,6 +57,7 @@ class IntervalSpectrum(PlotsInterval):
         fig, ax = self._get_fig()
         label = self.label if self.label else 't ~ {0:.1f}'.format(x.mean())
         plot_count = self._axplots[ax]
+        plot_fun = ax.loglog if self.loglog else ax.semilogy
         if self.avg_spec:
             jn = Jackknife(np.log(pxx), axis=0)
             mn, se = jn.estimate(np.mean, se=True)
@@ -67,12 +69,12 @@ class IntervalSpectrum(PlotsInterval):
             ## se = l_pxx.std(0) / np.sqrt(len(l_pxx))
             se = np.exp(mn - se), np.exp(mn + se)
             filled_interval(
-                ax.semilogy, fx, np.exp(mn), se,
+                plot_fun, fx, np.exp(mn), se,
                 color=self._colors[plot_count], label=label, ax=ax
             )
             ax.legend()
         else:
-            lns = ax.semilogy(
+            lns = plot_fun(
                 fx, pxx.T, lw=.25, color=self._colors[plot_count]
             )
             ax.legend(lns[:1], (label,))
@@ -95,6 +97,7 @@ class IntervalSpectrum(PlotsInterval):
                     Item('adaptive', label='Adaptive MTM'),
                 ),
                 HGroup(
+                    Item('loglog', label='Log-Log'),
                     Item('avg_spec', label='Plot avg'),
                     Item('sem', label='Use S.E.M.'),
                     Item('new_figure', label='Plot in new figure')
