@@ -6,11 +6,13 @@ pyqtgraph / traitsui vis tool.
 
 import os
 import numpy as np
+import pandas as pd
 import h5py
 import pickle
+from scipy.spatial.distance import pdist
 
 from traits.api import Instance, Button, HasTraits, Float, on_trait_change, \
-     Str, List, Enum, Int, Bool, cached_property, Range, Property
+     Str, List, Enum, Int, Bool, cached_property, Range, Property, File
 from traitsui.api import View, Group, VGroup, HGroup, UItem, Item, \
      Label, Handler, Tabbed, SetEditor
 from pyface.api import MessageDialog
@@ -53,6 +55,17 @@ def find_pickled_map(hdf_file):
     if chan_map is None:
         raise NoPickleError
     return chan_map
+
+
+def map_from_table(csv_file):
+    # fairly rigid
+    table = pd.read_csv(csv_file, index_col=0).sort_values('channels')
+    rows = table.rows
+    cols = table.cols
+    distances = pdist(np.c_[table.x_mm, table.y_mm])
+    pitch = distances.min()
+    m = ChannelMap.from_index(list(zip(rows, cols)), None, pitch=pitch)
+    return m
 
 
 def assign_file_from_headstage(headstage: str) -> FileData:
@@ -104,7 +117,7 @@ _subset_shortcuts = {'psv_244/newintan': ['intan64_new'] * 4,
 available_chan_maps = sorted(electrode_maps.keys()) + \
                       sorted(multi_arm_electrodes.keys()) + \
                       list(_subset_shortcuts.keys()) + \
-                      ['active', 'pickled', 'unknown', 'settable']
+                      ['active', 'csv file', 'pickled', 'unknown', 'settable']
 
 
 class VisLauncher(HasTraits):
@@ -128,6 +141,7 @@ class VisLauncher(HasTraits):
                       'stim v4', 'SI oephys', 'intan (oephys)', 'intan (rhd)',
                       'blackrock', 'active', 'unknown'))
     chan_map = Enum(available_chan_maps[0], available_chan_maps)
+    loadable_map = File(filter=['*.csv'], exists=True)
 
     n_chan = Int
     skip_chan = Str
@@ -232,6 +246,13 @@ class VisLauncher(HasTraits):
             except NoPickleError:
                 MessageDialog(message='No pickled ChannelMap').open()
                 return
+        elif self.chan_map == 'csv file':
+            try:
+                chan_map = map_from_table(self.loadable_map)
+                nc = []
+            except FileNotFoundError:
+                MessageDialog(message='Select a CSV file in the browser').open()
+                return
         else:
             chan_map, nc, rf = get_electrode_map(self.chan_map)
             nc = list(set(nc).union(rf))
@@ -289,10 +310,8 @@ class VisLauncher(HasTraits):
                         Label('Headstage'),
                         UItem('headstage'),
                         ),
-                    VGroup(
-                        Label('Channel map'),
-                        UItem('chan_map')
-                        ),
+                    VGroup(Label('Channel map'), UItem('chan_map'),
+                           UItem('loadable_map', enabled_when='chan_map=="csv file"')),
                     UItem('concat_tool_launch'),
                     HGroup(
                         VGroup(

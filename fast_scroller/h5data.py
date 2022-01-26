@@ -201,6 +201,9 @@ class ExtractorWrapper:
         self.chunks = (self.shape[0], 100 * RECORD_SIZE)
         self.dtype = np.dtype(np.int16)
 
+    def __len__(self):
+        return self.shape[0]
+
     def __getitem__(self, sl):
         # arrays are sliced as if they are channel x time..
         sl = unpack_ellipsis(sl, self.shape)
