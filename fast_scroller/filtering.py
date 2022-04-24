@@ -142,7 +142,7 @@ class NotchMenu(LTIFilterMenu):
         return notch(self.notch, Fs, self.nwid, nzo=self.nzo)
 
     def validate_params(self, Fs):
-        notch_valid = notch < Fs
+        notch_valid = self.notch < Fs
         return notch_valid
 
 
