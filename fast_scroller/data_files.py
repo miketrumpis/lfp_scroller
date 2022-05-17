@@ -27,7 +27,7 @@ from ecogdata.channel_map import ChannelMap
 
 from .h5data import FilteredReadCache, h5mean, ReadCache, ExtractorWrapper, \
      DCOffsetReadCache, CommonReferenceReadCache, interpolate_blanked, H5Chunks, passthrough
-from .filtering import FilterPipeline, pipeline_factory
+from .filtering import FilterPipeline, PipelineFactory
 from .helpers import Error, PersistentWindow
 
 
@@ -85,10 +85,10 @@ class FileData(HasTraits):
         except IOError:
             return ()
 
-    def _compose_arrays(self, filter):
+    def _compose_arrays(self, filter: PipelineFactory):
         # default is just a wrapped array
         h5 = h5py.File(self.file, 'r')
-        array = filter(h5[self.data_field])
+        array = filter.filter_pipeline(h5[self.data_field])
         if self.zero_windows:
             array = FilteredReadCache(array, partial(detrend, type='constant'))
         elif self.car_windows:
@@ -371,9 +371,9 @@ class SIOpenEphysFileData(FileData):
             return ()
         return (len(self.data_channels), self._extractor.get_num_samples())
 
-    def _compose_arrays(self, filter):
+    def _compose_arrays(self, filter: PipelineFactory):
         si_wrap = ExtractorWrapper(self._extractor)
-        array = filter(si_wrap)
+        array = filter.filter_pipeline(si_wrap)
         # # default is just a wrapped array
         # h5 = h5py.File(self.file, 'r')
         # array = filter(h5[self.data_field])
@@ -528,12 +528,12 @@ class Mux7FileData(FileData):
         except IOError:
             return []
     
-    def _compose_arrays(self, filter):
+    def _compose_arrays(self, filter: PipelineFactory):
         if not self.dc_subtract or self.zero_windows or self.car_windows:
             print('not removing dc')
             return super(Mux7FileData, self)._compose_arrays(filter)
         f = h5py.File(self.file, 'r')
-        array = filter(f[self.data_field])
+        array = filter.filter_pipeline(f[self.data_field])
         mn_level = h5mean(array, 1, start=int(3e4))
         array = DCOffsetReadCache(array, mn_level)
         return array
@@ -609,11 +609,11 @@ def concatenate_hdf5_files(files, new_file, filters=None):
     data_field = files[0].data_field
     if filters is not None and len(filters):
         print('Concatenating with given filters')
-        filters = filters.make_pipeline(samp_res, output_file=new_file)
+        filters = filters.make_pipeline(samp_res, output_file=new_file).filter_pipeline
     else:
         # in thise case, just create a new file using passthrough
         print('Concatenating with passthrough')
-        filters = pipeline_factory([passthrough], [None], output_file=new_file, data_field=data_field)
+        filters = PipelineFactory([passthrough], [None], output_file=new_file, data_field=data_field).filter_pipeline
 
     with ExitStack() as stack:
         hdf_files = [stack.enter_context(h5py.File(fd.file, 'r')) for fd in files]
@@ -660,7 +660,7 @@ def handoff_filter_hdf5_files(files, save_path, filters):
         output_files.append(save_file)
 
     if filters is not None and len(filters):
-        filters = filters.make_pipeline(files[0].Fs, output_file='same')
+        filters = filters.make_pipeline(files[0].Fs, output_file='same').filter_pipeline
 
     with ExitStack() as stack:
         # Now opening HDF5 files in r+ mode to support write-back
@@ -682,9 +682,9 @@ def batch_filter_hdf5_files(files, save_path, filters):
         save_file = os.path.join(save_path, os.path.split(fd.file)[1])
         print('input file:', fd.file, 'output file:', save_file)
         if filters is not None:
-            fpipe = filters.make_pipeline(fd.Fs, output_file=save_file, data_field=fd.data_field)
+            fpipe = filters.make_pipeline(fd.Fs, output_file=save_file, data_field=fd.data_field).filter_pipeline
         else:
-            fpipe = pipeline_factory([], None)
+            fpipe = PipelineFactory([], None).filter_pipeline
         with h5py.File(fd.file, 'r') as fr:
             fpipe(fr[fd.data_field])
             # copy any other values from the last file?

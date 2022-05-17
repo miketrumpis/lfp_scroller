@@ -271,14 +271,19 @@ class H5Chunks(object):
         self.slices = slices
         self._output_source = out
 
-    def write_out(self, data):
+    def write_out(self, data, transpose=False):
         if self._output_source is None:
             print('No output defined!')
             return
+        if transpose:
+            data = data.T
+            sl = self._current_sl[::-1]
+        else:
+            sl = self._current_sl
         if self.reverse:
             # data is reversed
             data = data[:, ::-1] if self.axis == 1 else data[::-1, :]
-        self._output_source[self._current_sl] = data
+        self._output_source[sl] = data
 
     def __iter__(self):
         return self
@@ -600,10 +605,11 @@ def bfilter(b: np.ndarray, a: np.ndarray, x: Union[ExtractorWrapper, h5py.Datase
     return out
 
 
-def passthrough(x, y):
-    itr = block_itr_factory(x, axis=1, out=y)
+def passthrough(x, y, transpose=False):
+    axis = 0 if transpose else 1
+    itr = block_itr_factory(x, axis=axis, out=y)
     for xc in tqdm(itr, desc='Copying to output', leave=True, total=itr.n_blocks):
-        itr.write_out(xc)
+        itr.write_out(xc, transpose=transpose)
 
 
 @input_as_2d(in_arr=(0, 1))
