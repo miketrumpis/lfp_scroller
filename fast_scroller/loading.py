@@ -135,7 +135,7 @@ class VisLauncher(HasTraits):
     b = Button('Launch Visualization')
     offset = Enum(200, [0, 100, 200, 500, 1000, 2000, 5000])
     # max_window_width = Float(1200.0)
-    _max_win = Property(Float, depends_on='file_data.file')
+    _max_win = Property(Float, depends_on='file_data.file, file_data.data_field')
     _min_win = Int(30)
     max_window_width = Range(low='_min_win', high='_max_win', value=60)
     headstage = Enum('mux7',

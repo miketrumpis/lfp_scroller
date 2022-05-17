@@ -60,6 +60,8 @@ class NWBFileHandler(Handler):
                 if isinstance(series, ElectricalSeries):
                     es_list.append(name)
         self.fields = es_list
+        if info.object.data_field:
+            self.object_data_field_changed(info)
 
     def object_data_field_changed(self, info):
         if not len(info.object.file):
