@@ -13,7 +13,7 @@ from pyface.api import FileDialog, OK
 from ecogdata.filt.time.design import butter_bp, cheby1_bp, cheby2_bp, notch, ellip_bp, savgol
 from ecogdata.filt.time import ma_highpass
 
-from .h5data import bfilter, block_nan_filter, square_filter, abs_filter, hilbert_envelope_filter
+from .h5data import bfilter, block_nan_filter, passthrough, square_filter, abs_filter, hilbert_envelope_filter
 
 
 class ReportsTraits(HasTraits):
@@ -342,6 +342,102 @@ def pipeline_factory(f_list, filter_modes, output_file=None, data_field='data'):
     return run_list
 
 
+class PipelineFactory:
+
+    def __init__(self, filter_list: list, filter_modes: list, transpose_input: bool=False,
+                 output_file: str=None, data_field: str='data'):
+        """
+
+        Parameters
+        ----------
+        filter_list : list
+            List of filters that are either polynomial coefficients, or callable functions
+            with signature filt(input, output)
+        filter_modes : list
+            List of booleans that indicate filtfilt mode (n/a for callables,
+            but there must still be a placeholder)
+        transpose_input: bool
+            If True, do a first step to transpose to input to channels x time orientation
+        output_file : str
+            If given, the output file name
+        data_field : str
+            If given, the name of the data array in the output file
+
+        """
+        self.filter_list = filter_list
+        self.filter_modes = filter_modes
+        self.output_file = output_file
+        self.data_field = data_field
+        self.transpose = transpose_input
+
+    def get_x_props(self, x):
+        if isinstance(x, (list, tuple)):
+            time = sum([arr.shape[1] for arr in x])
+            chan = x[0].shape[0]
+            shape = (chan, time)
+            dtype = x[0].dtype
+            # TODO: handle case for concatenating on axis=0
+            return shape, dtype
+        return x.shape, x.dtype
+
+    def anonymous_copy_x(self, x):
+        with NamedTemporaryFile(mode='ab', dir='.') as f:
+            # This redundant f.file.close is needed by Windows before re-opening the file
+            f.file.close()
+            fw = h5py.File(f.name, 'w')
+            shape, dtype = self.get_x_props(x)
+            if self.transpose:
+                shape = shape[::-1]
+            y = fw.create_dataset(self.data_field, shape=shape, dtype=dtype, chunks=True)
+        return y
+
+    def copy_x(self, x):
+        fw = h5py.File(self.output_file, 'w')
+        shape, dtype = self.get_x_props(x)
+        if self.transpose:
+            shape = shape[::-1]
+        y = fw.create_dataset(self.data_field, shape=shape, dtype=dtype, chunks=True)
+        return y
+
+    @property
+    def filter_pipeline(self):
+        return self._filter_pipeline
+
+    def _filter_pipeline(self, x, axis=1):
+        # simply return x if no filtering or copying is needed
+        if not (len(self.filter_list) or self.transpose):
+            return x
+        if self.output_file is not None:
+            if self.output_file.lower() == 'same':
+                y = 'same'
+            else:
+                y = self.copy_x(x)
+        else:
+            y = self.anonymous_copy_x(x)
+        # do a transpose passthrough if needed
+        if self.transpose:
+            passthrough(x, y, transpose=True)
+            x = y
+        # can return the transpose if there is no other filtering
+        if not len(self.filter_list):
+            return x
+        # call first filter to initialize y
+        if callable(self.filter_list[0]):
+            nf = self.filter_list[0]
+            nf(x, y)
+        else:
+            b, a = self.filter_list[0]
+            bfilter(b, a, x, axis=axis, out=y, filtfilt=self.filter_modes[0])
+        # cycle through the rest of the filters as y <- F(y)
+        for filt, ff_mode in zip(self.filter_list[1:], self.filter_modes[1:]):
+            if callable(filt):
+                filt(y, y)
+            else:
+                b, a = filt
+                bfilter(b, a, y, axis=axis, filtfilt=ff_mode)
+        return y
+
+
 class FilterPipeline(HasTraits):
     """List of filters that can be pipelined."""
     filters = List(Filter)
@@ -392,7 +488,7 @@ class FilterPipeline(HasTraits):
         if loader.open() == OK:
             self.load_pipeline(loader.path)
 
-    def make_pipeline(self, Fs, **kwargs):
+    def make_pipeline(self, Fs, **kwargs) -> PipelineFactory:
         valid_filters = list()
         for f in self.filters:
             if f.filt_menu is None or not f.filt_menu.validate_params(Fs):
@@ -407,7 +503,8 @@ class FilterPipeline(HasTraits):
                 filtfilt.append(f.filtfilt)
             except AttributeError:
                 filtfilt.append(None)
-        return pipeline_factory(filters, filtfilt, **kwargs)
+        # return pipeline_factory(filters, filtfilt, **kwargs)
+        return PipelineFactory(filters, filtfilt, **kwargs)
 
     def _add_filter_fired(self):
         self.filters.append(Filter(filt_type=self.filt_type))
