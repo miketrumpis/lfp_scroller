@@ -28,7 +28,7 @@ from .h5scroller import FastScroller
 from .h5data import h5mean
 
 from .data_files import Mux7FileData, OpenEphysFileData, SIOpenEphysFileData, BlackrockFileData, \
-     FileData, BatchFilesTool, ActiveArrayFileData, RHDFileData
+     FileData, BatchFilesTool, ActiveArrayFileData, RHDFileData, NWBFileData
 from .filtering import FilterPipeline
 from .new_scroller import VisWrapper
 from .modules import ana_modules, default_modules
@@ -88,6 +88,8 @@ def assign_file_from_headstage(headstage: str) -> FileData:
         fd = BlackrockFileData()
     elif headstage == 'active':
         fd = ActiveArrayFileData()
+    elif headstage == 'nwb':
+        fd = NWBFileData()
     else:
         fd = FileData()
     return fd
@@ -98,11 +100,11 @@ class HeadstageHandler(Handler):
     def object_headstage_changed(self, info):
         if not info.initialized and info.object.file_data:
             return
-        hs = info.object.headstage
+        hs = info.object.headstage.lower()
         info.object.file_data = assign_file_from_headstage(hs)
         # also update channel map for this case
-        if hs == 'active':
-            info.object.chan_map = 'active'
+        if hs in ('nwb', 'active'):
+            info.object.chan_map = 'implicit'
 
 
 _subset_chan_maps = ('psv_244_mux1', 'psv_244_mux3') + tuple(multi_arm_electrodes.keys())
@@ -117,7 +119,7 @@ _subset_shortcuts = {'psv_244/newintan': ['intan64_new'] * 4,
 available_chan_maps = sorted(electrode_maps.keys()) + \
                       sorted(multi_arm_electrodes.keys()) + \
                       list(_subset_shortcuts.keys()) + \
-                      ['active', 'csv file', 'pickled', 'unknown', 'settable']
+                      ['implicit', 'csv file', 'pickled', 'unknown', 'settable']
 
 
 class VisLauncher(HasTraits):
@@ -139,7 +141,7 @@ class VisLauncher(HasTraits):
     headstage = Enum('mux7',
                      ('mux3', 'mux5', 'mux6', 'mux7',
                       'stim v4', 'SI oephys', 'intan (oephys)', 'intan (rhd)',
-                      'blackrock', 'active', 'unknown'))
+                      'blackrock', 'active', 'NWB', 'unknown'))
     chan_map = Enum(available_chan_maps[0], available_chan_maps)
     loadable_map = File(filter=['*.csv'], exists=True)
 
@@ -224,7 +226,7 @@ class VisLauncher(HasTraits):
             geo = list(map(int, self.elec_geometry.split(',')))
             n_sig_chan = self.n_chan - len(nc)
             chan_map = ChannelMap(np.arange(n_sig_chan), geo)
-        elif self.chan_map == 'active':
+        elif isinstance(self.file_data, (NWBFileData, ActiveArrayFileData)):
             chan_map, nc = self.file_data.make_channel_map()
         elif self.chan_map in _subset_chan_maps:
             cnx = self.chan_map_connectors.split(',')

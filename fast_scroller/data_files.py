@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from glob import glob
 from functools import partial
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from tempfile import NamedTemporaryFile
 import numpy as np
 from scipy.signal import detrend
@@ -10,6 +10,9 @@ import h5py
 from tqdm import tqdm
 import json
 from spikeinterface.extractors import OpenEphysLegacyRecordingExtractor
+from pynwb import NWBFile, NWBHDF5IO
+from pynwb.ecephys import ElectricalSeries
+
 
 from traits.api import Instance, Button, HasTraits, File, Float, \
      Str, Property, List, Enum, Int, Bool, on_trait_change, Directory, \
@@ -41,6 +44,29 @@ class FileHandler(Handler):
         h5 = h5py.File(info.object.file, 'r')
         self.fields = list(h5.keys())
         h5.close()
+
+
+class NWBFileHandler(Handler):
+
+    fields = List(Str)
+    def object_file_changed(self, info):
+        if not len(info.object.file):
+            self.fields = []
+            return
+        with NWBHDF5IO(info.object.file, 'r') as io:
+            nwbfile = io.read()
+            es_list = []
+            for name, series in nwbfile.acquisition.items():
+                if isinstance(series, ElectricalSeries):
+                    es_list.append(name)
+        self.fields = es_list
+
+    def object_data_field_changed(self, info):
+        if not len(info.object.file):
+            return
+        with info.object._get_eseries(info.object.data_field, close_io=True) as es:
+            info.object.Fs = es.rate
+            info.object.y_scale = es.conversion
 
 
 class FileData(HasTraits):
@@ -161,6 +187,78 @@ class FileData(HasTraits):
             resizable=True
         )
         return view
+
+
+class NWBFileData(FileData):
+    file = File(filter=['*.nwb'], exists=True)
+    data_field = Str
+    Fs = Float(1.0)
+    _series_names = List([])
+
+    @contextmanager
+    def _get_eseries(self, electrical_series_name: str, close_io: bool=True):
+        with ExitStack() as stack:
+            if close_io:
+                io = stack.enter_context(NWBHDF5IO(self.file, 'r'))
+            else:
+                io = NWBHDF5IO(self.file, 'r')
+            nwbfile = io.read()
+            es_dict = {i.name: i for i in nwbfile.all_children() if isinstance(i, ElectricalSeries)}
+            assert electrical_series_name in es_dict, 'electrical series name not present in nwbfile'
+            es = es_dict[electrical_series_name]
+            yield es
+        # return es
+
+    def _get_data_channels(self):
+        with self._get_eseries(self.data_field, close_io=True) as series:
+            electrodes = series.electrodes.to_dataframe()
+        data_channels = np.where(~np.isnan(electrodes.row))[0]
+        return data_channels
+
+    def _get_array_size(self):
+        if not os.path.exists(self.file):
+            return ()
+        with self._get_eseries(self.data_field, close_io=True) as series:
+            shape = series.data.shape
+        return shape[::-1]
+
+    def make_channel_map(self):
+        with self._get_eseries(self.data_field, close_io=True) as series:
+            electrodes = series.electrodes.to_dataframe()
+        row = electrodes.row.values
+        col = electrodes.col.values
+        ref_type = np.isnan(row)
+        row = row[~ref_type].astype('i')
+        col = col[~ref_type].astype('i')
+        cm = ChannelMap.from_index(list(zip(row, col)), None)
+        ref_idx = np.where(ref_type)[0]
+        return cm, ref_idx
+
+    def _compose_arrays(self, filter: PipelineFactory):
+        # default is just a wrapped array
+        # h5 = h5py.File(self.file, 'r')
+        with self._get_eseries(self.data_field, close_io=False) as series:
+            pass
+        array = series.data
+        filter.transpose = True
+        array = filter.filter_pipeline(array)
+        if self.zero_windows:
+            array = FilteredReadCache(array, partial(detrend, type='constant'))
+        elif self.car_windows:
+            array = CommonReferenceReadCache(array)
+        else:
+            array = ReadCache(array)
+        return array
+
+    def default_traits_view(self):
+        v = super().default_traits_view()
+        v.handler = NWBFileHandler
+        hgroup = v.content.content[0].content[1]
+        # Get rid of the fs_field element (this is determined by the Timeseries object)
+        hgroup.content.pop(index=1)
+        # Change y_scale to read-only
+        v.content.content[0].content[3] = UItem('y_scale', style='readonly')
+        return v
 
 
 class RHDFileData(FileData):
