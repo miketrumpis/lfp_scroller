@@ -1,4 +1,5 @@
 import os
+from itertools import product
 from pathlib import Path
 from glob import glob
 from functools import partial
@@ -10,7 +11,7 @@ import h5py
 from tqdm import tqdm
 import json
 from spikeinterface.extractors import OpenEphysLegacyRecordingExtractor
-from pynwb import NWBFile, NWBHDF5IO
+from pynwb import NWBHDF5IO
 from pynwb.ecephys import ElectricalSeries
 
 
@@ -195,7 +196,7 @@ class NWBFileData(FileData):
     file = File(filter=['*.nwb'], exists=True)
     data_field = Str
     Fs = Float(1.0)
-    _series_names = List([])
+    map_nonsignal_channels = Bool(False)
 
     @contextmanager
     def _get_eseries(self, electrical_series_name: str, close_io: bool=True):
@@ -214,7 +215,10 @@ class NWBFileData(FileData):
     def _get_data_channels(self):
         with self._get_eseries(self.data_field, close_io=True) as series:
             electrodes = series.electrodes.to_dataframe()
-        data_channels = np.where(~np.isnan(electrodes.row))[0]
+        if self.map_nonsignal_channels:
+            data_channels = list(range(len(electrodes)))
+        else:
+            data_channels = np.where(~np.isnan(electrodes.row))[0]
         return data_channels
 
     def _get_array_size(self):
@@ -230,10 +234,24 @@ class NWBFileData(FileData):
         row = electrodes.row.values
         col = electrodes.col.values
         ref_type = np.isnan(row)
-        row = row[~ref_type].astype('i')
-        col = col[~ref_type].astype('i')
+        sig_row = row[~ref_type].astype('i')
+        sig_col = col[~ref_type].astype('i')
+        if self.map_nonsignal_channels:
+            grid_values = set(product(range(sig_row.max()), range(sig_col.max())))
+            unused_grid_iter = iter(sorted(list(grid_values - set(zip(sig_row, sig_col)))))
+            for ref_idx in np.where(ref_type)[0]:
+                fake_row, fake_col = next(unused_grid_iter)
+                print('ref channel', electrodes.index[ref_idx], 'going to', fake_row, fake_col)
+                row[ref_idx] = fake_row
+                col[ref_idx] = fake_col
+            col = col.astype('i')
+            row = row.astype('i')
+            ref_idx = []
+        else:
+            row = sig_row
+            col = sig_col
+            ref_idx = np.where(ref_type)[0]
         cm = ChannelMap.from_index(list(zip(row, col)), None)
-        ref_idx = np.where(ref_type)[0]
         return cm, ref_idx
 
     def _compose_arrays(self, filter: PipelineFactory):
@@ -258,6 +276,7 @@ class NWBFileData(FileData):
         hgroup = v.content.content[0].content[1]
         # Get rid of the fs_field element (this is determined by the Timeseries object)
         hgroup.content.pop(index=1)
+        hgroup.content.append(Item('map_nonsignal_channels', label='Include unmapped channels'))
         # Change y_scale to read-only
         v.content.content[0].content[3] = UItem('y_scale', style='readonly')
         return v
