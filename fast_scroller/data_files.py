@@ -353,43 +353,48 @@ class ActiveArrayFileData(FileData):
             shape = fr['data'].shape
         return shape[1] == nrow * ncol
 
-    def create_transposed(self, where='.'):
-        if not os.path.exists(self.file):
-            return
-        if not self.is_transpose:
-            return self.file
-        fname = os.path.split(self.file)[1]
-        fname, ext = os.path.splitext(fname)
-        # ds_fname = os.path.join( os.getcwd(), fname + '_ds.h5' )
-        with h5py.File(self.file, 'r') as h5, \
-                NamedTemporaryFile(mode='ab', dir=where,
-                                   suffix=fname + '.h5', delete=False) as f:
+    def _compose_arrays(self, filter: PipelineFactory):
+        if self.is_transpose:
+            filter.transpose = True
+        return super()._compose_arrays(filter)
 
-            arr = h5[self.data_field]
-            n_samp, n_chan = arr.shape
-            f.file.close()
-            fw = h5py.File(f.name, 'w')
-            y = fw.create_dataset(self.data_field, shape=(n_chan, n_samp),
-                                  dtype=arr.dtype, chunks=True)
-            # copy over other keys
-            for k in h5.keys():
-                if k not in (self.data_field,):
-                    try:
-                        fw[k] = h5[k][()]
-                    except (AttributeError, RuntimeError) as e:
-                        print('skipped key:', k)
-            # keep chunk size to ~ 200 MB
-            min_size = int(200e6 / 8 / n_chan)
-            chunk_iter = H5Chunks(h5['data'], axis=0, slices=True, min_chunk=min_size)
-            #for i in tqdm(range(n_chan), desc='Copying transpose'):
-            for sl in tqdm(chunk_iter, desc='Copying transpose'):
-                arr_rows = arr[sl]
-                # m = np.isnan(arr_row)
-                # if m.any():
-                #     arr_row = interpolate_blanked(arr_row, m, inplace=True)
-                y[sl[::-1]] = arr_rows.T
-        self.file = f.name
-        return f.name
+    # def create_transposed(self, where='.'):
+    #     if not os.path.exists(self.file):
+    #         return
+    #     if not self.is_transpose:
+    #         return self.file
+    #     fname = os.path.split(self.file)[1]
+    #     fname, ext = os.path.splitext(fname)
+    #     # ds_fname = os.path.join( os.getcwd(), fname + '_ds.h5' )
+    #     with h5py.File(self.file, 'r') as h5, \
+    #             NamedTemporaryFile(mode='ab', dir=where,
+    #                                suffix=fname + '.h5', delete=False) as f:
+    #
+    #         arr = h5[self.data_field]
+    #         n_samp, n_chan = arr.shape
+    #         f.file.close()
+    #         fw = h5py.File(f.name, 'w')
+    #         y = fw.create_dataset(self.data_field, shape=(n_chan, n_samp),
+    #                               dtype=arr.dtype, chunks=True)
+    #         # copy over other keys
+    #         for k in h5.keys():
+    #             if k not in (self.data_field,):
+    #                 try:
+    #                     fw[k] = h5[k][()]
+    #                 except (AttributeError, RuntimeError) as e:
+    #                     print('skipped key:', k)
+    #         # keep chunk size to ~ 200 MB
+    #         min_size = int(200e6 / 8 / n_chan)
+    #         chunk_iter = H5Chunks(h5['data'], axis=0, slices=True, min_chunk=min_size)
+    #         #for i in tqdm(range(n_chan), desc='Copying transpose'):
+    #         for sl in tqdm(chunk_iter, desc='Copying transpose'):
+    #             arr_rows = arr[sl]
+    #             # m = np.isnan(arr_row)
+    #             # if m.any():
+    #             #     arr_row = interpolate_blanked(arr_row, m, inplace=True)
+    #             y[sl[::-1]] = arr_rows.T
+    #     self.file = f.name
+    #     return f.name
 
     def make_channel_map(self):
         unmix = get_daq_unmix(self.daq, self.headstage, self.electrode)
