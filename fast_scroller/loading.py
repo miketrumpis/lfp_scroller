@@ -145,6 +145,7 @@ class VisLauncher(HasTraits):
     chan_map = Enum(available_chan_maps[0], available_chan_maps)
     loadable_map = File(filter=['*.csv'], exists=True)
 
+    channel_data_order = Bool(False)
     n_chan = Int
     skip_chan = Str
     elec_geometry = Str
@@ -259,21 +260,23 @@ class VisLauncher(HasTraits):
             chan_map, nc, rf = get_electrode_map(self.chan_map)
             nc = list(set(nc).union(rf))
 
-        # Check for transposed active data (coming from matlab)
-        if isinstance(self.file_data, ActiveArrayFileData) and self.file_data.is_transpose:
-            self.file_data.create_transposed()
-            print(self.file_data.file)
+        # # Check for transposed active data (coming from matlab)
+        # if isinstance(self.file_data, ActiveArrayFileData) and self.file_data.is_transpose:
+        #     self.file_data.create_transposed()
+        #     print(self.file_data.file)
         x_scale = self.file_data.Fs ** -1
         num_vectors = len(chan_map) + len(nc)
         data_channels = [self.file_data.data_channels[i]
                          for i in range(num_vectors) if i not in nc]
-        # permute  channels to stack rows
-        chan_idx = list(zip(*chan_map.to_mat()))
-        chan_order = chan_map.lookup(*list(zip( *sorted(chan_idx)[::-1])))
-        data_channels = [data_channels[i] for i in chan_order]
-        cls = type(chan_map)
-        chan_map = cls([chan_map[i] for i in chan_order], chan_map.geometry, pitch=chan_map.pitch,
-                       col_major=chan_map.col_major)
+
+        # permute channels to stack rows (unless data order is preferred)
+        if not self.channel_data_order:
+            chan_idx = list(zip(*chan_map.to_mat()))
+            chan_order = chan_map.lookup(*list(zip(*sorted(chan_idx)[::-1])))
+            data_channels = [data_channels[i] for i in chan_order]
+            cls = type(chan_map)
+            chan_map = cls([chan_map[i] for i in chan_order], chan_map.geometry, pitch=chan_map.pitch,
+                           col_major=chan_map.col_major)
 
         filters = self.filters.make_pipeline(x_scale ** -1.0)
         array = self.file_data._compose_arrays(filters)
@@ -352,6 +355,10 @@ class VisLauncher(HasTraits):
                         Label('Offset per channel (in uV)'),
                         UItem('offset', )
                         ),
+                    VGroup(
+                        Label('Data order channels?'),
+                        UItem('channel_data_order')
+                    ),
                     VGroup(
                         Label('Screen Channels?'),
                         UItem('screen_channels')
