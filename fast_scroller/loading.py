@@ -161,7 +161,7 @@ class VisLauncher(HasTraits):
 
     @cached_property
     def _get__max_win(self):
-        if not self.file_data or not self.file_data.file:
+        if not self.file_data or not self.file_data.file or not self.file_data.data_field:
             return 100
         try:
             Fs = self.file_data.Fs
