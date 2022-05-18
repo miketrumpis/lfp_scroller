@@ -1,5 +1,7 @@
 import numpy as np
 import h5py
+import os.path as osp
+from pynwb import NWBHDF5IO
 from traits.api import Button, Str, File, Bool, HasTraits, List, Instance, on_trait_change
 from traitsui.api import View, Group, UItem, Label, HGroup, EnumEditor, VGroup, TableEditor
 from traitsui.table_column import ObjectColumn
@@ -32,6 +34,13 @@ class TimeStampSet(HasTraits):
     #unload = Button('Hide timestamps')
 
     def _get_timestamps(self):
+        if osp.splitext(self.file)[1] == '.nwb':
+            self.is_binary = False
+            self.is_seconds = True
+            with NWBHDF5IO(self.file, mode='r') as nwb_io:
+                nwbfile = nwb_io.read()
+                stim_table = nwbfile.trials.to_dataframe()
+                return stim_table.start_time.values
         array = h5py.File(self.file, 'r')[self.timing_array]
         if array.shape[-1] == array.size:
             chans = array[:].squeeze()
