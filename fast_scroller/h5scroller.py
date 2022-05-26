@@ -72,8 +72,8 @@ class PlainSecAxis(pg.AxisItem):
 
     def tickStrings(self, values, scale, spacing):
         if len(values)==0:
-            return super(PlainSecAxis, self).tickStrings(values,scale,spacing)
-        strns = list(map(lambda x: str(x), values))
+            return super(PlainSecAxis, self).tickStrings(values, scale, spacing)
+        strns = list(map(lambda x: str(x * scale), values))
         return strns
 
 
@@ -180,7 +180,7 @@ class FastScroller(object):
         self.p1.enableAutoRange(axis='y', enable=True)
         self.p1.setAutoVisible(y=False)
         self.p1.setLabel('left', 'Amplitude', units=units)
-        self.p1.setLabel('bottom', 'Time')
+        self.p1.setLabel('bottom', 'Time', units='s')
 
         # Next layout row has the navigator plot (colspan 3)
         layout.nextRow()
