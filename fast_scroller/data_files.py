@@ -56,10 +56,7 @@ class NWBFileHandler(Handler):
             return
         with NWBHDF5IO(info.object.file, 'r') as io:
             nwbfile = io.read()
-            es_list = []
-            for name, series in nwbfile.acquisition.items():
-                if isinstance(series, ElectricalSeries):
-                    es_list.append(name)
+            es_list = [i.name for i in nwbfile.all_children() if isinstance(i, ElectricalSeries)]
         self.fields = es_list
         if info.object.data_field:
             self.object_data_field_changed(info)
