@@ -155,7 +155,7 @@ class IntervalSpectrogram(PlotsInterval):
         ts_ax.set_ylabel(r'$\mu$V')
         for t in ts_ax.get_xticklabels():
             t.set_visible(False)
-        sg_ax = fig.add_subplot(gs[1, 0])
+        sg_ax = fig.add_subplot(gs[1, 0], sharex=ts_ax)
         im = sg_ax.imshow(
             ptf, extent=[tx[0], tx[-1], fx[0], fx[-1]],
             cmap=self.colormap, origin='lower'
