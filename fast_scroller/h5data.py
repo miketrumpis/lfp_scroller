@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.linalg import LinAlgError
-from scipy.signal import lfilter, lfilter_zi, hilbert
+from scipy.signal import lfilter, lfilter_zi, sosfilt, sosfilt_zi, hilbert
 from scipy.interpolate import interp1d
 import h5py
 from tqdm import tqdm
@@ -560,29 +560,45 @@ def bfilter(b: np.ndarray, a: np.ndarray, x: Union[ExtractorWrapper, h5py.Datase
         Output array. Not well defined if using HandOffIter in 'same' output mode
 
     """
+    b = np.asarray(b)
+    if a is None and b.ndim == 2:
+        use_sos = True
+        min_chunk = 50 * b.size
+    else:
+        use_sos = False
+        min_chunk = len(b)
+
     try:
-        zii = lfilter_zi(b, a)
+        if use_sos:
+            zii = sosfilt_zi(b)
+        else:
+            zii = lfilter_zi(b, a)
     except LinAlgError:
         # the integrating filter doesn't have valid zi
         zii = np.array([0.0])
 
     zi_sl = np.s_[None, :] if axis in (-1, 1) else np.s_[:, None]
     xc_sl = np.s_[:, :1] if axis in (-1, 1) else np.s_[:1, :]
-    fir_size = len(b)
+    if use_sos:
+        zi_sl = (slice(None),) + zi_sl
+
     needs_cast = x.dtype in np.sctypes['int'] + np.sctypes['uint']
     if out is None:
         if isinstance(x, (list, tuple)):
             out = 'same'
         else:
             out = x
-    itr = block_itr_factory(x, axis=axis, out=out, min_chunk=fir_size)
+    itr = block_itr_factory(x, axis=axis, out=out, min_chunk=min_chunk)
     for n, xc in tqdm(enumerate(itr), desc='Blockwise filtering',
                       leave=True, total=itr.n_blocks):
         if needs_cast:
             xc = xc.astype('d')
         if n == 0:
             zi = zii[zi_sl] * xc[xc_sl]
-        xcf, zi = lfilter(b, a, xc, axis=axis, zi=zi)
+        if use_sos:
+            xcf, zi = sosfilt(b, xc, axis=axis, zi=zi)
+        else:
+            xcf, zi = lfilter(b, a, xc, axis=axis, zi=zi)
         itr.write_out(xcf)
 
     # presently hand off iteration only goes forward so can't filt-filt
