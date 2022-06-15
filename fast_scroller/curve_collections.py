@@ -80,6 +80,9 @@ class PlotCurveCollection(pg.PlotCurveItem):
         self._y_offset = new
         self.updatePlotData()
 
+    def channel_offset(self, channel):
+        return self.plot_channels.index(channel) * self._y_offset
+
     def current_data(self, visible=True, full_xdata=False):
         """
         Returns an array of the available display data without offsets
