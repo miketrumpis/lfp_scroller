@@ -32,12 +32,16 @@ class PersistentWindow(HasTraits):
         ui = super(PersistentWindow, self).configure_traits(**args)
         del_ui = _window_holder(ui)
         ui.control.destroyed.connect(del_ui)
+        # TODO: this handle didn't help with the out-of-focus closing
+        # self._ui_ctrl = ui.control
         return ui
 
     def edit_traits(self, **args):
         ui = super(PersistentWindow, self).edit_traits(**args)
         del_ui = _window_holder(ui)
         ui.control.destroyed.connect(del_ui)
+        # TODO: this handle didn't help with the out-of-focus closing
+        # self._ui_ctrl = ui.control
         return ui
 
 
