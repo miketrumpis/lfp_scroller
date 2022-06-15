@@ -4,6 +4,7 @@ from traitsui.api import View, Group, UItem
 from .base import VisModule
 from .animation import AnimateInterval
 from .interval_plot import IntervalTraces
+from .sorting_viewer import SortingViewer
 from .spatial_field import SpatialVariance, ArrayVarianceTool
 from .spatial_extra import ExtraSpatialVariance
 from .spectra import IntervalSpectrum
@@ -23,6 +24,7 @@ __all__ = ['AnimateInterval',
            'IntervalSpectrum',
            'IntervalSpectrogram',
            'Timestamps',
+           'SortingViewer',
            'BandPowerMap',
            'NavigatorManager',
            'FrameFilters',
@@ -63,6 +65,7 @@ ana_modules = {
     'Navigators': NavigatorManager,
     'Spatial filters': FrameFilters,
     'Series filters': SeriesFiltering,
+    'Sorting rasters': SortingViewer,
     }
 
 
