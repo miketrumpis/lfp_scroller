@@ -86,7 +86,7 @@ class PlotItemSettings(HasTraits):
         if self.pen_width == 0:
             self.curves.setPen(None)
         else:
-            self.curves.setPen(color=self.pen_color, width=self.pen_width)
+            self.curves.setPen(self.pen_color, width=self.pen_width)
 
     @on_trait_change('shadowpen_color, shadowpen_width')
     def set_shadowpen(self):

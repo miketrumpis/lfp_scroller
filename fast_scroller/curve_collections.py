@@ -70,6 +70,8 @@ class PlotCurveCollection(pg.PlotCurveItem):
         self._external_slice = None
         self.x_visible = None
         self.y_visible = None
+        default_color = (255, 169, 52)
+        self.setPen(default_color, width=1)
 
     @property
     def y_offset(self):
@@ -416,8 +418,9 @@ class SelectedFollowerCollection(FollowerCollection):
         self._active_channels = np.zeros(len(self._available_channels), dtype='?')
         if init_active:
             self._active_channels[:] = True
-        self.setPen(**pen_args)
-        self.setShadowPen(**shadowpen_args)
+        spen_color = shadowpen_args.pop('color', 'c')
+        self.setPen(spen_color, **pen_args)
+        self.setShadowPen(spen_color, **shadowpen_args)
         if clickable:
             curve_collection.setClickable(True, width=10)
             curve_collection.sigClicked.connect(self.report_clicked)

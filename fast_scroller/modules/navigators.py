@@ -29,7 +29,7 @@ class NavigatorBuilder(AutoPanel):
     @on_trait_change('color, width')
     def _change_pen(self):
         for curve in self._curves:
-            curve.setPen(pg.mkPen(color=self.color, width=self.width))
+            curve.setPen(pg.mkPen(self.color, width=self.width))
 
     @on_trait_change('visible')
     def _change_visibility(self):
