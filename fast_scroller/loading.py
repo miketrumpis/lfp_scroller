@@ -46,7 +46,10 @@ def find_pickled_map(hdf_file):
         if 'b_pickle' not in f.keys():
             raise NoPickleError
         arr = f['b_pickle'][0][:]
-        b = pickle.loads(arr.tostring())
+        if isinstance(arr, np.ndarray):
+            b = pickle.loads(arr.tostring())
+        else:
+            b = pickle.loads(arr)
     chan_map = None
     for k in b.keys():
         if isinstance(b[k], ChannelMap):
