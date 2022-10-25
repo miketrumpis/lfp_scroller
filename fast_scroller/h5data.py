@@ -155,7 +155,7 @@ class FilteredReadCache(ReadCache):
     def __init__(self, array, filters):
         if not isinstance(filters, (tuple, list)):
             f = filters
-            filters = [ f ] * len(array)
+            filters = [f] * len(array)
         self.filters = filters
         super(FilteredReadCache, self).__init__(array)
 
@@ -163,10 +163,10 @@ class FilteredReadCache(ReadCache):
         idx = sl[0]
         x = super(FilteredReadCache, self).__getitem__(sl)
         if isinstance(idx, int):
-            return self.filters[idx]( x )
+            return self.filters[idx](x)
         y = np.empty_like(x)
-        for x_, y_, f in zip(x[idx], y[idx], self.filters[idx]):
-            y_[:] = f(x_)
+        for i in idx:
+            y[i] = self.filters[i](x[i])
         return y
 
 
@@ -609,7 +609,7 @@ def bfilter(b: np.ndarray, a: np.ndarray, x: Union[ExtractorWrapper, h5py.Datase
         return out
 
     # Now read and write to the same out array (however it was earlier defined)
-    itr = H5Chunks(out, axis=axis, min_chunk=fir_size, out=out, reverse=True)
+    itr = H5Chunks(out, axis=axis, min_chunk=min_chunk, out=out, reverse=True)
     for n, xc in tqdm(enumerate(itr), desc='Blockwise filtering (reverse)',
                       leave=True, total=itr.n_blocks):
         if n == 0:
