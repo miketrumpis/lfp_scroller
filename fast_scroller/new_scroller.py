@@ -122,7 +122,7 @@ class VisWrapper(PersistentWindow):
     @on_trait_change('colormap')
     def _change_colormap(self):
         cmap = get_colormap(self.colormap, source='matplotlib')
-        self._qtwindow.cb.setCmap(cmap)
+        self._qtwindow.cb.setColorMap(cmap)
         # self._qtwindow.img.setLookupTable(cmap)
 
     def default_traits_view(self):
