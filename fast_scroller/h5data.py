@@ -5,10 +5,11 @@ from scipy.interpolate import interp1d
 import h5py
 from tqdm import tqdm
 from typing import Union
-from spikeinterface.extractors.neoextractors.neobaseextractor import NeoBaseRecordingExtractor
+from pynwb import TimeSeries
+from spikeinterface.core.baserecording import BaseRecording
 from ecogdata.util import input_as_2d
 from ecogdata.util import nextpow2
-from ecogdata.datasource.array_abstractions import unpack_ellipsis, slice_to_range, range_to_slice
+from ecogdata.datasource.array_abstractions import unpack_ellipsis, slice_to_range
 
 
 def h5mean(array, axis, rowmask=(), start=0, stop=None):
@@ -109,7 +110,7 @@ class ReadCache(object):
 
     def __getitem__(self, sl):
         indx, srange = sl
-        # Only access diretly if the first part of the slice is also a slice.
+        # Only access directly if the first part of the slice is also a slice.
         # In other cases, slice all first and then use numpy indexing
         if isinstance(indx, slice):
             return self._array[sl].copy()
@@ -193,13 +194,13 @@ class ExtractorWrapper:
     Make a spikeinterface SpikeExtractor look enough like an h5py Dataset to work in this module
     """
 
-    def __init__(self, extractor: NeoBaseRecordingExtractor):
+    def __init__(self, extractor: BaseRecording):
         self.ex = extractor
         self.shape = (self.ex.get_num_channels(), self.ex.get_num_samples())
-        from neo.rawio.openephysrawio import RECORD_SIZE
-        # record size is 1024 (I think).. a chunk size of 100 records seems good
-        self.chunks = (self.shape[0], 100 * RECORD_SIZE)
-        self.dtype = np.dtype(np.int16)
+        self.dtype = self.ex.dtype
+        # chunks is used to determine the block filtering size,
+        # with the assumption that data shape is channels x time
+        self.chunks = (self.shape[0], 4096)
 
     def __len__(self):
         return self.shape[0]
@@ -222,6 +223,48 @@ class ExtractorWrapper:
         traces = self.ex.get_traces(channel_ids=channel_ids, start_frame=start_frame, end_frame=end_frame)
         traces = traces[::frame_step].T
         return traces
+
+
+class OpenEphysExtractorWrapper(ExtractorWrapper):
+
+    def __init__(self, extractor):
+        super().__init__(extractor)
+        from neo.rawio.openephysrawio import RECORD_SIZE
+        # record size is 1024 (I think).. a chunk size of 100 records seems good
+        self.chunks = (self.shape[0], 100 * RECORD_SIZE)
+
+
+class NwbWrapper:
+    def __init__(self, series: TimeSeries):
+        self.series = series
+        chunks = series.data.chunks
+        self.shape = series.data.shape[::-1]
+        self.dtype = series.data.dtype
+        self.chunks = (self.shape[0], chunks[0])
+
+    def __len__(self):
+        return self.shape[0]
+
+    def __getitem__(self, sl):
+        # arrays are sliced as if they are channel x time..
+        sl = unpack_ellipsis(sl, self.shape)
+        chan_slice = sl[0]
+        # if chan_slice is None or chan_slice == slice(None):
+        #     channel_ids = None
+        # else:
+        #     channel_ids = list(slice_to_range(chan_slice), self.shape[0])
+        if len(sl) > 1:
+            samp_slice = sl[1]
+        else:
+            samp_slice = slice(None)
+        start_frame = samp_slice.start
+        end_frame = samp_slice.stop
+        frame_step = samp_slice.step if samp_slice.step else 1
+        # traces = self.ex.get_traces(channel_ids=channel_ids, start_frame=start_frame, end_frame=end_frame)
+        traces = self.series.data[start_frame:end_frame][:, chan_slice]
+        traces = traces[::frame_step].T
+        return traces
+
 
 
 class H5Chunks(object):
