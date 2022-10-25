@@ -29,7 +29,7 @@ from ecogdata.devices.load.active_electrodes import get_daq_unmix, pitch_lookup
 from ecogdata.filt.time import downsample
 from ecogdata.channel_map import ChannelMap
 
-from .h5data import FilteredReadCache, h5mean, ReadCache, ExtractorWrapper, \
+from .h5data import FilteredReadCache, h5mean, ReadCache, OpenEphysExtractorWrapper, NwbWrapper, \
      DCOffsetReadCache, CommonReferenceReadCache, interpolate_blanked, H5Chunks, passthrough
 from .filtering import FilterPipeline, PipelineFactory
 from .helpers import Error, PersistentWindow
@@ -65,7 +65,11 @@ class NWBFileHandler(Handler):
         if not len(info.object.file):
             return
         with info.object._get_eseries(info.object.data_field, close_io=True) as es:
-            info.object.Fs = es.rate
+            if es.rate is not None:
+                info.object.Fs = es.rate
+            else:
+                deltas = np.diff(es.timestamps[:2000])
+                info.object.Fs = 1 / deltas.mean()
             info.object.y_scale = es.conversion
 
 
@@ -111,17 +115,18 @@ class FileData(HasTraits):
         except IOError:
             return ()
 
-    def _compose_arrays(self, filter: PipelineFactory):
+    def compose_arrays(self, filter: PipelineFactory):
         # default is just a wrapped array
         h5 = h5py.File(self.file, 'r')
         array = filter.filter_pipeline(h5[self.data_field])
+        timestamps = np.arange(array.shape[1]) / self.Fs
         if self.zero_windows:
             array = FilteredReadCache(array, partial(detrend, type='constant'))
         elif self.car_windows:
             array = CommonReferenceReadCache(array)
         else:
             array = ReadCache(array)
-        return array
+        return array, timestamps
 
     def create_downsampled(self, where='.'):
         # This does not convert units! units out == units in
@@ -210,13 +215,14 @@ class NWBFileData(FileData):
         # return es
 
     def _get_data_channels(self):
+        if hasattr(self, '_cached_data_channels'):
+            return self._cached_data_channels
         with self._get_eseries(self.data_field, close_io=True) as series:
             electrodes = series.electrodes.to_dataframe()
-        if self.map_nonsignal_channels:
-            data_channels = list(range(len(electrodes)))
-        else:
-            data_channels = np.where(~np.isnan(electrodes.row))[0]
-        return data_channels
+        self._cached_data_channels = list(range(len(electrodes)))
+        # Correction -- this should return all the channels in the timeseries as "data_channels".
+        # It is up to the "make_channel_map()" method to decide which channels are mapped or not
+        return self._cached_data_channels
 
     def _get_array_size(self):
         if not os.path.exists(self.file):
@@ -251,21 +257,26 @@ class NWBFileData(FileData):
         cm = ChannelMap.from_index(list(zip(row, col)), None)
         return cm, ref_idx
 
-    def _compose_arrays(self, filter: PipelineFactory):
+    def compose_arrays(self, filter: PipelineFactory):
         # default is just a wrapped array
         # h5 = h5py.File(self.file, 'r')
         with self._get_eseries(self.data_field, close_io=False) as series:
             pass
-        array = series.data
-        filter.transpose = True
-        array = filter.filter_pipeline(array)
+        # array = series.data
+        # filter.transpose = True
+        array = NwbWrapper(series)
+        if series.rate is not None:
+            timestamps = np.arange(array.shape[1]) / series.rate
+        else:
+            timestamps = series.timestamps[:]
+        # array = filter.filter_pipeline(array)
         if self.zero_windows:
             array = FilteredReadCache(array, partial(detrend, type='constant'))
         elif self.car_windows:
             array = CommonReferenceReadCache(array)
         else:
             array = ReadCache(array)
-        return array
+        return array, timestamps
 
     def default_traits_view(self):
         v = super().default_traits_view()
@@ -350,10 +361,10 @@ class ActiveArrayFileData(FileData):
             shape = fr['data'].shape
         return shape[1] == nrow * ncol
 
-    def _compose_arrays(self, filter: PipelineFactory):
+    def compose_arrays(self, filter: PipelineFactory):
         if self.is_transpose:
             filter.transpose = True
-        return super()._compose_arrays(filter)
+        return super().compose_arrays(filter)
 
     # def create_transposed(self, where='.'):
     #     if not os.path.exists(self.file):
@@ -492,19 +503,20 @@ class SIOpenEphysFileData(FileData):
             return ()
         return (len(self.data_channels), self._extractor.get_num_samples())
 
-    def _compose_arrays(self, filter: PipelineFactory):
-        si_wrap = ExtractorWrapper(self._extractor)
+    def compose_arrays(self, filter: PipelineFactory):
+        si_wrap = OpenEphysExtractorWrapper(self._extractor)
         array = filter.filter_pipeline(si_wrap)
         # # default is just a wrapped array
         # h5 = h5py.File(self.file, 'r')
         # array = filter(h5[self.data_field])
+        timestamps = np.arange(array.shape[1]) / self.Fs
         if self.zero_windows:
             array = FilteredReadCache(array, partial(detrend, type='constant'))
         elif self.car_windows:
             array = CommonReferenceReadCache(array)
         else:
             array = ReadCache(array)
-        return array
+        return array, timestamps
 
     def default_traits_view(self):
         v = super().default_traits_view()
@@ -649,15 +661,16 @@ class Mux7FileData(FileData):
         except IOError:
             return []
     
-    def _compose_arrays(self, filter: PipelineFactory):
+    def compose_arrays(self, filter: PipelineFactory):
         if not self.dc_subtract or self.zero_windows or self.car_windows:
             print('not removing dc')
-            return super(Mux7FileData, self)._compose_arrays(filter)
+            return super(Mux7FileData, self).compose_arrays(filter)
         f = h5py.File(self.file, 'r')
         array = filter.filter_pipeline(f[self.data_field])
         mn_level = h5mean(array, 1, start=int(3e4))
         array = DCOffsetReadCache(array, mn_level)
-        return array
+        timestamps = np.arange(array.shape[1]) / self.Fs
+        return array, timestamps
 
     def default_traits_view(self):
         view = View(
