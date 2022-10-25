@@ -50,13 +50,18 @@ class PlotCurveCollection(pg.PlotCurveItem):
         # These are HDF5 getter helpers per plot curve line
         self.hdf_data = data
         self._y_offset = y_offset
-        self.dx = dx
+        if isinstance(dx, float):
+            self.dx = dx
+            self._full_x = np.arange(data.shape[1]) * dx
+        else:
+            self._full_x = dx
+            self.dx = np.mean(np.diff(self._full_x[:100]))
         self.dy = dy
         self.plot_channels = plot_channels
         # maximum number of samples to be plotted
         self.limit = kwargs.pop('points_limit', 6000)
         self.load_extra = kwargs.pop('load_extra', 0.25)
-        self._current_vis_rate = 1 / dx
+        self._current_vis_rate = 1 / self.dx
         # track current values of (x1, x2) to protect against reloads triggered by spurious view changes
         self._cx1 = 0
         self._cx2 = 0
@@ -136,7 +141,8 @@ class PlotCurveCollection(pg.PlotCurveItem):
             return  # no ViewBox yet
         # Determine what data range must be read from HDF5
         xrange = vb.viewRange()[0]
-        srange = list(map(lambda x: int(x / self.dx), xrange))
+        srange = self._full_x.searchsorted(xrange)
+        # srange = list(map(lambda x: int(x / self.dx), xrange))
         start = max(0, int(srange[0]) - 1)
         stop = min(self.hdf_data.shape[-1], int(srange[1] + 2))
         return start, stop
@@ -178,7 +184,8 @@ class PlotCurveCollection(pg.PlotCurveItem):
         y_start = start - x0
         y_stop = y_start + (stop - start)
         self.y_visible = self.y_slice[:, y_start:y_stop]
-        self.x_visible = np.tile(np.arange(start, stop) * self.dx, (len(self.plot_channels), 1))
+        self.x_visible = np.tile(self._full_x[start:stop], (len(self.plot_channels), 1))
+        # self.x_visible = np.tile(np.arange(start, stop) * self.dx, (len(self.plot_channels), 1))
         info('{}: x,y arrays set: {} {}'.format(type(self), self.y_visible.shape, self.x_visible.shape))
 
     def updatePlotData(self, data_ready=False):
@@ -298,10 +305,11 @@ class FollowerCollection(PlotCurveCollection):
     def __new__(cls, curve_collection: PlotCurveCollection, *args, **kwargs):
         # Create a new sub-type of PlotCurveCollection and then initiate it with the source material
         obj = PlotCurveCollection.__new__(cls, curve_collection.hdf_data, curve_collection.plot_channels,
-                                          curve_collection.dx, curve_collection.dy, curve_collection._y_offset)
+                                          curve_collection._full_x, curve_collection.dy, curve_collection._y_offset)
                                           # *args, **kwargs)
         super(FollowerCollection, obj).__init__(curve_collection.hdf_data, curve_collection.plot_channels,
-                                                curve_collection.dx, curve_collection.dy, curve_collection._y_offset)
+                                                curve_collection._full_x, curve_collection.dy,
+                                                curve_collection._y_offset)
                                                 # *args, **kwargs)
         return obj
 

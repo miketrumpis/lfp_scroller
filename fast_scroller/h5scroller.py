@@ -1,11 +1,12 @@
 from contextlib import contextmanager
 import numpy as np
 import pyqtgraph as pg
+from typing import Union
 from pyqtgraph.Qt import QtCore, QtGui
 pg.setConfigOptions(imageAxisOrder='row-major')
 from ecogdata.channel_map import ChannelMap, CoordinateChannelMap
 from ecogdata.parallel.mproc import parallel_context, timestamp
-
+from .h5data import ReadCache
 from .helpers import DebounceCallback, CurveManager
 from .curve_collections import PlotCurveCollection, LabeledCurveCollection
 
@@ -80,11 +81,9 @@ class PlainSecAxis(pg.AxisItem):
 class FastScroller(object):
 
     # noinspection PyStatementEffect
-    def __init__(
-            self, array, y_scale, y_spacing, chan_map,
-            nav_trace, x_scale=1, load_channels='all',
-            max_zoom=120.0, units='V'
-            ):
+    def __init__(self, array: ReadCache, y_scale: float, y_spacing: float, chan_map: ChannelMap,
+                 nav_trace: np.ndarray, x_scale: Union[float, np.ndarray]=1.0, load_channels: Union[list, str]='all',
+                 max_zoom: float=120.0, units: str='V'):
         """
         Scroller GUI loading a minimal amount of timeseries to display.
 
@@ -105,8 +104,8 @@ class FastScroller(object):
             Navigation trace that is the same length as the channel
             timeseries. If not given, then mean of channels is used.
             **THIS MAY BE A COSTLY COMPUTATION**
-        x_scale : float (optional)
-            X-axis scale (e.g. sampling interval)
+        x_scale : float or ndarray (optional)
+            X-axis scale (e.g. sampling interval) or timeseries
         load_channels : sequence | 'all'
             Order of (subset of) channels to load. Otherwise load all in array.
         units : str
@@ -193,25 +192,28 @@ class FastScroller(object):
         self.p2.setLabel('bottom', 'Time')
         self.region = pg.LinearRegionItem() 
         self.region.setZValue(10)
-        initial_pts = 5000
-        self.region.setRegion([0, initial_pts * x_scale])
 
         # Add the LinearRegionItem to the ViewBox,
         # but tell the ViewBox to exclude this 
         # item when doing auto-range calculations.
         self.p2.addItem(self.region, ignoreBounds=True)
 
-        self.p1.setAutoVisible(y=True)
-        self.p1.setXRange(0, initial_pts * x_scale)
-        self.p1.vb.setLimits(maxXRange=max_zoom)
-
         # Multiple curve set that calls up data on-demand
         self.curve_manager = CurveManager(plot=self.p1)
         curves = PlotCurveCollection(array, load_channels, x_scale, y_scale, y_spacing)
+        x_scale = curves.dx
         # curves.setPen('w', width=1)
         self.curve_manager.add_new_curves(curves, 'all', set_source=True)
         # Set the heatmap to track these curves
         self.curve_manager.heatmap_name = 'all'
+
+        initial_pts = 5000
+        self.region.setRegion([0, initial_pts * x_scale])
+
+        self.p1.setAutoVisible(y=True)
+        self.p1.setXRange(0, initial_pts * x_scale)
+        self.p1.vb.setLimits(maxXRange=max_zoom)
+
 
         # Selected curve & label set that calls up data on-demand
         labels = ['({}, {})'.format(i, j) for i, j in zip(*chan_map.to_mat())]

@@ -282,7 +282,7 @@ class VisLauncher(HasTraits):
                            col_major=chan_map.col_major)
 
         filters = self.filters.make_pipeline(x_scale ** -1.0)
-        array = self.file_data._compose_arrays(filters)
+        array, times = self.file_data.compose_arrays(filters)
         if self.screen_channels:
             data_channels, chan_map = \
               self._get_screen(array, data_channels, chan_map, x_scale**-1.0)
@@ -294,7 +294,7 @@ class VisLauncher(HasTraits):
         modules = [ana_modules[k] for k in self.module_set]
         new_vis = FastScroller(array, self.file_data.y_scale,
                                self.offset * 1e-6, chan_map, nav,
-                               x_scale=x_scale,
+                               x_scale=times,
                                load_channels=data_channels,
                                max_zoom=self.max_window_width)
         file_name = os.path.split(self.file_data.file)[1]
