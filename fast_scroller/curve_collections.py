@@ -413,7 +413,7 @@ class SelectedFollowerCollection(FollowerCollection):
         if pen_args is None:
             pen_args = dict(width=0)
         if shadowpen_args is None:
-            shadowpen_args = dict(width=4, color='c')
+            shadowpen_args = dict(width=1, color=(255, 0, 128))
         self._available_channels = self._source.plot_channels[:]
         self._active_channels = np.zeros(len(self._available_channels), dtype='?')
         if init_active:
@@ -550,7 +550,7 @@ class LabeledCurveCollection(SelectedFollowerCollection):
             y_visible = y_visible + self.y_offset
         label_row = 0
         for i, text in enumerate(self.texts):
-            text.setVisible(self._active_channels[i])
+            text.setVisible(bool(self._active_channels[i]))
             if not text.isVisible():
                 continue
             # put text 20% from the left
