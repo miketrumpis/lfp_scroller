@@ -165,7 +165,7 @@ class FastScroller(object):
         p_img.getViewBox().autoRange()
 
         # colorbar
-        self.cb = pg.ColorBarItem(limits=None, cmap=cmap, hoverBrush='#EEEEFF80',
+        self.cb = pg.ColorBarItem(limits=None, colorMap=cmap, hoverBrush='#EEEEFF80',
                                   rounding=10e-6, values=(-y_spacing, y_spacing))
         self.cb.getAxis('left').setLabel('')
         self.cb.getAxis('right').setLabel('Voltage', units='V')
@@ -240,6 +240,7 @@ class FastScroller(object):
         self.p1.scene().sigMouseMoved.connect(self.fine_nav)
         
         # final adjustments to rows: args are (row, stretch)
+        # TODO: deprecation warning here -- do not understand why
         self.win.centralWidget.layout.setRowStretchFactor(0, 0.5)
         self.win.centralWidget.layout.setRowStretchFactor(1, 5)
         self.win.centralWidget.layout.setRowStretchFactor(2, 2.5)
