@@ -36,9 +36,21 @@ class SortingViewer(VisModule):
             recording_json = load_json(fid)
 
         # This is highly dependent on the sorter recording having this heirarchy: CAR{SLICE{RecordingExtractor}}
-        active_channel_locs = recording_json['properties']['location']
-        active_channel_ids = recording_json['kwargs']['recording']['kwargs']['renamed_channel_ids']
-        original_locs = recording_json['kwargs']['recording']['kwargs']['parent_recording']['properties']['location']
+        level = recording_json
+        while 'ChannelSlice' not in level['class']:
+            if 'recording' in level['kwargs']:
+                level = level['kwargs']['recording']
+            else:
+                level = None
+                break
+        if level is None:
+            raise RuntimeError('This sorting did not use a channel slice??')
+
+        # active_channel_locs = recording_json['properties']['location']
+        active_channel_locs = level['properties']['location']
+        active_channel_ids = level['kwargs']['renamed_channel_ids']
+        # original_locs = recording_json['kwargs']['recording']['kwargs']['parent_recording']['properties']['location']
+        original_locs = level['kwargs']['parent_recording']['properties']['location']
         chan_to_chan = dict()
         for loc, chan in zip(active_channel_locs, active_channel_ids):
             chan_to_chan[chan] = original_locs.index(loc)
