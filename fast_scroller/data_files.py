@@ -258,18 +258,14 @@ class NWBFileData(FileData):
         return cm, ref_idx
 
     def compose_arrays(self, filter: PipelineFactory):
-        # default is just a wrapped array
-        # h5 = h5py.File(self.file, 'r')
         with self._get_eseries(self.data_field, close_io=False) as series:
             pass
-        # array = series.data
-        # filter.transpose = True
         array = NwbWrapper(series)
         if series.rate is not None:
             timestamps = np.arange(array.shape[1]) / series.rate
         else:
             timestamps = series.timestamps[:]
-        # array = filter.filter_pipeline(array)
+        array = filter.filter_pipeline(array)
         if self.zero_windows:
             array = FilteredReadCache(array, partial(detrend, type='constant'))
         elif self.car_windows:
