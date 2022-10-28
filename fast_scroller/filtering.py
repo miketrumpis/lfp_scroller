@@ -4,6 +4,7 @@ import h5py
 import pickle
 import json
 import base64
+import numpy as np
 
 from traits.api import Instance, Button, HasTraits, Float, List, Enum, Int, Bool
 from traitsui.api import View, VGroup, HGroup, Item, UItem, Label, Handler, Group, TableEditor
@@ -380,7 +381,7 @@ class PipelineFactory:
             return shape, dtype
         return x.shape, x.dtype
 
-    def anonymous_copy_x(self, x):
+    def anonymous_copy_x(self, x, integer_ok: bool=False):
         with NamedTemporaryFile(mode='ab', dir='.') as f:
             # This redundant f.file.close is needed by Windows before re-opening the file
             f.file.close()
@@ -388,14 +389,18 @@ class PipelineFactory:
             shape, dtype = self.get_x_props(x)
             if self.transpose:
                 shape = shape[::-1]
+            if dtype in np.sctypes['int'] + np.sctypes['uint'] and not integer_ok:
+                dtype = 'f'
             y = fw.create_dataset(self.data_field, shape=shape, dtype=dtype, chunks=True)
         return y
 
-    def copy_x(self, x):
+    def copy_x(self, x, integer_ok: bool=False):
         fw = h5py.File(self.output_file, 'w')
         shape, dtype = self.get_x_props(x)
         if self.transpose:
             shape = shape[::-1]
+        if dtype in np.sctypes['int'] + np.sctypes['uint'] and not integer_ok:
+            dtype = 'f'
         y = fw.create_dataset(self.data_field, shape=shape, dtype=dtype, chunks=True)
         return y
 
@@ -405,15 +410,22 @@ class PipelineFactory:
 
     def _filter_pipeline(self, x, axis=1):
         # simply return x if no filtering or copying is needed
-        if not (len(self.filter_list) or self.transpose):
-            return x
+        if not len(self.filter_list):
+            if not self.transpose:
+                return x
+            else:
+                integer_ok = True
+        else:
+            integer_ok = False
+
+        print(f'Preparing output HDF with integer {integer_ok}')
         if self.output_file is not None:
             if self.output_file.lower() == 'same':
                 y = 'same'
             else:
-                y = self.copy_x(x)
+                y = self.copy_x(x, integer_ok=integer_ok)
         else:
-            y = self.anonymous_copy_x(x)
+            y = self.anonymous_copy_x(x, integer_ok=integer_ok)
         # do a transpose passthrough if needed
         if self.transpose:
             passthrough(x, y, transpose=True)
