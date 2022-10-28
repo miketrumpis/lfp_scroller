@@ -165,9 +165,10 @@ class FilteredReadCache(ReadCache):
         x = super(FilteredReadCache, self).__getitem__(sl)
         if isinstance(idx, int):
             return self.filters[idx](x)
-        y = np.empty_like(x)
-        for i in idx:
-            y[i] = self.filters[i](x[i])
+        y = np.empty(x.shape, dtype='d')
+        # x has come back ordered [0, len(idx) - 1] to index it with enumeration
+        for n, i in enumerate(idx):
+            y[n] = self.filters[i](x[n])
         return y
 
 
