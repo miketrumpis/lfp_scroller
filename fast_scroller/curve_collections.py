@@ -20,7 +20,7 @@ class PlotCurveCollection(pg.PlotCurveItem):
         return super().__new__(cls)
 
     def __init__(self, data: ReadCache, plot_channels: list,
-                 dx: float, dy:float, y_offset: float, *args, **kwargs):
+                 dx: float, dy:float, y_offset: float, remove_common_average: bool, *args, **kwargs):
         """
         This object is a PlotCurveItem that can draw a lot of disconnected curves that trace multi-channel signals.
         The data for the active page is drawn from a ReadCache source (i.e. HDF5). Under the hood there is a bit of
@@ -58,6 +58,7 @@ class PlotCurveCollection(pg.PlotCurveItem):
             self.dx = np.mean(np.diff(self._full_x[:100]))
         self.dy = dy
         self.plot_channels = plot_channels
+        self._remove_common_average = remove_common_average
         # maximum number of samples to be plotted
         self.limit = kwargs.pop('points_limit', 6000)
         self.load_extra = kwargs.pop('load_extra', 0.25)
@@ -72,6 +73,7 @@ class PlotCurveCollection(pg.PlotCurveItem):
         # the underlying loaded data, which is a superset of the visible data
         self._use_raw_slice = True
         self._raw_slice = None
+        self._raw_slice_car = None
         self._external_slice = None
         self.x_visible = None
         self.y_visible = None
@@ -86,6 +88,20 @@ class PlotCurveCollection(pg.PlotCurveItem):
     def y_offset(self, new):
         self._y_offset = new
         self.updatePlotData()
+
+    # This needs to be dynamic to trigger data reloads
+    @property
+    def remove_common_average(self):
+        return self._remove_common_average
+
+    @remove_common_average.setter
+    def remove_common_average(self, new):
+        self._remove_common_average = new
+        if new:
+            self._raw_slice_car = self._raw_slice - self._raw_slice.mean(axis=0)
+        else:
+            self._raw_slice_car = None
+        self.updatePlotData(data_ready=True)
 
     def channel_offset(self, channel):
         return self.plot_channels.index(channel) * self._y_offset
@@ -121,7 +137,17 @@ class PlotCurveCollection(pg.PlotCurveItem):
 
     @property
     def y_slice(self):
-        return self._raw_slice if self._use_raw_slice else self._external_slice
+        if self._use_raw_slice:
+            y_slice = self._raw_slice_car if self.remove_common_average else self._raw_slice
+        else:
+            y_slice = self._external_slice
+        return y_slice
+
+    def sample_to_x(self, samples: np.ndarray):
+        return self._full_x[samples]
+
+    def x_to_sample(self, xdata: np.ndarray):
+        return self._full_x.searchsorted(xdata)
 
     def _view_really_changed(self):
         r = self._view_range()
@@ -175,6 +201,10 @@ class PlotCurveCollection(pg.PlotCurveItem):
             sl = np.s_[max(0, start - extra):min(L, stop + extra)]
             self._use_raw_slice = True
             self._raw_slice = self.hdf_data[(self.plot_channels, sl)] * self.dy
+            if self.remove_common_average:
+                self._raw_slice_car = self._raw_slice - self._raw_slice.mean(axis=0)
+            else:
+                self._raw_slice_car = None
             # self._raw_slice = self.hdf5[sl] * self._yscale
             self._cslice = sl
             self.data_changed.emit(self)
@@ -305,11 +335,12 @@ class FollowerCollection(PlotCurveCollection):
     def __new__(cls, curve_collection: PlotCurveCollection, *args, **kwargs):
         # Create a new sub-type of PlotCurveCollection and then initiate it with the source material
         obj = PlotCurveCollection.__new__(cls, curve_collection.hdf_data, curve_collection.plot_channels,
-                                          curve_collection._full_x, curve_collection.dy, curve_collection._y_offset)
+                                          curve_collection._full_x, curve_collection.dy, curve_collection._y_offset,
+                                          curve_collection.remove_common_average)
                                           # *args, **kwargs)
         super(FollowerCollection, obj).__init__(curve_collection.hdf_data, curve_collection.plot_channels,
                                                 curve_collection._full_x, curve_collection.dy,
-                                                curve_collection._y_offset)
+                                                curve_collection._y_offset, curve_collection.remove_common_average)
                                                 # *args, **kwargs)
         return obj
 
