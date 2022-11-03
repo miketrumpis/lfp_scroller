@@ -52,18 +52,26 @@ class SortingViewer(VisModule):
         # original_locs = recording_json['kwargs']['recording']['kwargs']['parent_recording']['properties']['location']
         original_locs = level['kwargs']['parent_recording']['properties']['location']
         chan_to_chan = dict()
+        # The curve manager knows what channels are ACTUALLY displayed -- only map unit channels on the scroller screen
+        curves = self.parent.curve_manager.source_curve
         for loc, chan in zip(active_channel_locs, active_channel_ids):
-            chan_to_chan[chan] = original_locs.index(loc)
+            data_order_chan = original_locs.index(loc)
+            if data_order_chan in curves.plot_channels:
+                chan_to_chan[chan] = data_order_chan
 
         with open(os.path.join(self.sort_output, 'channel_lookup.pk'), 'rb') as fid:
             unit_to_chan = load_pk(fid)
 
-        # a table mapping unit IDs to channel index
-        self.unit_to_chan = dict([(u, chan_to_chan[c]) for u, c in unit_to_chan.items() if u in sorting['unit_ids']])
-        # units_chans = np.c_[list(unit_to_chan.keys()), list(unit_to_chan.values())]
-
-        self.spikes = sorting['spike_indexes_seg0']
-        self.units = sorting['spike_labels_seg0']
+        # a table mapping unit IDs to channel index (but only channels on the screen)
+        self.unit_to_chan = dict()
+        for u, c in unit_to_chan.items():
+            if u in sorting['unit_ids'] and c in chan_to_chan:
+                self.unit_to_chan[u] = chan_to_chan[c]
+        units_on_screen = self.unit_to_chan.keys()
+        units = sorting['spike_labels_seg0']
+        u_mask = np.array([u in units_on_screen for u in units])
+        self.units = units[u_mask]
+        self.spikes = sorting['spike_indexes_seg0'][u_mask]
 
         # Need to add ScatterPlotItems to the plot
         p1 = self.parent._qtwindow.p1
@@ -73,15 +81,15 @@ class SortingViewer(VisModule):
         p1.sigRangeChanged.emit(None, p1.viewRange())
 
     def draw_spikes_in_p1_range(self, window, vrange):
-        plot = self.parent._qtwindow.p1
-        i1 = int(vrange[0][0] / self.parent.x_scale)
-        i2 = int(vrange[0][1] / self.parent.x_scale)
+        # plot = self.parent._qtwindow.p1
+        curves = self.parent.curve_manager.source_curve
+        i1, i2 = curves.x_to_sample(np.array([vrange[0][0], vrange[0][1]]))
         events = (self.spikes >= i1) & (self.spikes <= i2)
         info('Found {} events from {} to {}'.format(len(events), i1, i2))
 
-        curves = self.parent.curve_manager.source_curve
         channel_offsets = dict([(chan, curves.channel_offset(chan)) for chan in curves.plot_channels])
-        range_times = self.spikes[events] * self.parent.x_scale
+        # range_times = self.spikes[events] * self.parent.x_scale
+        range_times = curves.sample_to_x(self.spikes[events])
         range_units = self.units[events]
         range_offsets = [channel_offsets[self.unit_to_chan[u]] for u in range_units]
         # range_offsets = np.array(range_offsets) - 0.5 * self.parent.y_spacing / 1e6
