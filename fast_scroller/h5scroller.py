@@ -200,7 +200,7 @@ class FastScroller(object):
 
         # Multiple curve set that calls up data on-demand
         self.curve_manager = CurveManager(plot=self.p1)
-        curves = PlotCurveCollection(array, load_channels, x_scale, y_scale, y_spacing)
+        curves = PlotCurveCollection(array, load_channels, x_scale, y_scale, y_spacing, False)
         x_scale = curves.dx
         # curves.setPen('w', width=1)
         self.curve_manager.add_new_curves(curves, 'all', set_source=True)

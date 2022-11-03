@@ -1,6 +1,6 @@
 import numpy as np
-from traits.api import Instance, Float, Enum, Any, List, on_trait_change, Event, Str, Property, Button
-from traitsui.api import View, UItem, VSplit, CustomEditor, HSplit, Group, VGroup, HGroup, Label, ListEditor, \
+from traits.api import Instance, Float, Enum, Any, List, on_trait_change, Event, Str, Property, Button, Bool
+from traitsui.api import View, Item, UItem, VSplit, CustomEditor, HSplit, Group, VGroup, HGroup, Label, ListEditor, \
     EnumEditor
 from collections import OrderedDict
 from pyqtgraph.Qt import QtGui
@@ -26,6 +26,7 @@ class VisWrapper(PersistentWindow):
     auto_clim = Button('Auto colorbar')
     colormap = Enum('coolwarm', listMaps(source='matplotlib'))
     y_spacing = Property
+    remove_common_average = Bool(False)
     vis_rate = Float
     chan_map = Any
     region = Event
@@ -99,6 +100,10 @@ class VisWrapper(PersistentWindow):
             limits = -mx, mx
         self._qtwindow.cb.setLevels(values=limits)
 
+    @on_trait_change('remove_common_average')
+    def _change_car(self):
+        self.curve_manager.source_curve.remove_common_average = self.remove_common_average
+
     @on_trait_change('_y_spacing_enum')
     def _change_spacing(self):
         self._qtwindow.update_y_spacing(self.y_spacing * 1e-6)
@@ -135,7 +140,8 @@ class VisWrapper(PersistentWindow):
                       #height=(ht-150)),
                       height=0.85),
                 HSplit(
-                    Group(HGroup(VGroup(Label('Trace spacing (uV)'),
+                    Group(HGroup(VGroup(HGroup(Label('CAR'), UItem('remove_common_average')),
+                                        Label('Trace spacing (uV)'),
                                         UItem('_y_spacing_enum', resizable=True),
                                         Label('Enter spacing (uV)'),
                                         UItem('_y_spacing_entry'),
