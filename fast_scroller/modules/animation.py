@@ -20,8 +20,9 @@ __all__ = ['AnimateInterval']
 class AnimateInterval(VisModule):
     name = 'Animate window'
     anim_frame = Button('Animate')
-    anim_time_scale = Enum(50, [0.1, 0.5, 1, 5, 10, 20, 50, 100, 200, 500])
+    anim_time_scale = Enum(50, [0.1, 0.25, 0.5, 1, 2, 4, 10, 20, 50, 100, 200, 500])
     _has_ffmpeg = Bool(False)
+    frame_skip = Int(1)
     write_frames = Button('Write movie')
     drop_video_frames = Int(1)
     video_file = File(
@@ -53,18 +54,22 @@ class AnimateInterval(VisModule):
         # and the time it just took to draw (per "frame")
         elapsed = time.time() - t0
         t_pause = scaled_dt - elapsed / self.__f_skip
+        # If we're behind schedule, then increase the frame skip size
+        # AND calculate how many frames we're currently behind
         if t_pause < 0:
-            self.__f_skip += 1
+            self.__f_skip *= 2
+            extra_frames = int(-t_pause / scaled_dt) + 10
         else:
             # timer is in the middle of API change
             self._atimer.interval = t_pause
             # check to see if the frame skip can be decreased (e.g.
             # real-time is slowed down)
             while elapsed / max(1, self.__f_skip - 1) < scaled_dt:
-                self.__f_skip = max(1, self.__f_skip - 1)
+                self.__f_skip = int(max(1, self.__f_skip * 0.8))
                 if self.__f_skip == 1:
                     break
-        self.__n += self.__f_skip
+        self.frame_skip = int(self.__f_skip)
+        self.__n += self.__f_skip + extra_frames
 
     def _anim_frame_fired(self):
         if hasattr(self, '_atimer'):
@@ -73,13 +78,17 @@ class AnimateInterval(VisModule):
                 return
 
         x, self.__y = self.curve_manager.interactive_curve.current_data(full_xdata=False)
-        self.__f_skip = 1
         self.__x = x
         dt = self.__x[1] - self.__x[0]
+        # aim for ~100 fps
+        raw_rate = 1 / dt
+        skips = int(raw_rate / 100)
+        # 10 ms = 100 fps
+        timer_rate = 10
+        self.__f_skip = skips
         self.__n_frames = self.__y.shape[1]
         self.__n = 0
-        self._atimer = Timer(self.anim_time_scale * dt * 1000,
-                             self.__step_frame)
+        self._atimer = Timer(timer_rate, self.__step_frame)
 
     def _get_clim(self, array):
         if self.clim == 'full':
@@ -126,6 +135,7 @@ class AnimateInterval(VisModule):
                 VGroup(
                     Item('anim_time_scale', label='Divide real time'),
                     Item('anim_frame'),
+                    Item('frame_skip', label='Skip frames', style='readonly'),
                     label='Animate Frames'
                 ),
                 HGroup(
