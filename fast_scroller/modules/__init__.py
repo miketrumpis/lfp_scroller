@@ -14,6 +14,7 @@ from .band_power_map import BandPowerMap
 from .navigators import NavigatorManager
 from .frame_filters import FrameFilters
 from .series_filters import SeriesFiltering
+from .sonify import SonifySeries
 
 
 __all__ = ['AnimateInterval',
@@ -29,8 +30,9 @@ __all__ = ['AnimateInterval',
            'NavigatorManager',
            'FrameFilters',
            'SeriesFiltering',
+           'SonifySeries',
            'YRange',
-           'ana_modules',
+           'modules_by_name',
            'default_modules']
 
 
@@ -53,7 +55,7 @@ class YRange(VisModule):
         return v
 
 
-ana_modules = {
+modules_by_name = {
     'Stacked traces plot': IntervalTraces,
     'Spatial variance': SpatialVariance,
     'Spatial variance (dev)': ExtraSpatialVariance,
@@ -66,8 +68,8 @@ ana_modules = {
     'Spatial filters': FrameFilters,
     'Series filters': SeriesFiltering,
     'Sorting rasters': SortingViewer,
+    'Sonify waveforms': SonifySeries,
     }
-
 
 default_modules = ('Stacked traces plot',
                    'Power spectrum',

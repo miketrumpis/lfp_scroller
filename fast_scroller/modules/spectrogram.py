@@ -193,7 +193,7 @@ class IntervalSpectrogram(PlotsInterval):
                     HGroup(
                         VGroup(
                             Label('Channel to plot'),
-                            UItem('channel', editor=EnumEditor(name='object._chan_list'))
+                            UItem('channel')
                         ),
                         Label('Log-Hz?'),
                         UItem('log_freq'),

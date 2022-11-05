@@ -31,7 +31,7 @@ from .data_files import Mux7FileData, OpenEphysFileData, SIOpenEphysFileData, Bl
      FileData, BatchFilesTool, ActiveArrayFileData, RHDFileData, NWBFileData
 from .filtering import FilterPipeline
 from .new_scroller import VisWrapper
-from .modules import ana_modules, default_modules
+from .modules import modules_by_name, default_modules
 
 
 MEM_CAP = float(params.memory_limit)
@@ -134,7 +134,7 @@ class VisLauncher(HasTraits):
     file_data = Instance(FileData)
     filters = Instance(FilterPipeline, ())
     module_set = List(default_modules)
-    all_modules = List(list(ana_modules.keys()))
+    all_modules = List(list(modules_by_name.keys()))
     b = Button('Launch Visualization')
     offset = Enum(200, [0, 100, 200, 500, 1000, 2000, 5000])
     # max_window_width = Float(1200.0)
@@ -291,7 +291,7 @@ class VisLauncher(HasTraits):
         nav = h5mean(array.file_array, 0, rowmask=rowmask)
         nav *= self.file_data.y_scale
 
-        modules = [ana_modules[k] for k in self.module_set]
+        modules = [modules_by_name[k] for k in self.module_set]
         new_vis = FastScroller(array, self.file_data.y_scale,
                                self.offset * 1e-6, chan_map, nav,
                                x_scale=times,
