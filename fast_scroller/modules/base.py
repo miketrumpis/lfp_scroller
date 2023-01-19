@@ -1,12 +1,12 @@
 from collections import OrderedDict
-import numpy as np
-
 from pyqtgraph.Qt import QtWidgets
 
 import matplotlib as mpl
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from .. import QT5
+from ..uicore import SavesFigure
+
 if QT5:
     from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
     from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
@@ -15,14 +15,10 @@ else:
     from matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as NavigationToolbar
 from mpl_toolkits.axes_grid1 import AxesGrid
 
-from traits.api import HasTraits, Str, Instance, Bool, Int, Property, Float, on_trait_change, File, Button
-from traitsui.api import Item, RangeEditor, UItem, HGroup, FileEditor
+from traits.api import HasTraits, Str, Instance, Bool, Property
 
-from ecoglib.vis.ani import write_anim
 from ecoglib.vis.plot_util import subplots
-from ecoglib.vis.gui_tools import SavesFigure
 
-from ..helpers import Error, validate_file_path
 
 # useful colormaps
 colormaps = ['gray', 'jet', 'bwr', 'viridis', 'Blues', 'winter',
@@ -54,90 +50,6 @@ class SimpleFigure(QtWidgets.QWidget):
         layout.addWidget(self.canvas)
         layout.addWidget(self.toolbar)
         self.setLayout(layout)
-
-
-class MultiframeSavesFigure(SavesFigure):
-    """
-    Specialization of SavesFigure that has a plotting element
-    with multiple frames that can be scanned-through.
-    """
-
-    _mx = Int(10)
-    _mn = Int(0)
-    mode = Int(0)  # Range(low='_mn', high='_mx')
-    mode_name = 'Mode'
-    mode_value = Property(Float, depends_on='mode')
-    _has_ffmpeg = Bool
-    video_file = File
-    video_fps = Int(10)
-    make_video = Button('Make video')
-
-    def __init__(self, fig, frames, frame_index=(), **traits):
-        import matplotlib.animation as anim
-        traits['_has_ffmpeg'] = 'ffmpeg' in anim.writers.list()
-        super(MultiframeSavesFigure, self).__init__(fig, **traits)
-        self.frames = frames
-        self._mx = len(frames)-1
-        if not len(frame_index):
-            frame_index = list(range(len(frames)))
-        self.frame_index = frame_index
-
-    def _get_mode_value(self):
-        return np.round(self.frame_index[self.mode], decimals=2)
-
-    @on_trait_change('mode')
-    def change_frame(self):
-        # has to assume fig.axes[0].images[0] has an image!
-        im = self.fig.axes[0].images[0]
-        im.set_array(self.frames[self.mode])
-        self.fig.canvas.draw_idle()
-
-    def _make_video_fired(self):
-        if not validate_file_path(self.video_file):
-            ev = Error(
-                error_msg='Invalid video file:\n{0}'.format(self.video_file)
-            )
-            ev.edit_traits()
-            return
-        mode = self.mode
-
-        def step_fn(n):
-            self.mode = n
-            return (self.fig.axes[0].images[0],)
-        write_anim(
-            self.video_file, self.fig, step_fn, self._mx,
-            quicktime=True
-        )
-        self.mode = mode
-
-    def default_traits_view(self):
-        v = super(MultiframeSavesFigure, self).default_traits_view()
-        vsplit = v.content.content[0]
-
-        if self._has_ffmpeg:
-            vpanel = HGroup(
-                Item('video_file', editor=FileEditor(dialog_style='save')),
-                Item('video_fps', label='FPS',
-                     editor=RangeEditor(low=1, high=100, mode='spinner')),
-                UItem('make_video')
-            )
-            vsplit.content.insert(1, vpanel)
-        panel = HGroup(
-            Item('mode', label='Scroll frames',
-                 editor=RangeEditor(low=self._mn, high=self._mx)),
-            UItem('mode', visible_when='_mx > 101',
-                  editor=RangeEditor(
-                      low=self._mn, high=self._mx, mode='slider'
-                  )),
-            Item('mode_value', style='readonly',
-                 label='Current frame: {0}'.format(self.mode_name))
-        )
-        vsplit.content.insert(1, panel)
-        return v
-
-    @staticmethod
-    def named_toggle(name):
-        return MultiframeSavesFigure(mode_name=name)
 
 
 class FigureStack(OrderedDict):

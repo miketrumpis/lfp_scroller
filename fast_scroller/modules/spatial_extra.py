@@ -18,12 +18,11 @@ from ecogdata.filt.blocks import BlockedSignal
 import ecoglib.estimation.spatial_variance as sv
 from ecoglib.signal_testing import spatial_autocovariance
 from ecoglib.estimation import cxx_to_pairs, matern_semivariogram, matern_spectrum, make_matern_label
-from ecoglib.vis.traitsui_bridge import MPLFigureEditor, PingPongStartup
-from ecoglib.vis.gui_tools import SavesFigure
+from ..uicore import SavesFigure, MPLFigureEditor, PingPongStartup
 from ecoglib.vis.plot_util import subplots, subplot2grid
 from ecoglib.vis import plotters
 
-from .base import MultiframeSavesFigure
+from ..uicore import MultiframeSavesFigure
 from . import SpatialVariance
 from ..helpers import PersistentWindow, view_label_item
 

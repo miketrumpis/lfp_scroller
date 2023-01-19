@@ -15,8 +15,7 @@ from tqdm import tqdm
 from ecogdata.channel_map import ChannelMap
 from ecoglib.estimation.spatial_variance import semivariogram, fast_semivariogram, binned_variance, \
     binned_variance_aggregate
-from ecoglib.vis.traitsui_bridge import MPLFigureEditor, PingPongStartup
-from ecoglib.vis.gui_tools import ArrayMap
+from ..uicore import ArrayMap, MPLFigureEditor, PingPongStartup
 from ecoglib.vis.plot_util import subplots
 from ecoglib.signal_testing.signal_plots import plot_site_corr
 from ecoglib.vis import plotters
