@@ -128,12 +128,12 @@ class VisModule(HasTraits):
 
     def _get__chan_list(self):
         chan_map = self.curve_manager.interactive_curve.map_curves(self.chan_map)
-        print('curve type:', self.curve_manager.interactive_curve)
+        # print('curve type:', self.curve_manager.interactive_curve)
         ii, jj = chan_map.to_mat()
         clist = ['All']
         for i, j in zip(ii, jj):
             clist.append('{0}, {1}'.format(i, j))
-        print(f'returning {len(clist)} channels')
+        # print(f'returning {len(clist)} channels')
         return sorted(clist)
 
 

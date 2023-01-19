@@ -4,6 +4,7 @@ from pyqtgraph.Qt import QtCore
 from ecogdata.util import ToggleState
 from ecogdata.channel_map import ChannelMap
 from ecogdata.parallel.mproc import parallel_context, timestamp
+from ecogdata.filt.time import common_average_regression
 
 from .h5data import ReadCache
 # from . import pyqtSignal
@@ -98,7 +99,8 @@ class PlotCurveCollection(pg.PlotCurveItem):
     def remove_common_average(self, new):
         self._remove_common_average = new
         if new:
-            self._raw_slice_car = self._raw_slice - self._raw_slice.mean(axis=0)
+            # self._raw_slice_car = self._raw_slice - self._raw_slice.mean(axis=0)
+            self._raw_slice_car = common_average_regression(self._raw_slice, inplace=False)
         else:
             self._raw_slice_car = None
         self.updatePlotData(data_ready=True)
@@ -202,7 +204,8 @@ class PlotCurveCollection(pg.PlotCurveItem):
             self._use_raw_slice = True
             self._raw_slice = self.hdf_data[(self.plot_channels, sl)] * self.dy
             if self.remove_common_average:
-                self._raw_slice_car = self._raw_slice - self._raw_slice.mean(axis=0)
+                self._raw_slice_car = common_average_regression(self._raw_slice, inplace=False)
+                # self._raw_slice_car = self._raw_slice - self._raw_slice.mean(axis=0)
             else:
                 self._raw_slice_car = None
             # self._raw_slice = self.hdf5[sl] * self._yscale
@@ -470,7 +473,7 @@ class SelectedFollowerCollection(FollowerCollection):
         vy = vy[:, vx.searchsorted(ex)] + curves.y_offset.squeeze()
         channel = np.argmin(np.abs(vy - ey))
         b = self._active_channels[channel]
-        print('click pos', event.pos(), 'channel', channel, 'changing to', not b)
+        # print('click pos', event.pos(), 'channel', channel, 'changing to', not b)
         self._active_channels[channel] = not b
         with self.can_update(True):
             self.updatePlotData()

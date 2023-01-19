@@ -19,7 +19,7 @@ class SonifySeries(VisModule):
     save = Button('Save sound')
     speed_up = Enum(1, (0.25, 0.5, 1, 2, 4))
     average = Bool(False)
-    scroll_frames = Bool(True)
+    scroll_frames = Bool(False)
     wav_file = File(os.path.join(os.path.abspath(os.curdir), 'audio.wav'))
     volume = Float(1)
 
