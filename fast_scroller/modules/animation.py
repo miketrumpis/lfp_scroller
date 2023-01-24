@@ -13,7 +13,6 @@ import ecoglib.vis.ani as ani
 
 from .base import VisModule, colormaps
 from ..helpers import Error, validate_file_path
-from .. import pyf_new_api
 
 __all__ = ['AnimateInterval']
 
@@ -41,20 +40,14 @@ class AnimateInterval(VisModule):
         x = self.__x
         y = self.__y
         if n >= self.__n_frames:
-            if pyf_new_api:
-                self._atimer.stop()
-            else:
-                self._atimer.Stop()
+            self._atimer.stop()
             return
         t0 = time.time()
         scaled_dt = self.anim_time_scale * (x[1] - x[0])
         try:
             self.parent._qtwindow.set_image_frame(x=x[n], frame_vec=y[:, n])
         except IndexError:
-            if pyf_new_api:
-                self._atimer.stop()
-            else:
-                self._atimer.Stop()
+            self._atimer.stop()
         QtCore.QCoreApplication.instance().processEvents()
         # calculate the difference between the desired interval
         # and the time it just took to draw (per "frame")
@@ -64,10 +57,7 @@ class AnimateInterval(VisModule):
             self.__f_skip += 1
         else:
             # timer is in the middle of API change
-            if pyf_new_api:
-                self._atimer.interval = t_pause
-            else:
-                self._atimer.setInterval(t_pause * 1000.0)
+            self._atimer.interval = t_pause
             # check to see if the frame skip can be decreased (e.g.
             # real-time is slowed down)
             while elapsed / max(1, self.__f_skip - 1) < scaled_dt:
@@ -78,11 +68,8 @@ class AnimateInterval(VisModule):
 
     def _anim_frame_fired(self):
         if hasattr(self, '_atimer'):
-            if pyf_new_api and self._atimer.active:
+            if self._atimer.active:
                 self._atimer.stop()
-                return
-            elif not pyf_new_api and self._atimer.IsRunning():
-                self._atimer.Stop()
                 return
 
         x, self.__y = self.curve_manager.interactive_curve.current_data(full_xdata=False)

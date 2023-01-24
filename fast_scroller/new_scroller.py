@@ -3,7 +3,7 @@ from traits.api import Instance, Float, Enum, Any, List, on_trait_change, Event,
 from traitsui.api import View, Item, UItem, VSplit, CustomEditor, HSplit, Group, VGroup, HGroup, Label, ListEditor, \
     EnumEditor
 from collections import OrderedDict
-from pyqtgraph.Qt import QtGui
+from pyqtgraph.Qt import QtWidgets
 from pyqtgraph.colormap import listMaps, get as get_colormap
 
 from .helpers import PersistentWindow, CurveManager
@@ -18,7 +18,7 @@ def setup_qwidget_control(parent, editor):
 
 class VisWrapper(PersistentWindow):
 
-    graph = Instance(QtGui.QWidget)
+    graph = Instance(QtWidgets.QWidget)
     x_scale = Float
     _y_spacing_enum = Enum(200, [0, 20, 50, 100, 200, 500, 1000, 2000, 5000, 'entry'])
     _y_spacing_entry = Float(0.0)

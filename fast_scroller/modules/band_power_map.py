@@ -27,7 +27,7 @@ class BandPowerMap(PlotsInterval):
 
     BW = Enum(1, (1, 2, 3, 4, 5))
     cmap = Enum(colormaps[0], colormaps)
-    fc = Range('_f_lo', '_f_hi')
+    fc = Range('_f_lo', '_f_hi', value=2)
     sub_block_pct = Enum(10, (5, 10, 15, 20, 25))
 
     _f_lo = Property(Float, depends_on='BW')
@@ -37,11 +37,11 @@ class BandPowerMap(PlotsInterval):
     @property_depends_on('BW')
     def _get__f_hi(self):
         dt = self.curve_manager.interactive_curve.dx
-        return np.floor(0.5 * (dt ** -1) - self.BW)
+        return int(np.floor(0.5 * (dt ** -1) - self.BW))
 
     @property_depends_on('BW')
     def _get__f_lo(self):
-        return self.BW
+        return int(self.BW)
 
     def _get_new_figure(self):
         return True

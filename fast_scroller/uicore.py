@@ -59,10 +59,7 @@ def assign_canvas(editor):
 
 
 def _embedded_qt_figure(parent, editor, toolbar=True):
-    try:
-        from qtpy.QtWidgets import QVBoxLayout, QWidget
-    except ImportError:
-        from qtpy.QtGui import QVBoxLayout, QWidget
+    from qtpy.QtWidgets import QVBoxLayout, QWidget
 
     panel = QWidget(parent.parentWidget())
     canvas = assign_canvas(editor)

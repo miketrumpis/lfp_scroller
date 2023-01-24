@@ -2,7 +2,7 @@ from contextlib import contextmanager
 import numpy as np
 import pyqtgraph as pg
 from typing import Union
-from pyqtgraph.Qt import QtCore, QtGui
+from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
 pg.setConfigOptions(imageAxisOrder='row-major')
 from ecogdata.channel_map import ChannelMap, CoordinateChannelMap
 from ecogdata.parallel.mproc import parallel_context, timestamp
@@ -243,9 +243,9 @@ class FastScroller(object):
         
         # final adjustments to rows: args are (row, stretch)
         # TODO: deprecation warning here -- do not understand why
-        self.win.centralWidget.layout.setRowStretchFactor(0, 0.5)
-        self.win.centralWidget.layout.setRowStretchFactor(1, 5)
-        self.win.centralWidget.layout.setRowStretchFactor(2, 2.5)
+        self.win.centralWidget.layout.setRowStretchFactor(0, 1)
+        self.win.centralWidget.layout.setRowStretchFactor(1, 8)
+        self.win.centralWidget.layout.setRowStretchFactor(2, 2)
 
         # a callable frame filter may be set on this object to affect frame display
         self.frame_filter = None
@@ -257,7 +257,7 @@ class FastScroller(object):
         return self.region.getRegion()
 
     def jump_nav(self, evt):
-        if QtGui.QApplication.keyboardModifiers() != QtCore.Qt.ShiftModifier:
+        if QtWidgets.QApplication.keyboardModifiers() != QtCore.Qt.KeyboardModifier.ShiftModifier:
             return
         pos = evt.scenePos()
         if not self.p2.sceneBoundingRect().contains(pos):
@@ -269,7 +269,7 @@ class FastScroller(object):
         self.update_region([newX - rng, newX + rng])
 
     def fine_nav(self, evt):
-        if QtGui.QApplication.keyboardModifiers() != QtCore.Qt.ShiftModifier:
+        if QtWidgets.QApplication.keyboardModifiers() != QtCore.Qt.KeyboardModifier.ShiftModifier:
             return
         #pos = evt.scenePos()
         pos = evt

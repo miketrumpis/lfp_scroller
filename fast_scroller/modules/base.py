@@ -4,19 +4,18 @@ from pyqtgraph.Qt import QtWidgets
 import matplotlib as mpl
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
-from .. import QT5
+from .. import QT
 from ..uicore import SavesFigure
 
-if QT5:
+if QT != 'qt4':
     from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
     from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 else:
     from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
     from matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as NavigationToolbar
+
 from mpl_toolkits.axes_grid1 import AxesGrid
-
 from traits.api import HasTraits, Str, Instance, Bool, Property
-
 from ecoglib.vis.plot_util import subplots
 
 
