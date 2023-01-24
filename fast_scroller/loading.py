@@ -22,7 +22,7 @@ from ecogdata.util import Bunch
 from ecogdata.channel_map import ChannelMap
 from ecogdata.expconfig import params
 
-from ecoglib.signal_testing import interactive_mask
+from .legacy_scroller import interactive_mask
 
 from .h5scroller import FastScroller
 from .h5data import h5mean

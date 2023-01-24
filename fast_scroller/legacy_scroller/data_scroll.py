@@ -1,4 +1,3 @@
-from distutils.version import StrictVersion
 import numpy as np
 from matplotlib.lines import Line2D
 
@@ -12,7 +11,7 @@ from traitsui.api import Item, View, VGroup, HGroup, \
 from pyface.timer.api import Timer
 import pyface
 
-from . import plot_modules as pm
+import ecoglib.vis.plot_modules as pm
 
 from ecogdata.channel_map import ChannelMap
 import ecogdata.devices.units as units_tools
@@ -24,10 +23,6 @@ try:
     use_mayavi = True
 except ImportError:
     use_mayavi = False
-
-
-pyf_version = StrictVersion(pyface.__version__)
-pyf_new_api = pyf_version >= StrictVersion('6.1.0')
 
 
 def volumetric_data(data, rowcol):
@@ -294,13 +289,10 @@ class DataScroller(HasTraits):
 
     def _count_fired(self):
 
-        if self.t_counter is not None and (self.t_counter.active if pyf_new_api else self.t_counter.IsRunning()):
-            self.t_counter.stop() if pyf_new_api else self.t_counter.Stop()
+        if self.t_counter is not None and self.t_counter.active:
+            self.t_counter.stop()
         else:
-            if pyf_new_api:
-                self.t_counter = Timer(interval=1.0 / self.fps, repeat=self._count)
-            else:
-                self.t_counter = Timer(1000.0 / self.fps, self._count)
+            self.t_counter = Timer(interval=1.0 / self.fps, repeat=self._count)
 
     def _count(self):
         t = self.time + 1.0/self.Fs
@@ -788,11 +780,11 @@ class ChannelScroller(DataScroller):
         self.zoom_plot.ylim = lim
 
     def default_traits_view(self):
-        from . import traitsui_bridge as tb
+        from ..uicore import MPLFigureEditor, PingPongStartup
         view = View(
             HSplit(
                 Item(
-                    'ts_plot', editor=tb.MPLFigureEditor(), show_label=False,
+                    'ts_plot', editor=MPLFigureEditor(), show_label=False,
                     width=400, height=900, resizable=True
                 ),
                 VSplit(
@@ -803,7 +795,7 @@ class ChannelScroller(DataScroller):
                     ),
                     VSplit(
                         Item(
-                            'zoom_plot', editor=tb.MPLFigureEditor(),
+                            'zoom_plot', editor=MPLFigureEditor(),
                             show_label=False,
                             width=400, height=150, resizable=True
                         ),
@@ -845,32 +837,6 @@ class ChannelScroller(DataScroller):
                 )
             ),
             resizable=True, title='ChannelScroller',
-            handler=tb.PingPongStartup()
+            handler=PingPongStartup()
         )
         return view
-
-# except ImportError:
-#     DataScroller = None
-#     ColorCodedDataScroller = None
-#     ClassCodedDataScroller = None
-#     ChannelScroller = None
-
-    
-if __name__ == "__main__":
-    import sys
-    from qtpy import QtGui
-    nrow = 10; ncol = 15; n_pts = 1000
-    d = np.random.randn(nrow*ncol, n_pts)
-    d_mx = d.max(axis=0)
-    if len(sys.argv) < 2:
-        dscroll = DataScroller(d, d_mx, rowcol=(nrow, ncol), Fs=1.0)
-        dscroll.edit_traits()
-    else:
-        # if ANY args, do color coded test
-        cx = np.random.randn(len(d_mx))
-        dscroll = ColorCodedDataScroller(
-            d, d_mx, cx, rowcol=(nrow, ncol), Fs=1.0
-            )
-        dscroll.edit_traits()
-    app = QtGui.QApplication.instance()
-    app.exec_()

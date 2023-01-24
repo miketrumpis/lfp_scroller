@@ -7,10 +7,10 @@ from matplotlib.patches import Rectangle
 from ecogdata.devices.maskdb import MaskDB
 from ecogdata.datasource import MappedSource, ElectrodeDataSource
 from ecoglib.vis.plot_modules import BlitPlot, PagedTimeSeriesPlot, AxesScrubber
-from ecoglib.vis.gui_tools import ArrayMap
-from ecoglib.vis.data_scroll import ChannelScroller
 from ecoglib.vis.plot_util import light_boxplot
-from .signal_tools import safe_avg_power, bad_channel_mask
+from ecoglib.signal_testing.signal_tools import safe_avg_power, bad_channel_mask
+from ..uicore import ArrayMap
+from .data_scroll import ChannelScroller
 
 
 __all__ = ['interactive_mask', 'ChannelPicker']
@@ -64,22 +64,6 @@ class InteractiveBoxplot(BlitPlot):
         self.draw()
         self.add_static_artist(self.ax.lines)
         self.add_static_artist(self.ax.patches)
-
-    ##     self._map_lines(vals, h)
-
-    ## def _map_lines(self, orig_vals, horiz):
-    ##     # find the map from the given order of the
-    ##     # original values to the boxplot elements
-    ##     self._map = dict()
-    ##     value_points = list()
-    ##     values = orig_vals.tolist()
-    ##     for ln in self.ax.lines:
-    ##         d = ln.get_data()
-    ##         d_ord = d[0] if horiz else d[1]
-    ##         d_abs = d[1] if horiz else d[0]
-    ##         if (len( np.unique(d_ord) ) == 1) and len( d_abs ) == 2:
-    ##             print 'caught level mark'
-    ##             continue
 
     def clear_rectangles(self):
         self.remove_dynamic_artist(self.dynamic_artists[:])
@@ -446,7 +430,7 @@ else:
             return scr
 
         def default_traits_view(self):
-            from ecoglib.vis.traitsui_bridge import MPLFigureEditor, PingPongStartup
+            from fast_scroller.uicore import MPLFigureEditor, PingPongStartup
             view = View(
                 HSplit(
                     Item(
@@ -503,10 +487,3 @@ else:
                 handler=PingPongStartup()
             )
             return view
-
-if __name__ == '__main__':
-    from ecogdata.devices.data_util import load_experiment_auto
-
-    d = load_experiment_auto('viventi/2019-04-30', '2019-04-30_18-16-55_031', bandpass=(2, 100))
-    scr = ChannelPicker.from_dataset_bunch(d, 5)
-    scr.configure_traits()

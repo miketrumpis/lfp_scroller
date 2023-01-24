@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib
 from matplotlib.figure import Figure
 import matplotlib.cm as cm
+from matplotlib.patches import FancyBboxPatch, BoxStyle
 from traits.has_traits import HasTraits, on_trait_change
 from traits.trait_types import Str, Directory, Button, Instance, Float, Bool, Int, File, Enum
 from traits.traits import Property
@@ -12,7 +13,7 @@ from traitsui.api import Group, HGroup, VGroup, UItem, Item, View, VSplit, Handl
 from ecoglib.vis.colormaps import diverging_cm
 from ecoglib.vis.ani import write_anim
 from ecogdata.util import mkdir_p
-from ecogdata.channel_map import
+from ecogdata.channel_map import ChannelMap, CoordinateChannelMap, ChannelMapError
 from fast_scroller.helpers import validate_file_path, Error
 
 use = matplotlib.get_backend()
