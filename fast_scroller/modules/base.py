@@ -15,7 +15,7 @@ else:
     from matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as NavigationToolbar
 
 from mpl_toolkits.axes_grid1 import AxesGrid
-from traits.api import HasTraits, Str, Instance, Bool, Property
+from traits.api import HasTraits, Str, Instance, Bool, Property, Enum
 from ecoglib.vis.plot_util import subplots
 
 
