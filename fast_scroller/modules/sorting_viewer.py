@@ -25,7 +25,15 @@ class SortingViewer(VisModule):
     def _load_fired(self):
         if not os.path.exists(self.sort_output):
             return
-        sorting = np.load(os.path.join(self.sort_output, 'firings.npz'))
+        try:
+            sorting = np.load(os.path.join(self.sort_output, 'firings.npz'))
+            with open(os.path.join(self.sort_output, 'channel_lookup.pk'), 'rb') as fid:
+                unit_to_chan = load_pk(fid)
+        except FileNotFoundError:
+            sorting = np.load(os.path.join(self.sort_output, 'sorter_output', 'firings.npz'))
+            with open(os.path.join(self.sort_output, 'sorter_output', 'channel_lookup.pk'), 'rb') as fid:
+                unit_to_chan = load_pk(fid)
+
         # TODO: NOTE: I got stuck here because the only unit-to-channel lookup is saved by channel id,
         #  e.g. channels 14, 16, 18 for the Spikeinterface dataset, whereas these are only known as channels 3, 4,
         #  5 in the file reader and the curve collection
@@ -58,9 +66,6 @@ class SortingViewer(VisModule):
             data_order_chan = original_locs.index(loc)
             if data_order_chan in curves.plot_channels:
                 chan_to_chan[chan] = data_order_chan
-
-        with open(os.path.join(self.sort_output, 'channel_lookup.pk'), 'rb') as fid:
-            unit_to_chan = load_pk(fid)
 
         # a table mapping unit IDs to channel index (but only channels on the screen)
         self.unit_to_chan = dict()
